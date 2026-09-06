@@ -1,6 +1,6 @@
 # Phase 1: Crawl & Trend Discovery (Bilibili)
 
-Trạng thái: **Backend xong, verify bằng API thật + tải/merge video thật thành công.** Đã gỡ Clerk khỏi frontend. Còn thiếu: trang UI Crawl/Trend thật (dọn demo pages `chats/tasks/apps/users` trước), batch queue giới hạn concurrency.
+Trạng thái: **Xong** (trừ batch queue giới hạn concurrency — xem "Việc cần làm"). Backend + trang UI Crawl/Trending đã verify chạy đúng qua Playwright với API thật.
 
 ## Mục tiêu
 Crawl video Bilibili theo từ khoá, tải không watermark, dedup, batch queue cơ bản. Trang Trend Discovery hiển thị video/ranking phổ biến Bilibili để chọn từ khoá crawl.
@@ -32,8 +32,12 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 - [x] `app/services/download_service.py` — tải video-only + audio-only stream rồi merge bằng ffmpeg (chưa test thật vì máy chưa có ffmpeg, xem Ghi chú).
 - [x] API: `POST /api/jobs` (tạo job crawl + trả job kèm videos), `GET /api/trending/bilibili/popular`, `GET /api/trending/bilibili/ranking`.
 - [x] Test mocked (`tests/adapters/test_bilibili_client.py`, dùng `httpx.MockTransport`, không gọi mạng thật) — 5/5 pass.
-- [ ] Trang UI: tạo job crawl theo keyword, xem kết quả, xem trending, nút "Dùng làm từ khoá crawl" — **chưa làm**, cần dọn Clerk + demo pages trong `frontend/` trước (ghi chú từ Phase 0) rồi mới dựng trang thật.
-- [ ] Batch queue qua `ProcessPoolExecutor` cho nhiều video cùng lúc — hiện `download_bilibili_video()` mới chạy tuần tự/đơn lẻ qua API, chưa có hàng đợi giới hạn concurrency.
+- [x] Dọn demo pages `chats/tasks/apps/users` trong `frontend/` (route + feature), thay nav sidebar bằng "Crawl"/"Trending".
+- [x] `frontend/src/lib/api.ts` — axios client dùng `VITE_API_BASE_URL`, type cho Job/Video/Trending.
+- [x] Trang `features/crawl/index.tsx` + route `/crawl`: form nhập từ khoá → gọi `POST /api/jobs` → bảng kết quả (tiêu đề/tác giả/thời lượng/trạng thái).
+- [x] Trang `features/trending/index.tsx` + route `/trending`: tabs theo category (từ `GET /api/trending/bilibili/categories`) → lưới card video theo `GET /api/trending/bilibili/ranking?rid=`.
+- [x] Verify cả 2 trang bằng Playwright thật (không chỉ code review): nhập từ khoá thật, nhận kết quả thật; chuyển tab category, xem đúng dữ liệu thật.
+- [ ] Batch queue qua `ProcessPoolExecutor` cho nhiều video cùng lúc — hiện `download_bilibili_video()` mới chạy tuần tự/đơn lẻ qua API, chưa có hàng đợi giới hạn concurrency. Để làm khi thực sự cần chạy nhiều video song song (chưa cấp thiết ở quy mô test hiện tại).
 
 ## Tiêu chí hoàn thành (Definition of Done)
 - [x] Nhập 1 từ khoá → tool trả về danh sách video Bilibili thật — verify qua `POST /api/jobs` với keyword thật, nhận về video thật kèm bvid/title/author/duration.
@@ -50,4 +54,6 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 - Model `Job`/`Video` ban đầu thiếu quan hệ SQLAlchemy `relationship()` hai chiều — Pydantic `model_validate(job, from_attributes=True)` không tự suy ra field `videos` nếu không có `relationship`. Đã thêm `Job.videos` / `Video.job` (back_populates) — nhớ pattern này khi thêm quan hệ DB mới ở phase sau.
 - Bilibili search API trả kết quả **không ổn định giữa các lần gọi** cùng 1 keyword (thứ tự/nội dung xê dịch, có vẻ do cá nhân hoá/xoay vòng phía server) — không phải lỗi code, cần nhớ khi viết test/debug dựa vào "gọi 2 lần phải giống hệt nhau".
 - ~~Chưa test được bước tải + merge ffmpeg thật~~ **Đã test xong**: cài ffmpeg qua `winget install Gyan.FFmpeg`, gọi `download_service.download_bilibili_video()` với bvid/cid thật (lấy từ chính `get_popular()`), ra file `original.mp4` 436MB hợp lệ, không lỗi.
-- **Frontend chưa động tới** ở phase này — ưu tiên xong backend + verify API thật trước. Việc dọn Clerk/demo pages (đã ghi ở Phase 0) và dựng trang Crawl/Trend thật nên làm ở phiên kế tiếp, không gộp chung để giữ mỗi phiên gọn (theo quy tắc tiết kiệm token trong CLAUDE.md).
+- **Bug đã sửa**: CORS backend cố định `allow_origins=["http://localhost:5173"]` — Vite tự đổi cổng (5174, 5175...) khi 5173 bận (hay gặp lúc dev vì tiến trình cũ chưa dọn sạch), khiến browser bị chặn CORS dù backend chạy đúng. Sửa thành `allow_origin_regex=r"http://localhost:\d+"` (chấp nhận mọi cổng localhost — chỉ hợp lý vì đây là tool chạy local, không expose ra ngoài).
+- **Lưu ý vận hành `--reload`**: gặp trường hợp `uvicorn --reload` báo "WatchFiles detected changes... Reloading..." nhưng worker process cũ (`--multiprocessing-fork`) không thực sự bị thay, vẫn phục vụ code cũ — nếu sửa code mà hành vi không đổi dù server "đã reload", kiểm tra lại bằng cách tắt hẳn qua `Get-CimInstance Win32_Process | Where Name -match python` (tìm đúng PID `--multiprocessing-fork`, không phải PID reloader) rồi khởi động lại sạch, đừng cố đoán/sửa code thêm.
+- **Trending category "Giải trí" (rid 71) chỉ trả về 1 video** từ `ranking/region` (so với 9-11 video ở rid 21/211) — verify là dữ liệu thật từ Bilibili tại thời điểm test, không phải lỗi code. Nếu muốn nhiều nội dung giải trí hơn, có thể cân nhắc đổi/thêm rid khác cho category này ở phase sau.
