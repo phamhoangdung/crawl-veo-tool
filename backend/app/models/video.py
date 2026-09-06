@@ -1,11 +1,15 @@
 import enum
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.job import Platform
+
+if TYPE_CHECKING:
+    from app.models.job import Job
 
 
 class VideoStatus(str, enum.Enum):
@@ -52,3 +56,5 @@ class Video(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    job: Mapped["Job"] = relationship(back_populates="videos")

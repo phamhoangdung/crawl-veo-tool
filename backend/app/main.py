@@ -3,9 +3,9 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health
-from app.core.db import Base, engine
-from app import models  # noqa: F401  (import needed so models register on Base before create_all)
+from app.api import crawl, health, trending
+from app.core.db import Base, SessionLocal, engine
+from app.models.user import User
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,8 +19,19 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(crawl.router)
+app.include_router(trending.router)
 
 
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_default_user()
+
+
+def _ensure_default_user() -> None:
+    """MVP chỉ có 1 user cố định (id=1) — xem docs/overview/plan.md phần multi-tenant."""
+    with SessionLocal() as db:
+        if db.get(User, 1) is None:
+            db.add(User(id=1))
+            db.commit()
