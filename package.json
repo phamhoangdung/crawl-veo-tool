@@ -1,0 +1,13 @@
+{
+  "name": "crawl-video-tool",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/sync-env.mjs",
+    "dev": "concurrently -n BACKEND,FRONTEND -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --app-dir backend --port 8000",
+    "dev:frontend": "pnpm -C frontend dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}
