@@ -4,11 +4,13 @@ from pathlib import Path
 from pydub import AudioSegment
 from sqlalchemy.orm import Session
 
-from app.adapters import ffmpeg
+from app.adapters import demucs, ffmpeg
 from app.models.video import Video, VideoStatus
 from app.services import transcribe_service, translate_service, tts_service
 
 logger = logging.getLogger(__name__)
+
+_MIN_STRETCH_FACTOR_DELTA = 0.05  # bỏ qua time-stretch nếu lệch dưới 5%, không đáng để re-encode
 
 
 def run_transcribe(db: Session, video: Video, source_lang: str = "zh") -> None:
@@ -42,12 +44,34 @@ async def run_translate(
         raise
 
 
-async def run_dub_and_mux(db: Session, user_id: int, video: Video) -> Path:
-    """Sinh giọng đọc cho từng đoạn, đặt đúng mốc thời gian gốc, rồi thay hẳn audio track.
+async def _synthesize_segment_matched_duration(
+    db: Session, user_id: int, text: str, target_duration_s: float, tmp_dir: Path, index: int
+) -> AudioSegment | None:
+    """Sinh giọng rồi co giãn (time-stretch, giữ cao độ) cho khớp thời lượng đoạn gốc."""
+    raw_path = tmp_dir / f"segment_{index}_raw.mp3"
+    try:
+        await tts_service.synthesize_speech(db, user_id, text, raw_path)
+    except tts_service.TtsFailedError as exc:
+        logger.warning("Skipping segment %d (TTS failed): %s", index, exc)
+        return None
 
-    Chưa time-stretch để khớp chính xác thời lượng câu (việc của Phase 4) — đoạn TTS
-    dài hơn bản gốc sẽ tràn nhẹ sang khoảng lặng của đoạn sau, chấp nhận được ở MVP.
-    """
+    raw_clip = AudioSegment.from_file(raw_path)
+    raw_duration_s = len(raw_clip) / 1000
+    if raw_duration_s <= 0 or target_duration_s <= 0:
+        return raw_clip
+
+    factor = raw_duration_s / target_duration_s
+    if abs(factor - 1.0) < _MIN_STRETCH_FACTOR_DELTA:
+        return raw_clip
+
+    stretched_path = tmp_dir / f"segment_{index}_stretched.mp3"
+    ffmpeg.time_stretch(raw_path, stretched_path, factor)
+    return AudioSegment.from_file(stretched_path)
+
+
+async def run_dub_and_mux(db: Session, user_id: int, video: Video, keep_background: bool = True) -> Path:
+    """Sinh giọng đọc cho từng đoạn (time-stretch khớp thời lượng câu gốc), tuỳ chọn tách
+    và giữ lại nhạc nền (Demucs) trước khi thay audio track, thay vì xoá sạch âm thanh gốc."""
     video.status = VideoStatus.DUBBING
     db.commit()
     try:
@@ -57,28 +81,41 @@ async def run_dub_and_mux(db: Session, user_id: int, video: Video) -> Path:
         segments_dir.mkdir(exist_ok=True)
 
         total_ms = int((video.duration_seconds or 60) * 1000)
-        timeline = AudioSegment.silent(duration=total_ms)
+        voice_timeline = AudioSegment.silent(duration=total_ms)
         for i, segment in enumerate(segments):
             text = (segment.get("translated_text") or segment.get("text") or "").strip()
             if not text:
                 continue
-            segment_path = segments_dir / f"segment_{i}.mp3"
-            try:
-                await tts_service.synthesize_speech(db, user_id, text, segment_path)
-            except tts_service.TtsFailedError as exc:
-                logger.warning("Skipping segment %d (TTS failed): %s", i, exc)
+            target_duration = max(segment["end"] - segment["start"], 0.3)
+            clip = await _synthesize_segment_matched_duration(
+                db, user_id, text, target_duration, segments_dir, i
+            )
+            if clip is None:
                 continue
-            clip = AudioSegment.from_file(segment_path)
-            timeline = timeline.overlay(clip, position=int(segment["start"] * 1000))
+            voice_timeline = voice_timeline.overlay(clip, position=int(segment["start"] * 1000))
+
+        if keep_background:
+            video.status = VideoStatus.SEPARATING_AUDIO
+            db.commit()
+            original_audio_path = video_dir / "original_audio.wav"
+            ffmpeg.extract_audio(Path(video.local_path), original_audio_path)
+            _vocals_path, background_path = demucs.separate_vocals(
+                original_audio_path, video_dir / "demucs_out"
+            )
+
+            voice_path = video_dir / "voice_timeline.mp3"
+            voice_timeline.export(voice_path, format="mp3")
+            final_audio_path = video_dir / "dubbed_audio.mp3"
+            ffmpeg.mix_audio_tracks(voice_path, background_path, final_audio_path)
+        else:
+            final_audio_path = video_dir / "dubbed_audio.mp3"
+            voice_timeline.export(final_audio_path, format="mp3")
 
         video.status = VideoStatus.MUXING
         db.commit()
 
-        dubbed_audio_path = video_dir / "dubbed_audio.mp3"
-        timeline.export(dubbed_audio_path, format="mp3")
-
         output_path = video_dir / "dubbed.mp4"
-        ffmpeg.replace_audio_track(Path(video.local_path), dubbed_audio_path, output_path)
+        ffmpeg.replace_audio_track(Path(video.local_path), final_audio_path, output_path)
 
         video.dubbed_path = str(output_path)
         video.status = VideoStatus.DONE

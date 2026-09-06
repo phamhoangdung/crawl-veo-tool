@@ -82,7 +82,9 @@ def update_transcript(
 
 
 @router.post("/{video_id}/dub", response_model=VideoDetailRead)
-async def dub_video(video_id: int, db: Session = Depends(get_db)) -> VideoDetailRead:
+async def dub_video(
+    video_id: int, keep_background: bool = True, db: Session = Depends(get_db)
+) -> VideoDetailRead:
     video = _get_video_or_404(db, video_id)
-    await dubbing_service.run_dub_and_mux(db, _DEFAULT_USER_ID, video)
+    await dubbing_service.run_dub_and_mux(db, _DEFAULT_USER_ID, video, keep_background=keep_background)
     return _to_detail(video)
