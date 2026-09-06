@@ -74,6 +74,46 @@ def mix_audio_tracks(track_a: Path, track_b: Path, output_path: Path) -> None:
     )
 
 
+def get_video_dimensions(video_path: Path) -> tuple[int, int]:
+    ensure_ffmpeg_available()
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=s=x:p=0",
+            str(video_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    width_str, height_str = result.stdout.strip().split("x")
+    return int(width_str), int(height_str)
+
+
+def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, *, font_size: int) -> None:
+    """Burn phụ đề vào video. `font_size` nên chọn theo tỉ lệ khung hình (video dọc 9:16
+    cần chữ to hơn tương đối vì khung hẹp) — xem `subtitle_service.pick_font_size_for`.
+
+    Đường dẫn srt phải escape dấu `:` và `\\` cho cú pháp filter của ffmpeg trên Windows.
+    """
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    escaped_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-vf", f"subtitles='{escaped_srt}':force_style='FontSize={font_size},Outline=1'",
+            "-c:a", "copy",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
 def replace_audio_track(video_path: Path, new_audio_path: Path, output_path: Path) -> None:
     """Thay toàn bộ audio track của video bằng file audio mới (Phase 2: chưa giữ nhạc nền gốc).
 

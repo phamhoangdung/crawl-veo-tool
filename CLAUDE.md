@@ -36,7 +36,7 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 | 2. AI Pipeline MVP (1 provider) | [docs/phases/phase-2-ai-pipeline-mvp.md](docs/phases/phase-2-ai-pipeline-mvp.md) | **Xong** — verify end-to-end video thật |
 | 3. Multi-provider + Douyin | [docs/phases/phase-3-multiprovider-douyin.md](docs/phases/phase-3-multiprovider-douyin.md) | Một phần — cost estimate xong, Douyin cần cookie thật của bạn để test tiếp |
 | 4. Audio quality (tách nhạc nền) + video dài | [docs/phases/phase-4-audio-quality.md](docs/phases/phase-4-audio-quality.md) | Phần lõi xong & verify thật — chunking video dài chưa làm (thiếu video mẫu) |
-| 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | Chưa bắt đầu |
+| 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | **Xong & verify thật** (trừ cảnh báo hardsub, thiếu video mẫu) |
 | 6. Hardening & Ops | [docs/phases/phase-6-hardening-ops.md](docs/phases/phase-6-hardening-ops.md) | Chưa bắt đầu |
 | 7. Đóng gói để bán (tương lai) | [docs/phases/phase-7-productization.md](docs/phases/phase-7-productization.md) | Ý tưởng, chưa lên kế hoạch |
 

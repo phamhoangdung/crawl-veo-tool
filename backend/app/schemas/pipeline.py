@@ -18,3 +18,4 @@ class VideoDetailRead(BaseModel):
     status: str
     transcript: list[TranscriptSegment]
     dubbed_path: str | None
+    burned_path: str | None = None

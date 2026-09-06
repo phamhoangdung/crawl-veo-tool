@@ -78,6 +78,16 @@ export interface ApiKeyRead {
   updated_at: string
 }
 
+export interface LibraryItem {
+  id: number
+  title: string
+  platform: Platform
+  status: string
+  has_dubbed: boolean
+  has_burned: boolean
+  created_at: string
+}
+
 export async function createCrawlJob(keyword: string, platform: Platform = 'bilibili') {
   const { data } = await api.post<JobWithVideosRead>('/api/jobs', { keyword, platform })
   return data
@@ -123,9 +133,31 @@ export async function updateTranscript(videoId: number, segments: TranscriptSegm
   return data
 }
 
-export async function dubVideo(videoId: number) {
-  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/dub`)
+export async function dubVideo(videoId: number, keepBackground = true) {
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/dub`, null, {
+    params: { keep_background: keepBackground },
+  })
   return data
+}
+
+export async function burnSubtitles(videoId: number) {
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/burn-subtitles`)
+  return data
+}
+
+export async function getLibrary() {
+  const { data } = await api.get<LibraryItem[]>('/api/library')
+  return data
+}
+
+export function getDownloadUrl(videoId: number, variant: 'dubbed' | 'burned' | 'original') {
+  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  return `${base}/api/library/${videoId}/download?variant=${variant}`
+}
+
+export function getZipDownloadUrl(videoIds: number[], variant: 'dubbed' | 'burned' | 'original') {
+  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  return `${base}/api/library/download-zip?video_ids=${videoIds.join(',')}&variant=${variant}`
 }
 
 export async function getApiKeys() {

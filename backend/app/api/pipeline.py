@@ -1,11 +1,15 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
+from app.adapters import ffmpeg
 from app.adapters.bilibili.client import BilibiliClient
 from app.core.db import get_db
 from app.models.video import Video, VideoStatus
 from app.schemas.pipeline import TranscriptSegment, TranslateRequest, VideoDetailRead
-from app.services import download_service, dubbing_service
+from app.services import download_service, dubbing_service, subtitle_service
 
 router = APIRouter(prefix="/api/videos", tags=["pipeline"])
 
@@ -25,6 +29,7 @@ def _to_detail(video: Video) -> VideoDetailRead:
         status=video.status.value,
         transcript=[TranscriptSegment(**segment) for segment in (video.transcript_json or [])],
         dubbed_path=video.dubbed_path,
+        burned_path=video.burned_path,
     )
 
 
@@ -87,4 +92,29 @@ async def dub_video(
 ) -> VideoDetailRead:
     video = _get_video_or_404(db, video_id)
     await dubbing_service.run_dub_and_mux(db, _DEFAULT_USER_ID, video, keep_background=keep_background)
+    return _to_detail(video)
+
+
+@router.get("/{video_id}/subtitles.srt", response_class=PlainTextResponse)
+def get_subtitles(video_id: int, db: Session = Depends(get_db)) -> str:
+    video = _get_video_or_404(db, video_id)
+    return subtitle_service.build_bilingual_srt(video.transcript_json or [])
+
+
+@router.post("/{video_id}/burn-subtitles", response_model=VideoDetailRead)
+def burn_subtitles(video_id: int, db: Session = Depends(get_db)) -> VideoDetailRead:
+    """Burn phụ đề song ngữ vào video đã lồng tiếng (ưu tiên) hoặc video gốc nếu chưa dub."""
+    video = _get_video_or_404(db, video_id)
+    source_path = Path(video.dubbed_path or video.local_path)
+    video_dir = source_path.parent
+
+    srt_path = subtitle_service.write_srt(video.transcript_json or [], video_dir / "subtitles.srt")
+    width, height = ffmpeg.get_video_dimensions(source_path)
+    font_size = subtitle_service.pick_font_size_for(width, height)
+
+    output_path = video_dir / "burned.mp4"
+    ffmpeg.burn_subtitles(source_path, srt_path, output_path, font_size=font_size)
+
+    video.burned_path = str(output_path)
+    db.commit()
     return _to_detail(video)

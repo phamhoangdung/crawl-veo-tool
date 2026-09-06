@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import api_keys, crawl, health, pipeline, trending
+from app.api import api_keys, crawl, health, library, pipeline, trending
 from app.core.db import Base, SessionLocal, engine
 from app.models.user import User
 
@@ -25,6 +25,7 @@ app.include_router(crawl.router)
 app.include_router(trending.router)
 app.include_router(api_keys.router)
 app.include_router(pipeline.router)
+app.include_router(library.router)
 
 
 @app.on_event("startup")

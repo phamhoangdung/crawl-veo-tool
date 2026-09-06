@@ -47,6 +47,7 @@ class Video(Base):
     source_url: Mapped[str] = mapped_column()
     local_path: Mapped[str | None] = mapped_column(default=None)
     dubbed_path: Mapped[str | None] = mapped_column(default=None)
+    burned_path: Mapped[str | None] = mapped_column(default=None)
     transcript_json: Mapped[list[dict] | None] = mapped_column(JSON, default=None)
     status: Mapped[VideoStatus] = mapped_column(Enum(VideoStatus), default=VideoStatus.QUEUED)
     error_message: Mapped[str | None] = mapped_column(default=None)

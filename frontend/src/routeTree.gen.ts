@@ -24,6 +24,7 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedTrendingIndexRouteImport } from './routes/_authenticated/trending/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedLibraryIndexRouteImport } from './routes/_authenticated/library/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedCrawlIndexRouteImport } from './routes/_authenticated/crawl/index'
 import { Route as AuthenticatedApiKeysIndexRouteImport } from './routes/_authenticated/api-keys/index'
@@ -110,6 +111,12 @@ const AuthenticatedSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedLibraryIndexRoute =
+  AuthenticatedLibraryIndexRouteImport.update({
+    id: '/library/',
+    path: '/library/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexRouteImport.update({
     id: '/help-center/',
@@ -179,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/crawl/': typeof AuthenticatedCrawlIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/library/': typeof AuthenticatedLibraryIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/trending/': typeof AuthenticatedTrendingIndexRoute
 }
@@ -202,6 +210,7 @@ export interface FileRoutesByTo {
   '/api-keys': typeof AuthenticatedApiKeysIndexRoute
   '/crawl': typeof AuthenticatedCrawlIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/library': typeof AuthenticatedLibraryIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/trending': typeof AuthenticatedTrendingIndexRoute
 }
@@ -228,6 +237,7 @@ export interface FileRoutesById {
   '/_authenticated/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/_authenticated/crawl/': typeof AuthenticatedCrawlIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/library/': typeof AuthenticatedLibraryIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/trending/': typeof AuthenticatedTrendingIndexRoute
 }
@@ -254,6 +264,7 @@ export interface FileRouteTypes {
     | '/api-keys/'
     | '/crawl/'
     | '/help-center/'
+    | '/library/'
     | '/settings/'
     | '/trending/'
   fileRoutesByTo: FileRoutesByTo
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
     | '/api-keys'
     | '/crawl'
     | '/help-center'
+    | '/library'
     | '/settings'
     | '/trending'
   id:
@@ -302,6 +314,7 @@ export interface FileRouteTypes {
     | '/_authenticated/api-keys/'
     | '/_authenticated/crawl/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/library/'
     | '/_authenticated/settings/'
     | '/_authenticated/trending/'
   fileRoutesById: FileRoutesById
@@ -427,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/library/': {
+      id: '/_authenticated/library/'
+      path: '/library'
+      fullPath: '/library/'
+      preLoaderRoute: typeof AuthenticatedLibraryIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
@@ -516,6 +536,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedApiKeysIndexRoute: typeof AuthenticatedApiKeysIndexRoute
   AuthenticatedCrawlIndexRoute: typeof AuthenticatedCrawlIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
+  AuthenticatedLibraryIndexRoute: typeof AuthenticatedLibraryIndexRoute
   AuthenticatedTrendingIndexRoute: typeof AuthenticatedTrendingIndexRoute
 }
 
@@ -526,6 +547,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApiKeysIndexRoute: AuthenticatedApiKeysIndexRoute,
   AuthenticatedCrawlIndexRoute: AuthenticatedCrawlIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
+  AuthenticatedLibraryIndexRoute: AuthenticatedLibraryIndexRoute,
   AuthenticatedTrendingIndexRoute: AuthenticatedTrendingIndexRoute,
 }
 
