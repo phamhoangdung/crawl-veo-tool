@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 
 
+class CategoryRead(BaseModel):
+    rid: int
+    name: str
+
+
 class TrendingVideoRead(BaseModel):
     bvid: str
     title: str

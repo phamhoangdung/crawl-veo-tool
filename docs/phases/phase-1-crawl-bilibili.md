@@ -1,6 +1,6 @@
 # Phase 1: Crawl & Trend Discovery (Bilibili)
 
-Trạng thái: **Backend xong & verify bằng API thật** — Frontend UI (trang Crawl/Trend, dọn Clerk/demo pages) và merge ffmpeg thật chưa làm, xem Ghi chú.
+Trạng thái: **Backend xong, verify bằng API thật + tải/merge video thật thành công.** Đã gỡ Clerk khỏi frontend. Còn thiếu: trang UI Crawl/Trend thật (dọn demo pages `chats/tasks/apps/users` trước), batch queue giới hạn concurrency.
 
 ## Mục tiêu
 Crawl video Bilibili theo từ khoá, tải không watermark, dedup, batch queue cơ bản. Trang Trend Discovery hiển thị video/ranking phổ biến Bilibili để chọn từ khoá crawl.
@@ -12,7 +12,7 @@ Crawl video Bilibili theo từ khoá, tải không watermark, dedup, batch queue
 
 ## Nguyên liệu cần chuẩn bị trước khi bắt đầu
 - [x] Endpoint search theo keyword: **cần WBI signing** (Bilibili đã chặn endpoint search cũ không ký) — đã cài đặt cơ chế ký (`app/adapters/bilibili/wbi.py`) và verify chạy được bằng request thật.
-- [ ] Chọn danh sách `rid` (region id, vd Anime/Game/Life...) muốn theo dõi cho Trend Discovery — hiện API `ranking()` nhận `rid` tuỳ ý qua query param, chưa cố định danh sách category hiển thị mặc định trên UI (chưa có UI).
+- [x] Danh sách category theo dõi: **Giải trí (rid 71), Ẩm thực (rid 211), Đời sống (rid 21)** — verify đúng qua field `typename` trả về từ request thật (71→综艺, 211→美食记录, 21→日常). Expose qua `GET /api/trending/bilibili/categories`.
 - [x] Không cần video mẫu cố định — service tự lấy bvid/cid thật từ chính kết quả search/trending để test.
 - [x] Xác nhận cookie: **không cần cookie đăng nhập** cho search/popular/ranking/playurl — đã verify DASH trả về tới chất lượng 1080P60 (quality 116) mà không cần SESSDATA. Có thể cần cookie sau này nếu muốn quality cao hơn hoặc gặp rate-limit.
 
@@ -37,7 +37,7 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 
 ## Tiêu chí hoàn thành (Definition of Done)
 - [x] Nhập 1 từ khoá → tool trả về danh sách video Bilibili thật — verify qua `POST /api/jobs` với keyword thật, nhận về video thật kèm bvid/title/author/duration.
-- [ ] Tải được ít nhất 1 video về máy, không dính watermark, phát được bằng trình phát video thông thường — **bị chặn bởi thiếu ffmpeg trên máy**, code đã sẵn sàng (`download_service.download_bilibili_video`), chỉ cần cài ffmpeg rồi gọi thử.
+- [x] Tải được ít nhất 1 video về máy, không dính watermark — **đã cài ffmpeg (winget, Gyan.FFmpeg) và test thật**: tải + merge 1 video Bilibili thật (436MB) qua `download_service.download_bilibili_video()`, ra file `original.mp4` hợp lệ. Lưu ý: winget cập nhật PATH hệ thống vĩnh viễn, nhưng session/terminal đang mở cần mở lại mới thấy `ffmpeg` trong PATH (đã verify bằng cách trỏ thẳng path cài đặt trong lúc test).
 - [x] Xem được danh sách trending Bilibili theo category — verify qua `GET /api/trending/bilibili/popular` và `/ranking?rid=1&day=3`, trả về dữ liệu thật.
 - [x] Chạy lại cùng từ khoá không tải trùng video đã có — verify: gọi 2 lần liên tiếp cùng keyword, không có lỗi `UniqueConstraint` (nếu dedup sai sẽ crash 500 ở lần 2), dedup hoạt động đúng dù kết quả search Bilibili tự thay đổi thứ tự/nội dung giữa 2 lần gọi (bản chất search API, không phải bug).
 
@@ -49,5 +49,5 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 - Title từ search API đôi khi bọc `<em class="keyword">` quanh từ khớp — đã strip trong `client.py`.
 - Model `Job`/`Video` ban đầu thiếu quan hệ SQLAlchemy `relationship()` hai chiều — Pydantic `model_validate(job, from_attributes=True)` không tự suy ra field `videos` nếu không có `relationship`. Đã thêm `Job.videos` / `Video.job` (back_populates) — nhớ pattern này khi thêm quan hệ DB mới ở phase sau.
 - Bilibili search API trả kết quả **không ổn định giữa các lần gọi** cùng 1 keyword (thứ tự/nội dung xê dịch, có vẻ do cá nhân hoá/xoay vòng phía server) — không phải lỗi code, cần nhớ khi viết test/debug dựa vào "gọi 2 lần phải giống hệt nhau".
-- **Chưa test được bước tải + merge ffmpeg thật** vì máy chưa cài ffmpeg — `ensure_ffmpeg_available()` sẽ raise `FfmpegNotFoundError` sớm nếu gọi khi chưa cài, không tải phí công. Việc cần làm khi có ffmpeg: gọi thử `download_service.download_bilibili_video()` với 1 bvid/cid thật, xác nhận file `original.mp4` phát được.
+- ~~Chưa test được bước tải + merge ffmpeg thật~~ **Đã test xong**: cài ffmpeg qua `winget install Gyan.FFmpeg`, gọi `download_service.download_bilibili_video()` với bvid/cid thật (lấy từ chính `get_popular()`), ra file `original.mp4` 436MB hợp lệ, không lỗi.
 - **Frontend chưa động tới** ở phase này — ưu tiên xong backend + verify API thật trước. Việc dọn Clerk/demo pages (đã ghi ở Phase 0) và dựng trang Crawl/Trend thật nên làm ở phiên kế tiếp, không gộp chung để giữ mỗi phiên gọn (theo quy tắc tiết kiệm token trong CLAUDE.md).
