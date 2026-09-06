@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { createCrawlJob, type JobWithVideosRead } from '@/lib/api'
+import {
+  createCrawlJob,
+  downloadVideo,
+  transcribeVideo,
+  translateVideo,
+  dubVideo,
+  type JobWithVideosRead,
+  type VideoRead,
+} from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +33,65 @@ function formatDuration(seconds: number | null) {
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   return `${minutes}:${rest.toString().padStart(2, '0')}`
+}
+
+const NEXT_ACTION: Record<string, { label: string; run: (id: number) => Promise<unknown> } | null> = {
+  queued: { label: 'Tải video', run: downloadVideo },
+  downloaded: { label: 'Tách lời thoại', run: transcribeVideo },
+  transcribing: { label: 'Dịch', run: translateVideo },
+  translating: { label: 'Lồng tiếng', run: dubVideo },
+  done: null,
+}
+
+function VideoRow({
+  video,
+  onUpdate,
+}: {
+  video: VideoRead
+  onUpdate: (id: number, patch: Partial<VideoRead>) => void
+}) {
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const action = NEXT_ACTION[video.status]
+      if (!action) return null
+      return action.run(video.id)
+    },
+    onSuccess: (result) => {
+      if (result && typeof result === 'object' && 'status' in result) {
+        onUpdate(video.id, { status: (result as { status: VideoRead['status'] }).status })
+      }
+    },
+  })
+
+  const action = NEXT_ACTION[video.status]
+  const isFailed = video.status.startsWith('failed_')
+
+  return (
+    <TableRow>
+      <TableCell>
+        <a href={video.source_url} target='_blank' rel='noreferrer' className='hover:underline'>
+          {video.title}
+        </a>
+      </TableCell>
+      <TableCell>{video.author_name ?? '—'}</TableCell>
+      <TableCell>{formatDuration(video.duration_seconds)}</TableCell>
+      <TableCell>
+        <Badge variant={isFailed ? 'destructive' : 'outline'}>{video.status}</Badge>
+      </TableCell>
+      <TableCell>
+        {action && (
+          <Button size='sm' disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? 'Đang xử lý...' : action.label}
+          </Button>
+        )}
+        {video.status === 'done' && (
+          <Badge variant='outline' className='border-green-500 text-green-600'>
+            Hoàn tất
+          </Badge>
+        )}
+      </TableCell>
+    </TableRow>
+  )
 }
 
 export function Crawl() {
@@ -100,27 +167,27 @@ export function Crawl() {
                     <TableHead>Tác giả</TableHead>
                     <TableHead>Thời lượng</TableHead>
                     <TableHead>Trạng thái</TableHead>
+                    <TableHead>Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {job.videos.map((video) => (
-                    <TableRow key={video.id}>
-                      <TableCell>
-                        <a
-                          href={video.source_url}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='hover:underline'
-                        >
-                          {video.title}
-                        </a>
-                      </TableCell>
-                      <TableCell>{video.author_name ?? '—'}</TableCell>
-                      <TableCell>{formatDuration(video.duration_seconds)}</TableCell>
-                      <TableCell>
-                        <Badge variant='outline'>{video.status}</Badge>
-                      </TableCell>
-                    </TableRow>
+                    <VideoRow
+                      key={video.id}
+                      video={video}
+                      onUpdate={(id, patch) =>
+                        setJob((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                videos: prev.videos.map((v) =>
+                                  v.id === id ? { ...v, ...patch } : v
+                                ),
+                              }
+                            : prev
+                        )
+                      }
+                    />
                   ))}
                 </TableBody>
               </Table>

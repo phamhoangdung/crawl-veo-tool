@@ -33,7 +33,7 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 |---|---|---|
 | 0. Scaffolding (backend+frontend khung) | [docs/phases/phase-0-scaffolding.md](docs/phases/phase-0-scaffolding.md) | **Hoàn thành** |
 | 1. Crawl & Trend Discovery (Bilibili) | [docs/phases/phase-1-crawl-bilibili.md](docs/phases/phase-1-crawl-bilibili.md) | **Xong** (trừ batch queue concurrency, không cấp thiết) |
-| 2. AI Pipeline MVP (1 provider) | [docs/phases/phase-2-ai-pipeline-mvp.md](docs/phases/phase-2-ai-pipeline-mvp.md) | Chưa bắt đầu |
+| 2. AI Pipeline MVP (1 provider) | [docs/phases/phase-2-ai-pipeline-mvp.md](docs/phases/phase-2-ai-pipeline-mvp.md) | **Xong** — verify end-to-end video thật |
 | 3. Multi-provider + Douyin | [docs/phases/phase-3-multiprovider-douyin.md](docs/phases/phase-3-multiprovider-douyin.md) | Chưa bắt đầu |
 | 4. Audio quality (tách nhạc nền) + video dài | [docs/phases/phase-4-audio-quality.md](docs/phases/phase-4-audio-quality.md) | Chưa bắt đầu |
 | 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | Chưa bắt đầu |

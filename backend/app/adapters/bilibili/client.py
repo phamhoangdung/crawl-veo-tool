@@ -75,6 +75,14 @@ class BilibiliClient:
         )
         return payload["data"]
 
+    async def get_video_cid(self, bvid: str) -> int:
+        """`x/web-interface/view` hay bị chặn 412 (risk control) — dùng `pagelist` thay thế,
+        cùng cho ra cid nhưng ít bị chặn hơn. Lấy cid của phần đầu tiên (video 1 phần)."""
+        payload = await self._get_json(
+            "https://api.bilibili.com/x/player/pagelist", {"bvid": bvid}
+        )
+        return payload["data"][0]["cid"]
+
     async def get_play_streams(self, bvid: str, cid: int) -> dict:
         params = await wbi.sign_params(
             self._client, {"bvid": bvid, "cid": cid, "fnval": 16}

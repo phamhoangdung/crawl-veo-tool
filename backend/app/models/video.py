@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -46,6 +46,8 @@ class Video(Base):
     duration_seconds: Mapped[int | None] = mapped_column(Integer, default=None)
     source_url: Mapped[str] = mapped_column()
     local_path: Mapped[str | None] = mapped_column(default=None)
+    dubbed_path: Mapped[str | None] = mapped_column(default=None)
+    transcript_json: Mapped[list[dict] | None] = mapped_column(JSON, default=None)
     status: Mapped[VideoStatus] = mapped_column(Enum(VideoStatus), default=VideoStatus.QUEUED)
     error_message: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(

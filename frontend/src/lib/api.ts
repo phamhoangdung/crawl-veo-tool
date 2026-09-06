@@ -58,6 +58,26 @@ export interface TrendingVideo {
   cover_url: string | null
 }
 
+export interface TranscriptSegment {
+  start: number
+  end: number
+  text: string
+  translated_text: string
+}
+
+export interface VideoDetail {
+  id: number
+  status: string
+  transcript: TranscriptSegment[]
+  dubbed_path: string | null
+}
+
+export interface ApiKeyRead {
+  provider: string
+  masked_key: string
+  updated_at: string
+}
+
 export async function createCrawlJob(keyword: string, platform: Platform = 'bilibili') {
   const { data } = await api.post<JobWithVideosRead>('/api/jobs', { keyword, platform })
   return data
@@ -72,5 +92,48 @@ export async function getTrendingRanking(rid: number) {
   const { data } = await api.get<TrendingVideo[]>('/api/trending/bilibili/ranking', {
     params: { rid },
   })
+  return data
+}
+
+export async function getVideoDetail(videoId: number) {
+  const { data } = await api.get<VideoDetail>(`/api/videos/${videoId}`)
+  return data
+}
+
+export async function downloadVideo(videoId: number) {
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/download`)
+  return data
+}
+
+export async function transcribeVideo(videoId: number) {
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/transcribe`)
+  return data
+}
+
+export async function translateVideo(videoId: number, sourceLang = 'zh', targetLang = 'vi') {
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/translate`, {
+    source_lang: sourceLang,
+    target_lang: targetLang,
+  })
+  return data
+}
+
+export async function updateTranscript(videoId: number, segments: TranscriptSegment[]) {
+  const { data } = await api.put<VideoDetail>(`/api/videos/${videoId}/transcript`, segments)
+  return data
+}
+
+export async function dubVideo(videoId: number) {
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/dub`)
+  return data
+}
+
+export async function getApiKeys() {
+  const { data } = await api.get<ApiKeyRead[]>('/api/api-keys')
+  return data
+}
+
+export async function saveApiKey(provider: string, apiKey: string) {
+  const { data } = await api.put<ApiKeyRead>('/api/api-keys', { provider, api_key: apiKey })
   return data
 }
