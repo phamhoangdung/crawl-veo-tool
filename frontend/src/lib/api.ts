@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
+  baseURL: API_BASE_URL,
 })
 
 export type Platform = 'bilibili' | 'douyin'
@@ -12,7 +15,9 @@ export type VideoStatus =
   | 'downloaded'
   | 'separating_audio'
   | 'transcribing'
+  | 'transcribed'
   | 'translating'
+  | 'translated'
   | 'dubbing'
   | 'muxing'
   | 'done'
@@ -30,6 +35,7 @@ export interface VideoRead {
   title: string
   author_name: string | null
   duration_seconds: number | null
+  cover_url: string | null
   source_url: string
   status: VideoStatus
   created_at: string
@@ -47,6 +53,99 @@ export interface JobWithVideosRead {
 export interface TrendingCategory {
   rid: number
   name: string
+  name_zh: string | null
+  group: string | null
+  is_followed: boolean
+}
+
+export interface SnapshotPoint {
+  rid: number
+  captured_at: string
+  total_plays: number
+  avg_plays: number
+  heat_score: number
+}
+
+export interface CategoryHistory {
+  rid: number
+  name: string
+  points: SnapshotPoint[]
+}
+
+export type TaskKind = 'download' | 'transcribe' | 'translate' | 'dub' | 'burn'
+
+export interface TaskProgress {
+  video_id: number
+  title: string
+  kind: TaskKind
+  kind_label: string
+  stage: string
+  stage_label: string
+  percent: number
+  current: number
+  total: number | null
+  is_running: boolean
+  speed_per_sec: number
+  error: string | null
+}
+
+export interface FileEntry {
+  variant: 'original' | 'dubbed' | 'burned'
+  path: string
+  size_bytes: number
+  exists: boolean
+}
+
+export interface VideoFiles {
+  video_id: number
+  title: string
+  status: VideoStatus
+  video_dir: string | null
+  files: FileEntry[]
+  total_bytes: number
+}
+
+export interface DashboardStats {
+  total_videos: number
+  downloaded: number
+  transcribed: number
+  translated: number
+  dubbed: number
+  failed: number
+  total_bytes: number
+  running_tasks: number
+}
+
+export interface StorageSummary {
+  storage_root: string
+  video_count: number
+  total_bytes: number
+  orphan_bytes: number
+}
+
+export interface StorageLocation {
+  storage_root: string
+  video_path: string | null
+  video_dir: string | null
+  exists: boolean
+}
+
+export interface TrendingPage {
+  videos: TrendingVideo[]
+  page: number
+  has_more: boolean
+}
+
+export interface CategoryStats {
+  rid: number
+  name: string
+  group: string | null
+  video_count: number
+  total_plays: number
+  avg_plays: number
+  max_plays: number
+  total_likes: number
+  top_video_title: string | null
 }
 
 export interface TrendingVideo {
@@ -54,6 +153,7 @@ export interface TrendingVideo {
   title: string
   author_name: string | null
   play_count: number | null
+  like_count: number | null
   duration_seconds: number | null
   cover_url: string | null
 }
@@ -67,9 +167,17 @@ export interface TranscriptSegment {
 
 export interface VideoDetail {
   id: number
-  status: string
+  status: VideoStatus
   transcript: TranscriptSegment[]
   dubbed_path: string | null
+  burned_path: string | null
+  title: string | null
+  author_name: string | null
+  cover_url: string | null
+  source_url: string | null
+  duration_seconds: number | null
+  local_path: string | null
+  error_message: string | null
 }
 
 export interface ApiKeyRead {
@@ -88,13 +196,124 @@ export interface LibraryItem {
   created_at: string
 }
 
-export async function createCrawlJob(keyword: string, platform: Platform = 'bilibili') {
-  const { data } = await api.post<JobWithVideosRead>('/api/jobs', { keyword, platform })
+export async function createCrawlJob(
+  keyword: string,
+  options: { platform?: Platform; translateKeyword?: boolean } = {}
+) {
+  const { platform = 'bilibili', translateKeyword = false } = options
+  const { data } = await api.post<JobWithVideosRead>('/api/jobs', {
+    keyword,
+    platform,
+    translate_keyword: translateKeyword,
+  })
+  return data
+}
+
+export interface JobPage {
+  videos: VideoRead[]
+  page: number
+  has_more: boolean
+}
+
+/** Tải thêm 1 trang kết quả search vào job đã có (infinite scroll trang Crawl). */
+export async function loadMoreJobVideos(jobId: number, page: number) {
+  const { data } = await api.post<JobPage>(`/api/jobs/${jobId}/load-more`, null, {
+    params: { page },
+  })
+  return data
+}
+
+/** Tạo job tải từ các video người dùng tick chọn ở trang Trending. */
+export async function createJobFromSelection(videos: TrendingVideo[]) {
+  const { data } = await api.post<JobWithVideosRead>('/api/jobs/from-selection', {
+    videos: videos.map((v) => ({
+      bvid: v.bvid,
+      title: v.title,
+      author_name: v.author_name,
+      duration_seconds: v.duration_seconds,
+      cover_url: v.cover_url,
+    })),
+  })
   return data
 }
 
 export async function getTrendingCategories() {
   const { data } = await api.get<TrendingCategory[]>('/api/trending/bilibili/categories')
+  return data
+}
+
+export async function refreshCategories() {
+  const { data } = await api.post<TrendingCategory[]>(
+    '/api/trending/bilibili/categories/refresh'
+  )
+  return data
+}
+
+export async function getFollowedCategories() {
+  const { data } = await api.get<number[]>('/api/trending/bilibili/categories/followed')
+  return data
+}
+
+export async function setFollowedCategories(rids: number[]) {
+  const { data } = await api.put<number[]>('/api/trending/bilibili/categories/followed', {
+    rids,
+  })
+  return data
+}
+
+export async function getCategoryHistory(rids: number[], days = 30) {
+  const { data } = await api.get<CategoryHistory[]>('/api/trending/bilibili/history', {
+    params: { rids: rids.join(','), days },
+  })
+  return data
+}
+
+/** Tiến độ mọi tác vụ đang chạy: tải, tách lời thoại, dịch, lồng tiếng. */
+export async function getTaskProgress() {
+  const { data } = await api.get<TaskProgress[]>('/api/downloads/progress')
+  return data
+}
+
+export async function clearTaskProgress(videoId: number, kind?: TaskKind) {
+  await api.delete(`/api/downloads/progress/${videoId}`, {
+    params: kind ? { kind } : undefined,
+  })
+}
+
+export async function clearFinishedTasks() {
+  const { data } = await api.delete<{ cleared: number }>(
+    '/api/downloads/progress/finished'
+  )
+  return data
+}
+
+export async function getStorageLocation(videoId?: number) {
+  const { data } = await api.get<StorageLocation>('/api/downloads/location', {
+    params: videoId ? { video_id: videoId } : undefined,
+  })
+  return data
+}
+
+/** Mở thư mục chứa file trong Finder/Explorer — chỉ chạy được vì tool ở local. */
+export async function revealInFileManager(videoId?: number) {
+  const { data } = await api.post<{ opened: string }>('/api/downloads/reveal', null, {
+    params: videoId ? { video_id: videoId } : undefined,
+  })
+  return data
+}
+
+/** 1 trang video của category — trang 1 từ bảng xếp hạng, trang sau từ search. */
+export async function getCategoryPage(rid: number, page: number) {
+  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/category-page', {
+    params: { rid, page },
+  })
+  return data
+}
+
+export async function getCategoryStats(rids: number[]) {
+  const { data } = await api.get<CategoryStats[]>('/api/trending/bilibili/stats', {
+    params: { rids: rids.join(',') },
+  })
   return data
 }
 
@@ -151,13 +370,46 @@ export async function getLibrary() {
 }
 
 export function getDownloadUrl(videoId: number, variant: 'dubbed' | 'burned' | 'original') {
-  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-  return `${base}/api/library/${videoId}/download?variant=${variant}`
+  return `${API_BASE_URL}/api/library/${videoId}/download?variant=${variant}`
 }
 
 export function getZipDownloadUrl(videoIds: number[], variant: 'dubbed' | 'burned' | 'original') {
-  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-  return `${base}/api/library/download-zip?video_ids=${videoIds.join(',')}&variant=${variant}`
+  return `${API_BASE_URL}/api/library/download-zip?video_ids=${videoIds.join(',')}&variant=${variant}`
+}
+
+export async function getVideoFiles() {
+  const { data } = await api.get<VideoFiles[]>('/api/files')
+  return data
+}
+
+export async function getDashboardStats() {
+  const { data } = await api.get<DashboardStats>('/api/files/dashboard-stats')
+  return data
+}
+
+export async function getVideoFilesById(videoId: number) {
+  const { data } = await api.get<VideoFiles>(`/api/files/${videoId}`)
+  return data
+}
+
+export async function getStorageSummary() {
+  const { data } = await api.get<StorageSummary>('/api/files/summary')
+  return data
+}
+
+export async function deleteFileVariant(videoId: number, variant: string) {
+  const { data } = await api.delete<{ deleted: boolean }>(`/api/files/${videoId}/${variant}`)
+  return data
+}
+
+export async function deleteVideoFiles(videoId: number) {
+  const { data } = await api.delete<{ freed_bytes: number }>(`/api/files/${videoId}`)
+  return data
+}
+
+export async function cleanupOrphanFiles() {
+  const { data } = await api.post<{ freed_bytes: number }>('/api/files/cleanup-orphans')
+  return data
 }
 
 export async function getApiKeys() {
