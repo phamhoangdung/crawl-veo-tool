@@ -33,9 +33,35 @@ class TestNormalizeCoverUrl:
 
 
 class TestTranslateKeywordToChinese:
+    @pytest.fixture(autouse=True)
+    def _clear_keyword_cache(self) -> None:
+        """Cache là dict module-level (xem crawl_service) — dọn giữa các test để không rò rỉ."""
+        crawl_service._keyword_translation_cache.clear()
+
+    @pytest.mark.anyio
+    async def test_caches_successful_translation(
+        self, dummy_session: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dịch xong 1 lần thì lần sau dùng cache, không gọi lại API — đỡ tốn quota & đỡ rate limit."""
+        call_count = 0
+
+        async def fake_translate(*args: object, **kwargs: object) -> str:
+            nonlocal call_count
+            call_count += 1
+            return "美食"
+
+        monkeypatch.setattr(crawl_service.translate_service, "translate_text", fake_translate)
+
+        first = await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "ẩm thực")
+        second = await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "ẩm thực")
+
+        assert first == ("美食", True)
+        assert second == ("美食", True)
+        assert call_count == 1
+
     @pytest.mark.anyio
     async def test_skips_translation_when_already_chinese(self, dummy_session: object) -> None:
-        assert await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "美食") == "美食"
+        assert await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "美食") == ("美食", True)
 
     @pytest.mark.anyio
     async def test_falls_back_to_original_on_failure(
@@ -48,7 +74,7 @@ class TestTranslateKeywordToChinese:
 
         monkeypatch.setattr(crawl_service.translate_service, "translate_text", boom)
         result = await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "ẩm thực")
-        assert result == "ẩm thực"
+        assert result == ("ẩm thực", False)
 
     @pytest.mark.anyio
     async def test_falls_back_when_translation_is_blank(
@@ -59,4 +85,4 @@ class TestTranslateKeywordToChinese:
 
         monkeypatch.setattr(crawl_service.translate_service, "translate_text", blank)
         result = await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "ẩm thực")
-        assert result == "ẩm thực"
+        assert result == ("ẩm thực", False)

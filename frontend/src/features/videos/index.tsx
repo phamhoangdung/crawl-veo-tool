@@ -51,6 +51,7 @@ const STATUS_LABELS: Record<string, string> = {
   dubbing: 'Đang lồng tiếng',
   muxing: 'Đang ghép',
   done: 'Hoàn tất',
+  paused_quota: 'Tạm dừng (hết quota AI, thử lại sau)',
   failed_download: 'Lỗi tải',
   failed_separating_audio: 'Lỗi tách nhạc nền',
   failed_transcribing: 'Lỗi tách lời',

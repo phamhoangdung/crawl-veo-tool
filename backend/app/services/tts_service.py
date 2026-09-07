@@ -61,13 +61,34 @@ async def _synthesize_with_edge_retry(text: str, output_path: Path) -> None:
 
 
 async def synthesize_speech(db: Session, user_id: int, text: str, output_path: Path) -> None:
-    """Ưu tiên ElevenLabs nếu đã cấu hình key và gọi được; fallback Edge-TTS (free) nếu không."""
-    api_key = api_key_service.get_decrypted_key(db, user_id, "elevenlabs")
-    if api_key:
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
+    """Xoay vòng key ElevenLabs trong pool (Phase 8) khi 1 key hết quota (HTTP 429);
+    hết cả pool (hoặc chưa cấu hình key nào) thì fallback Edge-TTS (free) như trước.
+
+    Không ném AllProvidersExhaustedError ở đây (khác translate_service): Edge-TTS
+    free không có khái niệm "hết quota", lỗi của nó (TtsFailedError) đã được
+    dubbing_service xử lý riêng bằng cách bỏ qua đoạn — biến nó thành lỗi "hết quota
+    toàn phần" sẽ sai bản chất và làm job dừng oan khi thực ra chỉ 1 câu không đọc được.
+    """
+    tried_key_ids: set[int] = set()
+    async with httpx.AsyncClient(timeout=60) as client:
+        while True:
+            picked = api_key_service.pick_decrypted_key(db, user_id, "elevenlabs")
+            if picked is None or picked[0] in tried_key_ids:
+                break
+            key_id, api_key = picked
+            tried_key_ids.add(key_id)
+            try:
                 await elevenlabs_adapter.synthesize(client, api_key, text, output_path)
-            return
-        except httpx.HTTPError as exc:
-            logger.warning("ElevenLabs TTS failed (%s), falling back to Edge-TTS", exc)
+                api_key_service.mark_key_result(db, key_id, success=True)
+                return
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    api_key_service.mark_key_result(db, key_id, success=False)
+                    logger.warning("ElevenLabs key #%d hết quota, thử key khác trong pool", key_id)
+                    continue
+                logger.warning("ElevenLabs TTS failed (%s), falling back to Edge-TTS", exc)
+                break
+            except httpx.HTTPError as exc:
+                logger.warning("ElevenLabs TTS failed (%s), falling back to Edge-TTS", exc)
+                break
     await _synthesize_with_edge_retry(text, output_path)

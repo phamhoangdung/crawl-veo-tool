@@ -6,6 +6,7 @@ from pydub import AudioSegment
 from sqlalchemy.orm import Session
 
 from app.adapters import demucs, ffmpeg
+from app.adapters.provider_errors import AllProvidersExhaustedError
 from app.models.video import Video, VideoStatus
 from app.services import (
     progress_service,
@@ -71,6 +72,12 @@ async def run_translate(
         video.transcript_json = translated
         video.status = VideoStatus.TRANSLATED
         db.commit()
+    except AllProvidersExhaustedError:
+        # Hết quota toàn bộ key trong pool + provider free — tạm dừng để thử lại
+        # sau, KHÔNG phải lỗi cần sửa (khác FAILED_TRANSLATING).
+        video.status = VideoStatus.PAUSED_QUOTA
+        db.commit()
+        raise
     except Exception:
         video.status = VideoStatus.FAILED_TRANSLATING
         db.commit()

@@ -21,6 +21,7 @@ export type VideoStatus =
   | 'dubbing'
   | 'muxing'
   | 'done'
+  | 'paused_quota'
   | 'failed_download'
   | 'failed_separating_audio'
   | 'failed_transcribing'
@@ -48,6 +49,7 @@ export interface JobWithVideosRead {
   status: 'pending' | 'running' | 'completed' | 'failed'
   created_at: string
   videos: VideoRead[]
+  translation_failed: boolean
 }
 
 export interface TrendingCategory {
@@ -180,9 +182,18 @@ export interface VideoDetail {
   error_message: string | null
 }
 
+export type ApiKeyStatus = 'active' | 'cooldown' | 'exhausted' | 'invalid'
+
 export interface ApiKeyRead {
+  id: number
   provider: string
+  label: string | null
   masked_key: string
+  status: ApiKeyStatus
+  request_count: number
+  error_count: number
+  last_used_at: string | null
+  cooldown_until: string | null
   updated_at: string
 }
 
@@ -417,7 +428,108 @@ export async function getApiKeys() {
   return data
 }
 
-export async function saveApiKey(provider: string, apiKey: string) {
-  const { data } = await api.put<ApiKeyRead>('/api/api-keys', { provider, api_key: apiKey })
+export async function addApiKey(provider: string, apiKey: string, label?: string) {
+  const { data } = await api.post<ApiKeyRead>('/api/api-keys', {
+    provider,
+    api_key: apiKey,
+    label: label || null,
+  })
+  return data
+}
+
+export async function updateApiKey(
+  keyId: number,
+  patch: { label?: string; status?: ApiKeyStatus }
+) {
+  const { data } = await api.patch<ApiKeyRead>(`/api/api-keys/${keyId}`, patch)
+  return data
+}
+
+export async function deleteApiKey(keyId: number) {
+  await api.delete(`/api/api-keys/${keyId}`)
+}
+
+// --- Phase 13: trình chỉnh sửa timeline ---
+// Hình dạng "clip" gộp chung field của cả 3 loại track (video/audio/overlay) thay
+// vì union type riêng — đơn giản hoá thao tác kéo-thả/patch ở store, khớp với
+// schema backend (dict[str, Any] theo track, xem app/schemas/timeline.py).
+export interface TimelineClip {
+  source?: string
+  text?: string
+  start: number
+  end: number
+  track_start?: number
+  volume?: number
+  transition_in?: 'cut' | 'fade'
+  transition_duration?: number
+  x?: number
+  y?: number
+  font_size?: number
+}
+
+export interface TimelineTrack {
+  type: 'video' | 'audio' | 'overlay'
+  role?: string
+  clips: TimelineClip[]
+}
+
+export interface TimelineOperations {
+  tracks: TimelineTrack[]
+}
+
+export async function getTimeline(videoId: number) {
+  const { data } = await api.get<{ tracks: TimelineTrack[] | null }>(
+    `/api/videos/${videoId}/timeline`
+  )
+  return data.tracks
+}
+
+export async function saveTimeline(videoId: number, operations: TimelineOperations) {
+  const { data } = await api.put<{ tracks: TimelineTrack[] }>(
+    `/api/videos/${videoId}/timeline`,
+    operations
+  )
+  return data.tracks
+}
+
+export async function renderTimeline(videoId: number) {
+  const { data } = await api.post<{ rendered_path: string }>(
+    `/api/videos/${videoId}/timeline/render`
+  )
+  return data
+}
+
+export async function getWaveform(videoId: number, variant: string = 'dubbed') {
+  const { data } = await api.get<{ peaks: number[] }>(`/api/videos/${videoId}/waveform`, {
+    params: { variant },
+  })
+  return data.peaks
+}
+
+// --- Phase 11: clip ngắn TikTok/Shorts ---
+export interface ClipCandidate {
+  start: number
+  end: number
+  text: string
+  score: number
+}
+
+export interface CropBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export async function getClipCandidates(videoId: number) {
+  const { data } = await api.get<ClipCandidate[]>(`/api/videos/${videoId}/clip-candidates`)
+  return data
+}
+
+export async function createClip(
+  videoId: number,
+  payload: { start: number; end: number; crop?: CropBox; cta_text?: string }
+) {
+  const { data } = await api.post<{ output_path: string }>(`/api/videos/${videoId}/clips`, payload)
   return data
 }

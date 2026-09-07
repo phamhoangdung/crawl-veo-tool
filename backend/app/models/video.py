@@ -28,6 +28,10 @@ class VideoStatus(str, enum.Enum):
     DUBBING = "dubbing"
     MUXING = "muxing"
     DONE = "done"
+    # Phase 8: hết quota toàn bộ key trong pool CỘNG provider fallback free — khác
+    # FAILED_* (lỗi thật, cần sửa gì đó), đây là "tạm dừng chờ", tự thử lại được khi
+    # có key mới hoặc cooldown hết hạn (docs/phases/phase-8-ai-account-pool.md).
+    PAUSED_QUOTA = "paused_quota"
     FAILED_DOWNLOAD = "failed_download"
     FAILED_SEPARATING_AUDIO = "failed_separating_audio"
     FAILED_TRANSCRIBING = "failed_transcribing"
@@ -53,7 +57,11 @@ class Video(Base):
     local_path: Mapped[str | None] = mapped_column(default=None)
     dubbed_path: Mapped[str | None] = mapped_column(default=None)
     burned_path: Mapped[str | None] = mapped_column(default=None)
+    timeline_rendered_path: Mapped[str | None] = mapped_column(default=None)
     transcript_json: Mapped[list[dict] | None] = mapped_column(JSON, default=None)
+    # Phase 13: draft timeline (edit operations) — chưa render, cho sửa nhiều lần
+    # trước khi bấm nút render riêng (nguyên tắc "AI gợi ý, người quyết định").
+    timeline_json: Mapped[dict | None] = mapped_column(JSON, default=None)
     status: Mapped[VideoStatus] = mapped_column(Enum(VideoStatus), default=VideoStatus.QUEUED)
     error_message: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(

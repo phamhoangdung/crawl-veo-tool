@@ -119,6 +119,11 @@ export function Crawl() {
       setPage(1)
       // Job vừa tạo luôn từ search nên gần như chắc chắn còn trang sau.
       setHasMore(data.videos.length > 0)
+      if (data.translation_failed) {
+        toast.warning(
+          `Dịch từ khoá thất bại, đã tìm bằng nguyên văn "${data.keyword}" (dễ ra ít/không có kết quả). Kiểm tra lại API key dịch trong Cài đặt.`
+        )
+      }
     },
   })
 

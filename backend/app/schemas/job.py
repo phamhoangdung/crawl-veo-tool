@@ -63,3 +63,6 @@ class JobRead(BaseModel):
 
 class JobWithVideosRead(JobRead):
     videos: list[VideoRead]
+    # Không lưu DB — chỉ set tạm ở create_bilibili_crawl_job để frontend cảnh
+    # báo khi dịch từ khoá thất bại (search bằng nguyên văn gần như 0 kết quả).
+    translation_failed: bool = False

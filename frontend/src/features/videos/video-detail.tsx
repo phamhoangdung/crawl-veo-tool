@@ -4,6 +4,7 @@ import { Link, useParams } from '@tanstack/react-router'
 import {
   ArrowLeft,
   Captions,
+  Clapperboard,
   Download,
   ExternalLink,
   FolderOpen,
@@ -37,6 +38,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -47,6 +55,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { TimelineEditor } from '@/features/editor'
 import { SubtitleEditor } from './subtitle-editor'
 
 function formatBytes(bytes: number) {
@@ -242,6 +251,7 @@ export function VideoDetail() {
 
   const queryClient = useQueryClient()
   const [editorOpen, setEditorOpen] = useState(false)
+  const [timelineEditorOpen, setTimelineEditorOpen] = useState(false)
 
   const { data: files, isLoading: filesLoading } = useQuery({
     queryKey: ['files', videoId],
@@ -485,6 +495,31 @@ export function VideoDetail() {
                     </CardContent>
                   </Card>
                 )}
+
+                {hasFile && (
+                  <Card>
+                    <CardHeader>
+                      <div className='flex items-center justify-between'>
+                        <div>
+                          <CardTitle className='text-base'>Trình chỉnh sửa timeline</CardTitle>
+                          <CardDescription>
+                            Cắt/sắp xếp lại video, thêm overlay/CTA, chuyển cảnh, chỉnh âm lượng —
+                            AI chỉ gợi ý, bạn kéo-chỉnh rồi mới render.
+                          </CardDescription>
+                        </div>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='gap-1'
+                          onClick={() => setTimelineEditorOpen(true)}
+                        >
+                          <Clapperboard className='size-3.5' />
+                          Mở trình chỉnh sửa
+                        </Button>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                )}
               </div>
             </div>
 
@@ -500,6 +535,20 @@ export function VideoDetail() {
               open={editorOpen}
               onOpenChange={setEditorOpen}
             />
+
+            <Dialog open={timelineEditorOpen} onOpenChange={setTimelineEditorOpen}>
+              <DialogContent className='flex max-h-[95vh] w-full max-w-6xl flex-col gap-0 overflow-y-auto p-0'>
+                <DialogHeader className='border-b p-4'>
+                  <DialogTitle className='text-start'>{title}</DialogTitle>
+                  <DialogDescription className='text-start'>
+                    Trình chỉnh sửa timeline — kéo-thả để chỉnh, bấm Render khi ưng ý.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className='p-4'>
+                  {timelineEditorOpen && <TimelineEditor videoId={videoId} />}
+                </div>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </Main>

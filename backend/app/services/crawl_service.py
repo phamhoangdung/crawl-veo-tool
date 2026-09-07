@@ -1,4 +1,5 @@
 import logging
+import time
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,30 @@ from app.schemas.job import SelectedVideo
 from app.services import translate_service
 
 logger = logging.getLogger(__name__)
+
+# Cache tạm trong process (mất khi restart server) cho từ khoá search vừa dịch
+# gần đây — người dùng hay bấm lại/gõ lại cùng 1 từ khoá, cache tránh gọi lại
+# API dịch mỗi lần (đỡ tốn quota và đỡ dính rate limit của Google Translate free).
+_KEYWORD_TRANSLATION_CACHE_TTL_SECONDS = 3600
+_keyword_translation_cache: dict[str, tuple[str, float]] = {}
+
+
+def _get_cached_translation(keyword: str) -> str | None:
+    cached = _keyword_translation_cache.get(keyword)
+    if cached is None:
+        return None
+    translated, expires_at = cached
+    if time.monotonic() > expires_at:
+        del _keyword_translation_cache[keyword]
+        return None
+    return translated
+
+
+def _cache_translation(keyword: str, translated: str) -> None:
+    _keyword_translation_cache[keyword] = (
+        translated,
+        time.monotonic() + _KEYWORD_TRANSLATION_CACHE_TTL_SECONDS,
+    )
 
 
 def _looks_chinese(text: str) -> bool:
@@ -42,29 +67,42 @@ def _normalize_cover_url(raw: str | None) -> str | None:
     return raw
 
 
-async def translate_keyword_to_chinese(db: Session, user_id: int, keyword: str) -> str:
+async def translate_keyword_to_chinese(db: Session, user_id: int, keyword: str) -> tuple[str, bool]:
     """Dịch từ khoá sang tiếng Trung giản thể để search trên Bilibili.
 
     Trả lại từ khoá gốc nếu dịch lỗi — thà search nguyên văn còn hơn chặn cả job.
+    Cờ bool thứ hai báo có dịch thành công không, để tầng gọi cảnh báo người
+    dùng thay vì âm thầm search nguyên văn tiếng Việt (gần như chắc chắn 0 kết quả).
     """
     if _looks_chinese(keyword):
-        return keyword
+        return keyword, True
+
+    cached = _get_cached_translation(keyword)
+    if cached is not None:
+        return cached, True
+
     try:
         translated = await translate_service.translate_text(
             db, user_id, keyword, source_lang="vi", target_lang="zh-CN"
         )
     except Exception as exc:  # noqa: BLE001 — dịch hỏng không được làm chết job
         logger.warning("Dịch từ khoá '%s' thất bại (%s), dùng nguyên văn", keyword, exc)
-        return keyword
-    return translated.strip() or keyword
+        return keyword, False
+    translated = translated.strip()
+    if not translated:
+        return keyword, False
+    _cache_translation(keyword, translated)
+    return translated, True
 
 
 async def create_bilibili_crawl_job(
     db: Session, user_id: int, keyword: str, translate_keyword: bool = False
 ) -> Job:
     search_keyword = keyword
+    translation_failed = False
     if translate_keyword:
-        search_keyword = await translate_keyword_to_chinese(db, user_id, keyword)
+        search_keyword, translated_ok = await translate_keyword_to_chinese(db, user_id, keyword)
+        translation_failed = not translated_ok
 
     job = Job(
         user_id=user_id,
@@ -108,6 +146,8 @@ async def create_bilibili_crawl_job(
     job.status = JobStatus.COMPLETED
     db.commit()
     db.refresh(job)
+    # Cờ tạm, không lưu DB — chỉ để router trả về cho frontend cảnh báo ngay lần này.
+    job.translation_failed = translation_failed
     return job
 
 

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     api_keys,
+    clips,
     crawl,
     downloads,
     files,
@@ -12,6 +13,7 @@ from app.api import (
     image_proxy,
     library,
     pipeline,
+    timeline,
     trending,
 )
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
@@ -36,6 +38,8 @@ app.include_router(crawl.router)
 app.include_router(trending.router)
 app.include_router(api_keys.router)
 app.include_router(pipeline.router)
+app.include_router(timeline.router)
+app.include_router(clips.router)
 app.include_router(library.router)
 app.include_router(image_proxy.router)
 app.include_router(downloads.router)
