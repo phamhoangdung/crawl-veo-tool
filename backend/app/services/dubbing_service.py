@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 from pydub import AudioSegment
@@ -6,18 +7,36 @@ from sqlalchemy.orm import Session
 
 from app.adapters import demucs, ffmpeg
 from app.models.video import Video, VideoStatus
-from app.services import transcribe_service, translate_service, tts_service
+from app.services import (
+    progress_service,
+    transcribe_service,
+    translate_service,
+    tts_service,
+)
 
 logger = logging.getLogger(__name__)
 
 _MIN_STRETCH_FACTOR_DELTA = 0.05  # bỏ qua time-stretch nếu lệch dưới 5%, không đáng để re-encode
 
 
+def _is_speakable(text: str) -> bool:
+    """Có chữ hoặc số để đọc không.
+
+    Edge-TTS báo "No audio was received" khi văn bản chỉ có dấu câu — lỗi input
+    chứ không phải lỗi mạng, nên retry cũng vô ích. Lọc trước cho sạch log.
+    """
+    return bool(re.search(r"[^\W_]", text, flags=re.UNICODE))
+
+
 def run_transcribe(db: Session, video: Video, source_lang: str = "zh") -> None:
     video.status = VideoStatus.TRANSCRIBING
     db.commit()
+    # faster-whisper chạy liền một mạch, không chia nhỏ được nên chỉ báo chặng
+    # chứ không có phần trăm.
+    progress_service.set_stage(video.id, "transcribing", kind="transcribe")
     try:
         video.transcript_json = transcribe_service.transcribe(Path(video.local_path), language=source_lang)
+        video.status = VideoStatus.TRANSCRIBED
         db.commit()
     except Exception:
         video.status = VideoStatus.FAILED_TRANSCRIBING
@@ -32,11 +51,25 @@ async def run_translate(
     db.commit()
     try:
         segments = video.transcript_json or []
+        progress_service.set_stage(
+            video.id, "translating", total=len(segments), kind="translate"
+        )
+        # Dựng list MỚI thay vì sửa tại chỗ: cột JSON của SQLAlchemy không theo
+        # dõi thay đổi bên trong, gán lại chính object cũ thì commit không ghi gì.
+        translated: list[dict] = []
         for segment in segments:
-            segment["translated_text"] = await translate_service.translate_text(
-                db, user_id, segment["text"], source_lang, target_lang
+            translated.append(
+                {
+                    **segment,
+                    "translated_text": await translate_service.translate_text(
+                        db, user_id, segment["text"], source_lang, target_lang
+                    ),
+                }
             )
-        video.transcript_json = segments
+            progress_service.advance(video.id, 1, kind="translate")
+
+        video.transcript_json = translated
+        video.status = VideoStatus.TRANSLATED
         db.commit()
     except Exception:
         video.status = VideoStatus.FAILED_TRANSLATING
@@ -82,9 +115,16 @@ async def run_dub_and_mux(db: Session, user_id: int, video: Video, keep_backgrou
 
         total_ms = int((video.duration_seconds or 60) * 1000)
         voice_timeline = AudioSegment.silent(duration=total_ms)
+        progress_service.set_stage(
+            video.id, "synthesizing", total=len(segments), kind="dub"
+        )
         for i, segment in enumerate(segments):
-            text = (segment.get("translated_text") or segment.get("text") or "").strip()
-            if not text:
+            progress_service.advance(video.id, 1, kind="dub")
+            # CHỈ dùng bản dịch: giọng tiếng Việt không đọc được lời gốc tiếng
+            # Trung, Edge-TTS sẽ báo "No audio was received".
+            text = (segment.get("translated_text") or "").strip()
+            if not _is_speakable(text):
+                logger.debug("Bỏ qua đoạn %d: không có nội dung đọc được (%r)", i, text)
                 continue
             target_duration = max(segment["end"] - segment["start"], 0.3)
             clip = await _synthesize_segment_matched_duration(
@@ -97,6 +137,8 @@ async def run_dub_and_mux(db: Session, user_id: int, video: Video, keep_backgrou
         if keep_background:
             video.status = VideoStatus.SEPARATING_AUDIO
             db.commit()
+            # Demucs chạy model PyTorch liền mạch — chỉ báo chặng, không có %.
+            progress_service.set_stage(video.id, "separating", kind="dub")
             original_audio_path = video_dir / "original_audio.wav"
             ffmpeg.extract_audio(Path(video.local_path), original_audio_path)
             _vocals_path, background_path = demucs.separate_vocals(
@@ -113,6 +155,7 @@ async def run_dub_and_mux(db: Session, user_id: int, video: Video, keep_backgrou
 
         video.status = VideoStatus.MUXING
         db.commit()
+        progress_service.set_stage(video.id, "muxing", kind="dub")
 
         output_path = video_dir / "dubbed.mp4"
         ffmpeg.replace_audio_track(Path(video.local_path), final_audio_path, output_path)

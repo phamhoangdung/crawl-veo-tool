@@ -40,3 +40,41 @@ Từ 1 video đã tải (Phase 1), chạy hết pipeline: transcribe → dịch 
 - **Bug đã sửa**: `Job`/`Video` thiếu `relationship()` hai chiều đã sửa ở Phase 1 — nhắc lại vì lần này thêm cột mới (`dubbed_path`, `transcript_json`) cũng phải nhớ xoá DB cũ (`storage/app.db`) để SQLAlchemy tạo lại schema, vì MVP chưa dùng Alembic.
 - Dịch qua Google Translate free gọi **tuần tự từng câu** (không batch), với video ~105 câu mất khoảng 1-2 phút — chấp nhận được cho MVP nhưng sẽ chậm với video dài; có thể cải thiện bằng cách gộp nhiều câu vào 1 request khi cần (Phase sau).
 - Module quản lý API key (dự kiến ban đầu ở Phase 3) đã làm sớm ở Phase 2 vì logic fallback ưu tiên-key-trả-phí cần nó ngay — Phase 3 giờ chỉ cần thêm UI/adapter cho provider mới, không cần làm lại phần lưu trữ key.
+
+## Bug: dịch báo "Hoàn tất" nhưng không lưu gì (phiên 2026-09-07)
+
+**Hiện tượng**: tác vụ dịch chạy hết 32/32 câu, progress báo Hoàn tất, nhưng `translated_text` trong DB vẫn rỗng cả 32 câu → nút "Lồng tiếng" tiếp tục bị khoá với lý do "Cần dịch phụ đề trước".
+
+**Nguyên nhân 1 — SQLAlchemy không theo dõi thay đổi bên trong cột JSON.** Code cũ sửa tại chỗ:
+```python
+for segment in segments:            # segments LÀ chính video.transcript_json
+    segment["translated_text"] = ...
+video.transcript_json = segments    # gán lại cùng object → không "dirty" → commit không ghi
+```
+Sửa: dựng **list mới** (`{**segment, "translated_text": ...}`) rồi gán. Đây là bẫy chung của `mapped_column(JSON)` — mọi chỗ sửa cột JSON phải tạo object mới, hoặc dùng `MutableList`/`flag_modified`. Các chỗ khác trong repo đều đã gán list mới nên chỉ `run_translate` bị.
+
+**Nguyên nhân 2 — thiếu trạng thái "đã xong" cho từng bước.** `run_transcribe`/`run_translate` đặt status `TRANSCRIBING`/`TRANSLATING` rồi **không bao giờ đổi khi hoàn tất**, nên video kẹt mãi ở trạng thái "đang làm". Đã thêm `TRANSCRIBED` và `TRANSLATED` vào `VideoStatus` và đặt sau khi commit thành công.
+
+**Verify thật**: chạy lại dịch → 32/32 câu lưu vào DB (`有活就干没活就炫` → `Nếu bạn có công việc, hãy làm nó...`), status `TRANSLATED`.
+
+## Edge-TTS "No audio was received" — nguyên nhân thật (phiên 2026-09-07)
+
+Comment cũ trong `tts_service.py` ghi lỗi này là "tạm thời của thư viện, không phải do input sai" — **sai**. Đo thật với edge-tts 7.2.8, giọng `vi-VN-HoaiMyNeural`:
+
+| Input | Kết quả |
+|---|---|
+| `'Xin chào, đây là thử nghiệm.'` | OK (16992 bytes) |
+| `''` / `'   '` | OK (0 bytes, không lỗi) |
+| `'...'` | **NoAudioReceived** |
+| `'炫饭'` (chữ Hán, giọng tiếng Việt) | **NoAudioReceived** |
+
+Vậy lỗi xảy ra khi **văn bản không có nội dung đọc được cho ngôn ngữ của giọng** — retry 3 lần là vô ích.
+
+**Nguyên nhân gốc trong luồng dub**: `dubbing_service` fallback `segment.get("translated_text") or segment.get("text")` — khi bản dịch rỗng (do bug SQLAlchemy JSON ở mục trên), nó lấy **lời gốc tiếng Trung** đưa cho giọng tiếng Việt đọc → lỗi ở mọi câu.
+
+**Đã sửa**:
+- `dubbing_service`: **chỉ dùng `translated_text`**, bỏ fallback về lời gốc. Câu chưa dịch thì bỏ qua (im lặng ở đoạn đó) thay vì tạo tiếng Việt đọc chữ Hán.
+- `tts_service._has_speakable_content()`: chặn trước khi gọi Edge-TTS, báo lỗi ngay thay vì retry 3 lần. Regex `[^\W_]` nên chữ tiếng Việt có dấu vẫn nhận đúng.
+- Log lỗi kèm 60 ký tự đầu của văn bản để truy nguyên nhanh.
+
+Giọng khả dụng (verify qua `edge_tts.list_voices()`): `vi-VN-HoaiMyNeural` (nữ), `vi-VN-NamMinhNeural` (nam).

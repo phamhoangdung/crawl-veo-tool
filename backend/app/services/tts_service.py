@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from pathlib import Path
 
 import edge_tts
@@ -19,9 +20,25 @@ class TtsFailedError(RuntimeError):
     pass
 
 
+def _has_speakable_content(text: str) -> bool:
+    """Có chữ/số để đọc không — chỉ dấu câu thì Edge-TTS không trả về audio nào."""
+    return bool(re.search(r"[^\W_]", text, flags=re.UNICODE))
+
+
 async def _synthesize_with_edge_retry(text: str, output_path: Path) -> None:
-    """edge-tts thỉnh thoảng lỗi tạm thời `NoAudioReceived` (vấn đề đã biết của thư viện,
-    không phải do input sai) — retry vài lần trước khi coi là lỗi thật."""
+    """Gọi Edge-TTS, retry khi lỗi mạng tạm thời.
+
+    `NoAudioReceived` có hai nguyên nhân rất khác nhau:
+    - Văn bản không đọc được (chỉ dấu câu, hoặc chữ không thuộc ngôn ngữ của
+      giọng — ví dụ giọng tiếng Việt gặp chữ Hán). Đây là lỗi input, **retry vô
+      ích**, nên báo lỗi ngay kèm nội dung để dễ truy nguyên.
+    - Trục trặc tạm thời phía dịch vụ. Trường hợp này retry mới có tác dụng.
+    """
+    if not _has_speakable_content(text):
+        raise TtsFailedError(
+            f"Văn bản không có nội dung đọc được: {text!r}"
+        )
+
     last_error: Exception | None = None
     for attempt in range(1, _EDGE_TTS_MAX_ATTEMPTS + 1):
         try:
@@ -29,9 +46,18 @@ async def _synthesize_with_edge_retry(text: str, output_path: Path) -> None:
             return
         except edge_tts.exceptions.NoAudioReceived as exc:
             last_error = exc
-            logger.warning("Edge-TTS attempt %d/%d failed: %s", attempt, _EDGE_TTS_MAX_ATTEMPTS, exc)
+            logger.warning(
+                "Edge-TTS lần %d/%d thất bại (%s) — text: %r",
+                attempt,
+                _EDGE_TTS_MAX_ATTEMPTS,
+                exc,
+                text[:60],
+            )
             await asyncio.sleep(1)
-    raise TtsFailedError(f"Edge-TTS failed after {_EDGE_TTS_MAX_ATTEMPTS} attempts") from last_error
+    raise TtsFailedError(
+        f"Edge-TTS thất bại sau {_EDGE_TTS_MAX_ATTEMPTS} lần thử. "
+        f"Nếu lặp lại, kiểm tra xem văn bản có đúng tiếng Việt không: {text[:60]!r}"
+    ) from last_error
 
 
 async def synthesize_speech(db: Session, user_id: int, text: str, output_path: Path) -> None:
