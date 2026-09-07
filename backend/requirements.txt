@@ -10,3 +10,4 @@ pydub>=0.25
 demucs>=4.0
 pytest>=8.3
 pytest-asyncio>=0.24
+pyinstaller>=6.22  # Phase 12: đóng gói desktop app, không cần cho chạy dev thường

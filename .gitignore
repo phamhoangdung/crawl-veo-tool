@@ -11,3 +11,5 @@ dist/
 build/
 storage/
 .DS_Store
+target/
+src-tauri/gen/

@@ -9,9 +9,13 @@
     "dev:frontend": "pnpm -C frontend dev",
     "test": "concurrently -n BACKEND,FRONTEND -c blue,green \"npm:test:backend\" \"npm:test:frontend\"",
     "test:backend": "node scripts/run-python.mjs -m pytest backend",
-    "test:frontend": "pnpm -C frontend test"
+    "test:frontend": "pnpm -C frontend test",
+    "desktop:build-backend": "cd backend && .venv\\Scripts\\python.exe -m PyInstaller --onedir --name viedub-backend --distpath dist --workpath build --noconfirm app/entrypoint.py",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "pnpm -C frontend build && npm run desktop:build-backend && tauri build"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "concurrently": "^9.2.4"
   }
 }
