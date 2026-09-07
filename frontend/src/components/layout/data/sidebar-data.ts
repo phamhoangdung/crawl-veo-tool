@@ -1,181 +1,88 @@
 import {
-  Construction,
   LayoutDashboard,
   Monitor,
-  Bug,
+  Clapperboard,
   Download,
-  FileX,
   HelpCircle,
   KeyRound,
   LibraryBig,
-  Lock,
-  Bell,
   Palette,
-  ServerOff,
   Settings,
-  Wrench,
   UserCog,
-  UserX,
   TrendingUp,
-  ShieldCheck,
-  AudioWaveform,
-  Command,
-  GalleryVerticalEnd,
 } from 'lucide-react'
+import { APP_OWNER } from '@/config/app'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
-    name: 'satnaing',
-    email: 'satnaingdev@gmail.com',
-    avatar: '/avatars/shadcn.jpg',
+    name: APP_OWNER.name,
+    email: APP_OWNER.email,
+    avatar: '',
   },
-  teams: [
-    {
-      name: 'Shadcn Admin',
-      logo: Command,
-      plan: 'Vite + ShadcnUI',
-    },
-    {
-      name: 'Acme Inc',
-      logo: GalleryVerticalEnd,
-      plan: 'Enterprise',
-    },
-    {
-      name: 'Acme Corp.',
-      logo: AudioWaveform,
-      plan: 'Startup',
-    },
-  ],
   navGroups: [
     {
-      title: 'General',
+      // Nhóm theo luồng làm việc thật: tìm video → xử lý → lấy kết quả.
+      title: 'Nội dung',
       items: [
         {
-          title: 'Dashboard',
+          title: 'Tổng quan',
           url: '/',
           icon: LayoutDashboard,
         },
         {
-          title: 'Crawl',
-          url: '/crawl',
-          icon: Download,
-        },
-        {
-          title: 'Trending',
+          title: 'Xu hướng',
           url: '/trending',
           icon: TrendingUp,
         },
         {
-          title: 'API Keys',
-          url: '/api-keys',
-          icon: KeyRound,
+          title: 'Tìm & tải',
+          url: '/crawl',
+          icon: Download,
         },
         {
-          title: 'Library',
+          title: 'Video của tôi',
+          url: '/videos',
+          icon: Clapperboard,
+        },
+        {
+          title: 'Thư viện',
           url: '/library',
           icon: LibraryBig,
         },
       ],
     },
     {
-      title: 'Pages',
+      title: 'Hệ thống',
       items: [
         {
-          title: 'Auth',
-          icon: ShieldCheck,
-          items: [
-            {
-              title: 'Sign In',
-              url: '/sign-in',
-            },
-            {
-              title: 'Sign In (2 Col)',
-              url: '/sign-in-2',
-            },
-            {
-              title: 'Sign Up',
-              url: '/sign-up',
-            },
-            {
-              title: 'Forgot Password',
-              url: '/forgot-password',
-            },
-            {
-              title: 'OTP',
-              url: '/otp',
-            },
-          ],
+          title: 'API Keys',
+          url: '/api-keys',
+          icon: KeyRound,
         },
         {
-          title: 'Errors',
-          icon: Bug,
-          items: [
-            {
-              title: 'Unauthorized',
-              url: '/errors/unauthorized',
-              icon: Lock,
-            },
-            {
-              title: 'Forbidden',
-              url: '/errors/forbidden',
-              icon: UserX,
-            },
-            {
-              title: 'Not Found',
-              url: '/errors/not-found',
-              icon: FileX,
-            },
-            {
-              title: 'Internal Server Error',
-              url: '/errors/internal-server-error',
-              icon: ServerOff,
-            },
-            {
-              title: 'Maintenance Error',
-              url: '/errors/maintenance-error',
-              icon: Construction,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      title: 'Other',
-      items: [
-        {
-          title: 'Settings',
+          title: 'Cài đặt',
           icon: Settings,
           items: [
             {
-              title: 'Profile',
-              url: '/settings',
+              title: 'Tài khoản',
+              url: '/settings/account',
               icon: UserCog,
             },
             {
-              title: 'Account',
-              url: '/settings/account',
-              icon: Wrench,
-            },
-            {
-              title: 'Appearance',
+              title: 'Giao diện',
               url: '/settings/appearance',
               icon: Palette,
             },
             {
-              title: 'Notifications',
-              url: '/settings/notifications',
-              icon: Bell,
-            },
-            {
-              title: 'Display',
+              title: 'Hiển thị',
               url: '/settings/display',
               icon: Monitor,
             },
           ],
         },
         {
-          title: 'Help Center',
+          title: 'Trợ giúp',
           url: '/help-center',
           icon: HelpCircle,
         },

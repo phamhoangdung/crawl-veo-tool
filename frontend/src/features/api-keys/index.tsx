@@ -11,6 +11,7 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
 
 const PROVIDERS = [
@@ -72,6 +73,7 @@ export function ApiKeys() {
       <Header>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
+          <TaskMonitor />
           <ThemeSwitch />
           <ConfigDrawer />
           <ProfileDropdown />

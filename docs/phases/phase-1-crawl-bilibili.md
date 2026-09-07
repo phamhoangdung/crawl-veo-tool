@@ -57,3 +57,48 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 - **Bug đã sửa**: CORS backend cố định `allow_origins=["http://localhost:5173"]` — Vite tự đổi cổng (5174, 5175...) khi 5173 bận (hay gặp lúc dev vì tiến trình cũ chưa dọn sạch), khiến browser bị chặn CORS dù backend chạy đúng. Sửa thành `allow_origin_regex=r"http://localhost:\d+"` (chấp nhận mọi cổng localhost — chỉ hợp lý vì đây là tool chạy local, không expose ra ngoài).
 - **Lưu ý vận hành `--reload`**: gặp trường hợp `uvicorn --reload` báo "WatchFiles detected changes... Reloading..." nhưng worker process cũ (`--multiprocessing-fork`) không thực sự bị thay, vẫn phục vụ code cũ — nếu sửa code mà hành vi không đổi dù server "đã reload", kiểm tra lại bằng cách tắt hẳn qua `Get-CimInstance Win32_Process | Where Name -match python` (tìm đúng PID `--multiprocessing-fork`, không phải PID reloader) rồi khởi động lại sạch, đừng cố đoán/sửa code thêm.
 - **Trending category "Giải trí" (rid 71) chỉ trả về 1 video** từ `ranking/region` (so với 9-11 video ở rid 21/211) — verify là dữ liệu thật từ Bilibili tại thời điểm test, không phải lỗi code. Nếu muốn nhiều nội dung giải trí hơn, có thể cân nhắc đổi/thêm rid khác cho category này ở phase sau.
+
+## Bổ sung sau (phiên 2026-09-07)
+
+- **Tải video từ Trending**: `POST /api/jobs/from-selection` nhận danh sách video người dùng tick chọn (metadata gửi kèm từ frontend, không gọi lại API Bilibili). Trang Trending có checkbox trên từng card + nút "Chọn tất cả".
+- **Dịch từ khoá sang tiếng Trung**: `JobCreateRequest.translate_keyword` (mặc định UI bật sẵn). Bilibili là nền tảng Trung Quốc nên search nguyên văn tiếng Việt gần như không ra kết quả. Dùng lại `translate_service.translate_text` (OpenAI → fallback Google free), bỏ qua nếu từ khoá đã là tiếng Trung, và **fallback về từ khoá gốc nếu dịch lỗi** — dịch hỏng không được làm chết cả job. Verify thật: `'ẩm thực'` → `'美食'`.
+- **Ảnh thumbnail**: thêm cột `videos.cover_url` (search API trả field `pic`, dạng `//i2.hdslb.com/...` thiếu scheme → chuẩn hoá về https). Hiển thị ở cả trang Crawl (cột Ảnh) lẫn Trending.
+- **Hotlink**: Bilibili chặn ảnh theo header `Referer` (gửi kèm localhost → 403). Frontend dùng `referrerPolicy="no-referrer"`; có thêm `/api/image` proxy ở backend làm fallback khi CDN siết chặt (chỉ cho phép host `.hdslb.com`/`.bilibili.com` để tránh SSRF).
+- **Migration**: dự án chưa dùng Alembic mà `create_all()` không sửa bảng cũ, nên thêm `ensure_schema_columns()` trong `app/core/db.py` — tự `ALTER TABLE ADD COLUMN` cho cột nullable còn thiếu, chạy lúc startup. Khi schema thay đổi nhiều hơn thì nên chuyển sang Alembic.
+
+### Trending: chọn chuyên mục, phân trang, chart (phiên 2026-09-07)
+
+**Ràng buộc API Bilibili (đo thật, quan trọng khi sửa sau này):**
+- `ranking/region` trả **~11 video/category và KHÔNG phân trang** (không có tham số `pn`).
+- `popular` **có** phân trang (20/trang) nhưng là bảng xếp hạng chung, không chia category. Cần header User-Agent, thiếu thì trả `code: -352` (risk control).
+- `search/all/v2` có phân trang thật — đây là nguồn duy nhất để lướt sâu theo chủ đề.
+- Item ranking **không có** field lượt thích; dùng `favorites` (lượt lưu) làm chỉ số tương tác.
+
+**Đã làm:**
+- **Chọn chuyên mục**: `app/services/bilibili_categories.py` liệt kê 39 category (rid + tên Việt + tên Trung + nhóm), tất cả xác nhận bằng request thật. `GET /categories` trả toàn bộ, `GET /default-categories` trả 3 mục mặc định. UI có Sheet chọn nhiều mục + ô tìm kiếm, lưu lựa chọn vào `localStorage`.
+- **Infinite scroll (Trending)**: `GET /category-page?rid&page` — **trang 1 lấy từ ranking** (đúng nghĩa "đang hot"), **trang sau lấy từ search theo `name_zh`** của category. Frontend lọc trùng bvid giữa 2 nguồn. Cache `staleTime` 5 phút để chuyển tab qua lại không gọi lại API.
+- **Infinite scroll (Crawl)**: `POST /api/jobs/{id}/load-more?page=N` — search thêm bằng chính `job.keyword` (đã dịch nếu bật) rồi thêm video vào job, bỏ qua video đã có trong DB.
+- **Chart**: `GET /stats?rids=1,2,3` gọi song song từng category, trả tổng/trung bình/max lượt xem + lượt lưu + video nổi nhất, sắp giảm dần theo tổng lượt xem. Category lỗi bị bỏ qua chứ không làm hỏng cả biểu đồ. UI vẽ bar chart ngang bằng recharts (đã có sẵn trong deps).
+- Hook dùng chung `frontend/src/hooks/use-infinite-scroll.ts` (IntersectionObserver, dùng state chứ không phải ref để effect chạy lại khi sentinel gắn vào DOM).
+
+**Chưa làm**: theo dõi xu hướng theo thời gian (tăng/giảm) — Bilibili chỉ trả snapshot hiện tại, muốn có đường xu hướng phải tự lưu snapshot vào DB theo ngày rồi so sánh.
+
+### Chuyên mục động, chart xu hướng, theo dõi tải (phiên 2026-09-07, phần 3)
+
+**Chuyên mục lấy từ API thay vì hardcode** — `bilibili_categories.py` đã bị xoá.
+- Bilibili **không có** endpoint trả cây phân loại, nhưng mọi API video đều kèm `tid`/`tname`. `category_service.discover_categories()` quét `popular` (2 trang) + `online/list` để dựng danh sách thật → **40 chuyên mục** thay vì 39 mục tự điền, và tự bắt kịp khi Bilibili thêm mục mới.
+- Bảng `categories` (rid, name_zh, name_vi, group_name, is_followed, first/last_seen_at). Tên tiếng Việt dịch dần qua `translate_missing_names()` (mỗi lần 20 mục) — mục chưa dịch vẫn dùng được, UI hiển thị tên tiếng Trung.
+- Nhóm được đoán bằng từ khoá trong tên tiếng Trung (`_GROUP_HINTS`), không khớp thì để None → UI xếp vào "Khác".
+- Lựa chọn theo dõi lưu ở **DB** (`is_followed`), không phải localStorage — chuẩn bị cho việc đóng gói thành app desktop.
+- Lưu ý đã gặp: rid của cùng một mục có thể khác giữa các API (`211` vs `215` đều là 美食记录) — thêm lý do không nên hardcode.
+
+**Chart dạng line theo thời gian**
+- Bilibili chỉ trả snapshot hiện tại nên phải **tự tích luỹ**: bảng `category_snapshots` ghi 1 điểm mỗi lần gọi `/stats`, chống ghi dày bằng `min_interval_minutes=30`.
+- `GET /history?rids&days` trả chuỗi điểm để vẽ. Khi chưa đủ 2 điểm, UI hiển thị thanh ngang số liệu hiện tại kèm giải thích — không vẽ đường giả.
+- `heat_score` = lượt xem trung bình / số ngày xếp hạng, để so sánh được giữa các khung `day` khác nhau.
+
+**Theo dõi tiến độ tải (trang Crawl)**
+- `progress_service` giữ tiến độ **trong bộ nhớ** (dict + Lock), không ghi DB: tiến độ chỉ có nghĩa lúc đang tải, mất khi restart là đúng. **Nếu sau này chuyển sang Celery/nhiều worker thì phải đổi sang Redis.**
+- Chặng: pending → video → audio → merging → done/failed. Mỗi chặng đếm lại byte từ đầu, nên phần trăm là của chặng hiện tại chứ không phải toàn bộ.
+- `GET /api/downloads/progress` (frontend poll 800ms khi còn mục đang tải, dừng hẳn khi rỗng), `DELETE /progress/{id}` để bỏ mục đã xong.
+- `GET /api/downloads/location` cho biết file lưu ở đâu; `POST /api/downloads/reveal` mở Finder/Explorer (macOS `open -R`, Windows `explorer /select,`, Linux `xdg-open`). **Đường dẫn luôn lấy từ DB, không nhận từ client** — nếu không endpoint này thành công cụ mở file tuỳ ý trên máy.

@@ -32,3 +32,19 @@ Xuất phụ đề song ngữ, burn-in tuỳ chọn, có trang thư viện quả
 - **Phát hiện thú vị lúc verify**: tưởng video test (`BV1sQZ7Y5EZa`, tải từ Bilibili) sẽ là 16:9 vì tài liệu research trước đó giả định Bilibili chủ yếu ngang — thực tế video này là 480×852 (dọc). Bilibili thật ra có cả nội dung dọc (video ngắn kiểu short-form), không chỉ ngang như giả định ban đầu trong plan. Nhờ vậy vô tình verify được nhánh dọc của `pick_font_size_for` bằng dữ liệu thật thay vì chỉ mock.
 - Dọn 4 record video test còn sót từ Phase 1-2 (2 trong số đó là video nhạc phát hiện lúc làm Phase 2, đã dừng không xử lý tiếp) khỏi DB trước khi verify trang Library, để danh sách chỉ còn video thật sự đã xử lý hoàn chỉnh.
 - Zip download dùng `zipfile` thư viện chuẩn Python, không cần thêm dependency — nén theo `ZIP_DEFLATED`, đặt tên file trong zip theo `{video_id}_{tên gốc}` để tránh trùng tên khi tải nhiều video cùng lúc.
+
+## Editor phụ đề + sửa bug nút bước tiếp theo (phiên 2026-09-07)
+
+**Bug: dịch xong nhưng nút "Lồng tiếng" vẫn bị khoá.** Nguyên nhân: `['video', id]` chỉ được invalidate lúc **bấm nút chạy**, không phải lúc tác vụ **xong**. Tác vụ chạy nền nên khi dịch hoàn tất, `translated_text` đã có trong DB nhưng frontend vẫn dùng cache cũ → `hasTranslation = false` → nút khoá.
+
+Sửa trong `hooks/use-task-progress.ts`: mỗi lần SSE đẩy dữ liệu, so với lần trước để phát hiện tác vụ **vừa chuyển từ đang-chạy sang kết thúc**, rồi invalidate `['video', id]` + `['files']` + `['dashboard-stats']`. Đây là chỗ duy nhất biết được thời điểm đó.
+
+**Editor phụ đề** (`features/videos/subtitle-editor.tsx`) — mở từ panel chi tiết, nút "Xem trước & sửa":
+- **Video player** bên trái, phát bản đã xử lý nhiều nhất có sẵn (burned → dubbed → original). Phụ đề câu đang phát hiện to bên dưới để đọc khi xem.
+- **Bảng sửa** bên phải: mỗi câu có 2 textarea (gốc + bản dịch), bấm mốc thời gian để nhảy tới câu đó trong video, câu đang phát được tô sáng.
+- Nút Lưu chỉ bật khi có thay đổi thật (`isDirty` so từng câu), kèm nút Hoàn tác. Lưu qua `PUT /api/videos/{id}/transcript` vốn đã có sẵn.
+- Panel chi tiết giờ hiện 3 câu đầu + link "Xem tất cả N câu" thay vì đổ hết danh sách.
+
+**Endpoint mới** `GET /api/library/{id}/stream?variant=` — phát video inline trong thẻ `<video>`. Khác `/download`: **không đặt `filename`** nên trình duyệt phát thay vì tải xuống. `FileResponse` tự xử lý HTTP Range (verify: trả 206 với header `Range`) nên tua được.
+
+**Lưu ý React**: bản nháp phụ đề reset bằng `key` trên component con, **không** dùng `useEffect` để đồng bộ state từ props — lint rule `set-state-in-effect` chặn đúng, và cách dùng `key` cũng sạch hơn.
