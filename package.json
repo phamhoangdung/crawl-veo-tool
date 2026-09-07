@@ -2,10 +2,14 @@
   "name": "crawl-video-tool",
   "private": true,
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "predev": "node scripts/sync-env.mjs",
     "dev": "concurrently -n BACKEND,FRONTEND -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --app-dir backend --port 8000",
-    "dev:frontend": "pnpm -C frontend dev"
+    "dev:backend": "node scripts/run-backend.mjs",
+    "dev:frontend": "pnpm -C frontend dev",
+    "test": "concurrently -n BACKEND,FRONTEND -c blue,green \"npm:test:backend\" \"npm:test:frontend\"",
+    "test:backend": "node scripts/run-python.mjs -m pytest backend",
+    "test:frontend": "pnpm -C frontend test"
   },
   "devDependencies": {
     "concurrently": "^9.2.4"

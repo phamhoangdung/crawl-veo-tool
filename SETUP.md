@@ -2,6 +2,8 @@
 
 Hướng dẫn cài lại toàn bộ dự án từ đầu trên 1 máy Windows mới, dựa trên những gì đã gặp thật khi build dự án này (xem thêm chi tiết/lý do ở từng `docs/phases/phase-N-*.md`).
 
+> Hướng dẫn chung cho cả 3 nền tảng (Windows/macOS/Linux) nằm ở [README.md](README.md). Cách nhanh nhất trên mọi OS là `npm install && npm run setup` — script tự lo venv, deps và `.env`. File này giữ lại phần đặc thù Windows và các lỗi đã gặp thật.
+
 ## 1. Cài công cụ nền tảng
 - **Python 3.11+** — kiểm tra `python3 --version` (trên Windows, lệnh `python` trần có thể trỏ tới Python 2 hoặc App Store stub, luôn dùng `python3` hoặc gọi thẳng venv).
 - **Node.js** (kèm npm) — dùng cho điều phối script ở root.
