@@ -43,6 +43,22 @@ def download_video(video_id: int, variant: str = "dubbed", db: Session = Depends
     return FileResponse(path, filename=f"{video.id}_{path.name}")
 
 
+@router.get("/{video_id}/stream")
+def stream_video(video_id: int, variant: str = "original", db: Session = Depends(get_db)) -> FileResponse:
+    """Phát video trong thẻ <video> của trình duyệt.
+
+    Khác `/download`: không đặt `filename` nên trình duyệt phát inline thay vì
+    tải xuống. FileResponse tự xử lý HTTP Range nên tua được.
+    """
+    video = db.get(Video, video_id)
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    path = library_service.resolve_download_path(video, variant)
+    if path is None or not path.exists():
+        raise HTTPException(status_code=404, detail=f"Không có file '{variant}' cho video này")
+    return FileResponse(path, media_type="video/mp4")
+
+
 @router.get("/download-zip")
 def download_zip(
     video_ids: str = Query(..., description="Danh sách id cách nhau bởi dấu phẩy, vd: 1,2,3"),
