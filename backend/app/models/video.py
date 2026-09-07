@@ -20,7 +20,11 @@ class VideoStatus(str, enum.Enum):
     DOWNLOADED = "downloaded"
     SEPARATING_AUDIO = "separating_audio"
     TRANSCRIBING = "transcribing"
+    # Mỗi bước cần trạng thái "đã xong" riêng, nếu không video kẹt mãi ở trạng
+    # thái "đang làm" và UI không biết bước nào đã hoàn tất.
+    TRANSCRIBED = "transcribed"
     TRANSLATING = "translating"
+    TRANSLATED = "translated"
     DUBBING = "dubbing"
     MUXING = "muxing"
     DONE = "done"
@@ -44,6 +48,7 @@ class Video(Base):
     title: Mapped[str] = mapped_column()
     author_name: Mapped[str | None] = mapped_column(default=None)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, default=None)
+    cover_url: Mapped[str | None] = mapped_column(default=None)
     source_url: Mapped[str] = mapped_column()
     local_path: Mapped[str | None] = mapped_column(default=None)
     dubbed_path: Mapped[str | None] = mapped_column(default=None)

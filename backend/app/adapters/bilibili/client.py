@@ -68,6 +68,13 @@ class BilibiliClient:
         )
         return payload["data"]["list"]
 
+    async def get_online_list(self) -> list[dict]:
+        """Video đang được xem nhiều — mỗi item kèm tid/tname, dùng để phát hiện chuyên mục."""
+        payload = await self._get_json(
+            "https://api.bilibili.com/x/web-interface/online/list", {}
+        )
+        return payload["data"]
+
     async def get_ranking(self, rid: int, day: int = 3) -> list[dict]:
         payload = await self._get_json(
             "https://api.bilibili.com/x/web-interface/ranking/region",
