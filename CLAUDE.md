@@ -45,7 +45,7 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 | 9. Compliance & value-add cho re-up | [docs/phases/phase-9-reup-compliance.md](docs/phases/phase-9-reup-compliance.md) | Chưa bắt đầu — Phase 13 (timeline editor) đã xong, sẵn sàng để dùng |
 | 10. Video kể chuyện (script + TTS + video nền) | [docs/phases/phase-10-story-videos.md](docs/phases/phase-10-story-videos.md) | Chưa bắt đầu — cần chốt hướng kịch bản; cần video nền mẫu (chưa có) |
 | 11. Clip ngắn TikTok + cross-post | [docs/phases/phase-11-shorts-crosspost.md](docs/phases/phase-11-shorts-crosspost.md) | **Phần cắt clip xong & verify thật** (ffmpeg thật) — cross-post qua API chưa làm (ngoài phạm vi, xem Ghi chú) |
-| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | Chưa bắt đầu — plan sẵn sàng, độc lập (làm bất kỳ lúc nào) |
+| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | **Cơ chế lõi xong & verify thật** (sidecar spawn/tắt, MASTER_KEY/storage đúng chỗ) — còn thiếu `tauri build` ra installer thật |
 | 13. Trình chỉnh sửa timeline (AI gợi ý + kéo-thả) | [docs/phases/phase-13-timeline-editor.md](docs/phases/phase-13-timeline-editor.md) | **Xong & verify thật** (ffmpeg thật, DB thật, browser thật) — 9/10/11 giờ dùng chung editor này |
 
 ## Quy ước tài liệu (module/nghiên cứu, khác với phase thực thi ở trên)

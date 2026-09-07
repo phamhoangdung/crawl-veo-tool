@@ -75,7 +75,10 @@ pub fn run() {
             // Python nền (xem DoD ở docs/phases/phase-12-desktop-packaging.md).
             if let RunEvent::Exit = event {
                 let state = app_handle.state::<BackendProcess>();
-                if let Some(mut child) = state.0.lock().unwrap().take() {
+                // Lấy Child ra khỏi Mutex rồi nhả lock ngay (không giữ lock trong
+                // lúc kill/wait — đó là I/O chặn, không nên giữ mutex khi làm việc đó).
+                let child_opt = state.0.lock().unwrap().take();
+                if let Some(mut child) = child_opt {
                     let _ = child.kill();
                     let _ = child.wait();
                     log::info!("Đã tắt tiến trình backend.");
