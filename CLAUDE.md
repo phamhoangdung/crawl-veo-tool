@@ -12,6 +12,8 @@ Kiến trúc/tech stack đầy đủ: Backend Python/FastAPI + SQLite(WAL) + Pro
 
 Cả 3 gate ban đầu đã chốt: Bilibili trước, cặp ngôn ngữ Trung → Việt, dùng cá nhân trước rồi mới đóng gói bán sau (chi tiết + ảnh hưởng kiến trúc ở docs/overview/plan.md phần Context).
 
+**Hướng phân phối khi thương mại hoá (chốt 2026-09-07, tạm thời — có thể đổi lại)**: ưu tiên đóng gói **desktop app** (Tauri + PyInstaller sidecar, xem [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md)), tạm gác hướng host multi-tenant SaaS/bán license qua web — lý do (chi phí compute Whisper/Demucs, rủi ro pháp lý khi host nội dung re-up cho nhiều người lạ) ở [docs/scale-reup-features/plan.md](docs/scale-reup-features/plan.md).
+
 **Chạy dự án**: copy root `.env.example` → `.env`, điền `MASTER_KEY`, rồi `npm install` (1 lần) + `npm run dev` ở root — tự sync env vào `backend/.env`/`frontend/.env` và chạy cả backend (:8000) + frontend (:5173) cùng lúc. Chi tiết ở [docs/phases/phase-0-scaffolding.md](docs/phases/phase-0-scaffolding.md) mục "Cách chạy dự án". Lưu ý: root dùng npm (chỉ điều phối), `frontend/` dùng pnpm — không lẫn lộn.
 
 **Coding conventions**: xem [docs/conventions.md](docs/conventions.md) (kiến trúc phân lớp backend, quy tắc frontend, git/review). Skill hỗ trợ code chất lượng cao đã cài global: `vercel-react-best-practices` (React/TS, chính chủ Vercel, 692K+ installs) — dùng skill này khi viết code React. Backend Python/FastAPI không có skill tương đương đủ tin cậy trên skills.sh, quy tắc viết thủ công trong conventions.md. Sau mỗi phase, chạy `/code-review` (built-in) trước khi đánh dấu hoàn thành.
@@ -39,6 +41,12 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 | 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | **Xong & verify thật** (trừ cảnh báo hardsub, thiếu video mẫu) |
 | 6. Hardening & Ops | [docs/phases/phase-6-hardening-ops.md](docs/phases/phase-6-hardening-ops.md) | Phần cốt lõi xong & verify thật (storage cleanup, health-check, SETUP.md) |
 | 7. Đóng gói để bán (tương lai) | [docs/phases/phase-7-productization.md](docs/phases/phase-7-productization.md) | Ý tưởng, chưa lên kế hoạch |
+| 8. AI Account Pool (nhiều key/provider, failover, n8n orchestrator) | [docs/phases/phase-8-ai-account-pool.md](docs/phases/phase-8-ai-account-pool.md) | **Phần lõi xong** & verify qua test suite (127 test) + DB thật — chưa verify qua HTTP thật (xem Ghi chú trong phase) |
+| 9. Compliance & value-add cho re-up | [docs/phases/phase-9-reup-compliance.md](docs/phases/phase-9-reup-compliance.md) | Chưa bắt đầu — Phase 13 (timeline editor) đã xong, sẵn sàng để dùng |
+| 10. Video kể chuyện (script + TTS + video nền) | [docs/phases/phase-10-story-videos.md](docs/phases/phase-10-story-videos.md) | Chưa bắt đầu — cần chốt hướng kịch bản; cần video nền mẫu (chưa có) |
+| 11. Clip ngắn TikTok + cross-post | [docs/phases/phase-11-shorts-crosspost.md](docs/phases/phase-11-shorts-crosspost.md) | **Phần cắt clip xong & verify thật** (ffmpeg thật) — cross-post qua API chưa làm (ngoài phạm vi, xem Ghi chú) |
+| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | Chưa bắt đầu — plan sẵn sàng, độc lập (làm bất kỳ lúc nào) |
+| 13. Trình chỉnh sửa timeline (AI gợi ý + kéo-thả) | [docs/phases/phase-13-timeline-editor.md](docs/phases/phase-13-timeline-editor.md) | **Xong & verify thật** (ffmpeg thật, DB thật, browser thật) — 9/10/11 giờ dùng chung editor này |
 
 ## Quy ước tài liệu (module/nghiên cứu, khác với phase thực thi ở trên)
 Mỗi nhiệm vụ/module lớn có một thư mục riêng trong `docs/`, chứa `research.md`/`plan.md` của nhiệm vụ đó — dùng cho tài liệu tham khảo/kiến trúc, không phải checklist thực thi (đó là việc của `docs/phases/`). Khi cần thêm tài liệu module mới: tạo `docs/<ten-nhiem-vu>/`, thêm file, rồi thêm dòng vào bảng dưới.
@@ -46,3 +54,4 @@ Mỗi nhiệm vụ/module lớn có một thư mục riêng trong `docs/`, chứ
 | Nhiệm vụ | Thư mục |
 |---|---|
 | Tổng quan & kiến trúc toàn bộ tool | [docs/overview/plan.md](docs/overview/plan.md) |
+| Mở rộng re-up quy mô lớn (compliance YouTube, video kể chuyện, clip TikTok, AI Account Pool) | [docs/scale-reup-features/plan.md](docs/scale-reup-features/plan.md) |
