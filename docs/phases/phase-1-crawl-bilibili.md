@@ -46,6 +46,14 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 - [x] Chạy lại cùng từ khoá không tải trùng video đã có — verify: gọi 2 lần liên tiếp cùng keyword, không có lỗi `UniqueConstraint` (nếu dedup sai sẽ crash 500 ở lần 2), dedup hoạt động đúng dù kết quả search Bilibili tự thay đổi thứ tự/nội dung giữa 2 lần gọi (bản chất search API, không phải bug).
 
 ## Ghi chú phát sinh trong lúc làm
+
+### Tooltip xem ảnh to + dịch tiêu đề (2026-09-08)
+- Thumb trong bảng phải nhỏ để vừa nhiều dòng, nhưng nhỏ thì không thấy nội dung video → `ThumbPreview` hover hiện ảnh 320px. **Không bọc tooltip khi thumb nằm trong `<Link>`**: `<button>` lồng trong `<a>` là HTML không hợp lệ và làm hỏng điều hướng (đã thử ở trang Quản lý file rồi bỏ).
+- `TranslatedTitle` hover hiện bản dịch tiếng Việt, **dịch lười — chỉ gọi khi tooltip mở thật**. Dịch sẵn cả trang là đốt quota cho 40 tiêu đề mà người dùng chỉ xem vài dòng. Bỏ qua luôn tiêu đề không có ký tự Hán.
+- **Cache 2 tầng**: `queryKey: ['translate', title]` (TanStack Query, dùng chung giữa các dòng trùng tiêu đề) + bảng `translation_cache` ở backend (bền qua restart). Khoá cache theo **hash nội dung text**, không theo video id — video re-up rất hay trùng tiêu đề, và text dài hơn giới hạn index của SQLite nên phải hash.
+- `POST /api/translate/batch` bỏ trùng trước khi dịch; hết quota giữa lô thì trả về phần đã dịch được và dừng, không đốt thêm request.
+- Verify: 4 request → 2 lần gọi API thật; test kiểm chứng chạy đỏ khi gỡ điều kiện "chỉ khi hover" và khi phá cache dùng chung (329 lần gọi thay vì 1).
+
 - **Bilibili đã chặn endpoint search cũ** (`x/web-interface/search/type`) — verify bằng request thật, giờ trả về trang lỗi HTML thay vì JSON. Bắt buộc dùng endpoint WBI-signed (`x/web-interface/wbi/search/all/v2`). Cơ chế WBI: lấy `img_key`+`sub_key` từ `nav`, trộn qua 1 bảng hoán vị cố định thành `mixin_key`, rồi md5-sign query string kèm timestamp. Đã cài trong `wbi.py`, cache key ~6h vì Bilibili đổi key theo ngày.
 - `x/player/wbi/playurl` cũng cần WBI sign (không phải chỉ search).
 - `x/web-interface/popular` và `x/web-interface/ranking/region` **không cần** WBI sign — verify thực tế cả 2 chạy OK không ký.

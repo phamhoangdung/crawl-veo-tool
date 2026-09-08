@@ -4,6 +4,7 @@ import random
 from typing import Awaitable, Callable
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.adapters.provider_errors import AllProvidersExhaustedError, ProviderQuotaExceededError
@@ -122,3 +123,48 @@ async def complete_text(db: Session, user_id: int, prompt: str) -> str:
     raise AllProvidersExhaustedError(
         "Cần API key OpenAI để sinh metadata — thêm ở trang API Keys."
     )
+
+
+async def translate_cached(
+    db: Session,
+    user_id: int,
+    text: str,
+    source_lang: str = "zh",
+    target_lang: str = "vi",
+) -> tuple[str, bool]:
+    """Dịch có cache trong DB. Trả `(bản_dịch, lấy_từ_cache)`.
+
+    Dành cho tooltip dịch tiêu đề: mỗi lần hover là một request, không cache thì
+    rê chuột qua bảng 40 dòng vài lượt đã đủ hết quota. Cache nằm trong DB nên
+    còn nguyên sau khi restart, khác với cache trong bộ nhớ.
+    """
+    from app.models.translation_cache import TranslationCache, make_key
+
+    key = make_key(text, source_lang, target_lang)
+
+    cached = db.get(TranslationCache, key)
+    if cached is not None:
+        # Đếm lượt dùng lại để biết cache có thật sự hiệu quả hay không.
+        cached.hit_count += 1
+        db.commit()
+        return cached.translated_text, True
+
+    translated = await translate_text(db, user_id, text, source_lang, target_lang)
+
+    db.add(
+        TranslationCache(
+            key=key,
+            source_text=text,
+            translated_text=translated,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        # Hai request hover cùng lúc cùng một tiêu đề — bản ghi kia đã vào trước,
+        # không phải lỗi. Bản dịch vẫn đúng nên cứ trả về.
+        db.rollback()
+
+    return translated, False

@@ -10,7 +10,8 @@ import {
   type VideoRead,
 } from '@/lib/api'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
-import { CoverImage } from '@/components/cover-image'
+import { ThumbPreview } from '@/components/thumb-preview'
+import { TranslatedTitle } from '@/components/translated-title'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -75,20 +76,17 @@ function VideoRow({
     <TableRow>
       <TableCell>
         {/* w-28 cố định (CoverImage đã tự lo aspect-video + object-cover) — cột
-            đã table-fixed nên ảnh không co lại khi tiêu đề dài. */}
-        <CoverImage src={video.cover_url} className='w-28 rounded' />
+            đã table-fixed nên ảnh không co lại khi tiêu đề dài. Hover xem ảnh to. */}
+        <ThumbPreview src={video.cover_url} className='w-28 rounded' />
       </TableCell>
       <TableCell className='min-w-0'>
-        {/* title= để xem đủ tiêu đề khi hover, vì phần thừa bị cắt bằng "…". */}
-        <a
-          href={video.source_url}
-          target='_blank'
-          rel='noreferrer'
+        {/* Hover hiện bản dịch tiếng Việt (tiêu đề bị cắt bằng "…" nên cũng cần
+            xem đủ nguyên văn). */}
+        <TranslatedTitle
           title={video.title}
+          href={video.source_url}
           className='block truncate hover:underline'
-        >
-          {video.title}
-        </a>
+        />
       </TableCell>
       <TableCell className='truncate' title={video.author_name ?? undefined}>
         {video.author_name ?? '—'}

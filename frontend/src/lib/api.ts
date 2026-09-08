@@ -482,6 +482,31 @@ export interface TimelineOperations {
   tracks: TimelineTrack[]
 }
 
+// --- Dịch text lẻ cho tooltip (có cache ở backend) ---
+
+export interface TranslateResult {
+  translated_text: string
+  cached: boolean
+}
+
+export async function translateText(text: string, sourceLang = 'zh', targetLang = 'vi') {
+  const { data } = await api.post<TranslateResult>('/api/translate', {
+    text,
+    source_lang: sourceLang,
+    target_lang: targetLang,
+  })
+  return data
+}
+
+/** Dịch cả trang trong 1 request — 40 request rời rạc sẽ đụng rate limit. */
+export async function translateBatch(texts: string[], sourceLang = 'zh', targetLang = 'vi') {
+  const { data } = await api.post<{ translations: Record<string, string> }>(
+    '/api/translate/batch',
+    { texts, source_lang: sourceLang, target_lang: targetLang }
+  )
+  return data.translations
+}
+
 // --- Kho file dùng chung: logo, intro/outro, nhạc nền (Phase 9) ---
 // Asset dùng lại cho NHIỀU video nên lưu riêng, không nằm trong thư mục 1 video.
 

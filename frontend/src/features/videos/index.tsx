@@ -24,6 +24,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { CoverImage } from '@/components/cover-image'
+import { TranslatedTitle } from '@/components/translated-title'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -105,7 +106,7 @@ function VideoCard({ item }: { item: VideoFiles }) {
               params={{ videoId: String(item.video_id) }}
               className='block text-sm font-medium hover:underline'
             >
-              <span className='line-clamp-2'>{item.title}</span>
+              <TranslatedTitle title={item.title} className='line-clamp-2' />
             </Link>
             <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
               <Badge

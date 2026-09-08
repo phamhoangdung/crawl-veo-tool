@@ -17,6 +17,7 @@ from app.api import (
     metadata,
     pipeline,
     timeline,
+    translate,
     trending,
 )
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
@@ -50,6 +51,7 @@ app.include_router(files.router)
 app.include_router(batch.router)
 app.include_router(metadata.router)
 app.include_router(assets.router)
+app.include_router(translate.router)
 
 
 @app.on_event("startup")
