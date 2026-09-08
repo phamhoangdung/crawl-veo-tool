@@ -66,3 +66,7 @@ class JobWithVideosRead(JobRead):
     # Không lưu DB — chỉ set tạm ở create_bilibili_crawl_job để frontend cảnh
     # báo khi dịch từ khoá thất bại (search bằng nguyên văn gần như 0 kết quả).
     translation_failed: bool = False
+    # Số video Bilibili trả về nhưng bị lọc vì đã có trong DB, và tổng số tìm
+    # được. Không có 2 số này thì "0 video" trông giống hệt "không tìm thấy gì".
+    skipped_existing: int = 0
+    total_found: int = 0

@@ -86,3 +86,130 @@ class TestTranslateKeywordToChinese:
         monkeypatch.setattr(crawl_service.translate_service, "translate_text", blank)
         result = await crawl_service.translate_keyword_to_chinese(dummy_session, 1, "ẩm thực")
         assert result == ("ẩm thực", False)
+
+
+class TestSkippedExistingCount:
+    """Bilibili trả gần như cùng một tập video mỗi lần tìm. Khi đã tải hết,
+    job mới ra 0 video — không đếm số bị lọc thì UI báo "0 video" y như bị chặn."""
+
+    @pytest.fixture
+    def db(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        import app.models  # noqa: F401
+        from app.core.db import Base
+        from app.models.job import Job, JobStatus, Platform
+        from app.models.user import User
+
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        session.add(User(id=1))
+        session.commit()
+        # Video cần job_id NOT NULL — job cũ đại diện cho lần crawl trước.
+        session.add(
+            Job(
+                id=99,
+                user_id=1,
+                platform=Platform.BILIBILI,
+                keyword="lần trước",
+                status=JobStatus.COMPLETED,
+            )
+        )
+        session.commit()
+        yield session
+        session.close()
+
+    @staticmethod
+    def _fake_results(bvids: list[str]) -> list[dict]:
+        return [
+            {"bvid": b, "title": f"video {b}", "author": "tác giả", "duration": "1:00", "pic": ""}
+            for b in bvids
+        ]
+
+    @pytest.mark.anyio
+    async def test_counts_videos_already_in_db(
+        self, db, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.adapters.bilibili.client import BilibiliClient
+        from app.models.job import Platform
+        from app.models.video import Video, VideoStatus
+
+        # 2 trong 3 video đã có sẵn trong thư viện.
+        for bvid in ("BV1", "BV2"):
+            db.add(
+                Video(
+                    user_id=1,
+                    job_id=99,
+                    platform=Platform.BILIBILI,
+                    platform_video_id=bvid,
+                    title="đã có",
+                    source_url="https://e.com",
+                    status=VideoStatus.DONE,
+                )
+            )
+        db.commit()
+
+        async def fake_search(self, keyword: str, page: int = 1) -> list[dict]:
+            return TestSkippedExistingCount._fake_results(["BV1", "BV2", "BV3"])
+
+        monkeypatch.setattr(BilibiliClient, "search_videos", fake_search)
+
+        job = await crawl_service.create_bilibili_crawl_job(db, 1, "匹克球")
+
+        assert job.total_found == 3
+        assert job.skipped_existing == 2
+        assert len(job.videos) == 1
+
+    @pytest.mark.anyio
+    async def test_all_existing_gives_zero_new_but_reports_total(
+        self, db, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Đây đúng là ca người dùng gặp: tìm ra 20 video mà hiện 0."""
+        from app.adapters.bilibili.client import BilibiliClient
+        from app.models.job import Platform
+        from app.models.video import Video, VideoStatus
+
+        bvids = [f"BV{i}" for i in range(20)]
+        for bvid in bvids:
+            db.add(
+                Video(
+                    user_id=1,
+                    job_id=99,
+                    platform=Platform.BILIBILI,
+                    platform_video_id=bvid,
+                    title="đã có",
+                    source_url="https://e.com",
+                    status=VideoStatus.DONE,
+                )
+            )
+        db.commit()
+
+        async def fake_search(self, keyword: str, page: int = 1) -> list[dict]:
+            return TestSkippedExistingCount._fake_results(bvids)
+
+        monkeypatch.setattr(BilibiliClient, "search_videos", fake_search)
+
+        job = await crawl_service.create_bilibili_crawl_job(db, 1, "匹克球")
+
+        assert len(job.videos) == 0
+        # Hai số này là thứ phân biệt "đã tải hết" với "không tìm thấy gì".
+        assert job.total_found == 20
+        assert job.skipped_existing == 20
+
+    @pytest.mark.anyio
+    async def test_genuinely_empty_search_reports_zero_skipped(
+        self, db, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.adapters.bilibili.client import BilibiliClient
+
+        async def fake_search(self, keyword: str, page: int = 1) -> list[dict]:
+            return []
+
+        monkeypatch.setattr(BilibiliClient, "search_videos", fake_search)
+
+        job = await crawl_service.create_bilibili_crawl_job(db, 1, "từ khoá vô nghĩa")
+
+        assert job.total_found == 0
+        assert job.skipped_existing == 0

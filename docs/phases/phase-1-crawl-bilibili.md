@@ -47,6 +47,12 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 
 ## Ghi chú phát sinh trong lúc làm
 
+### "Search không ra kết quả" — hoá ra là lọc trùng (2026-09-08)
+- Triệu chứng: cùng từ khoá, lần trước ra 19-40 video, lần sau ra **0 video**. Nghi Bilibili chặn, nhưng đo thật thì API vẫn trả 20 video ở mọi trang (1→30) và cả khi bắn 12 request dồn dập — **không phải risk control**.
+- Nguyên nhân: `create_bilibili_crawl_job` bỏ qua video đã có trong DB (`continue`). Bilibili trả gần như cùng một tập video cho mỗi lần tìm, nên khi đã tải hết thì job mới rỗng. Đo thật: 20/20 video đã có trong DB (tổng 308 video Bilibili).
+- Vấn đề thực sự là **UI im lặng**: hiện "0 video" y như không tìm thấy gì. Đã thêm `skipped_existing` / `total_found` (cờ tạm, không lưu DB — cùng cách với `translation_failed`) và khối giải thích kèm nút "Tải thêm trang sau" / "Xem thư viện".
+- Ẩn luôn bảng khi rỗng: trước đó chỉ còn hàng tiêu đề trơ trọi.
+
 ### Tooltip xem ảnh to + dịch tiêu đề (2026-09-08)
 - Thumb trong bảng phải nhỏ để vừa nhiều dòng, nhưng nhỏ thì không thấy nội dung video → `ThumbPreview` hover hiện ảnh 320px. **Không bọc tooltip khi thumb nằm trong `<Link>`**: `<button>` lồng trong `<a>` là HTML không hợp lệ và làm hỏng điều hướng (đã thử ở trang Quản lý file rồi bỏ).
 - `TranslatedTitle` hover hiện bản dịch tiếng Việt, **dịch lười — chỉ gọi khi tooltip mở thật**. Dịch sẵn cả trang là đốt quota cho 40 tiêu đề mà người dùng chỉ xem vài dòng. Bỏ qua luôn tiêu đề không có ký tự Hán.

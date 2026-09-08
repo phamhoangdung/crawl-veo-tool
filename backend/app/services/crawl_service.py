@@ -117,6 +117,11 @@ async def create_bilibili_crawl_job(
     async with BilibiliClient() as client:
         results = await client.search_videos(search_keyword)
 
+    # Đếm số video bị lọc vì đã có trong DB. Bilibili trả gần như cùng một tập
+    # video cho mỗi lần tìm, nên khi đã tải hết thì job mới ra 0 video — trước đây
+    # UI báo "0 video" y như không tìm thấy gì, khiến người dùng tưởng bị chặn.
+    skipped_existing = 0
+
     for item in results:
         bvid = item.get("bvid")
         if not bvid:
@@ -127,6 +132,7 @@ async def create_bilibili_crawl_job(
             .first()
         )
         if already_downloaded:
+            skipped_existing += 1
             continue
         db.add(
             Video(
@@ -148,6 +154,8 @@ async def create_bilibili_crawl_job(
     db.refresh(job)
     # Cờ tạm, không lưu DB — chỉ để router trả về cho frontend cảnh báo ngay lần này.
     job.translation_failed = translation_failed
+    job.skipped_existing = skipped_existing
+    job.total_found = len(results)
     return job
 
 

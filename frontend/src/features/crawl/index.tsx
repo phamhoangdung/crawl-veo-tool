@@ -11,11 +11,15 @@ import {
 } from '@/lib/api'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
 import { useVideoTaskProgress } from '@/hooks/use-task-progress'
-import { ThumbPreview } from '@/components/thumb-preview'
-import { TranslatedTitle } from '@/components/translated-title'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
@@ -33,6 +37,8 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { ThumbPreview } from '@/components/thumb-preview'
+import { TranslatedTitle } from '@/components/translated-title'
 
 function formatDuration(seconds: number | null) {
   if (seconds === null) return '—'
@@ -77,7 +83,9 @@ export function VideoRow({
       // Tải chạy nền: phản hồi chỉ xác nhận đã nhận việc, tiến độ xem ở dock.
       onUpdate(video.id, { status: result.status as VideoRead['status'] })
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      toast.success('Đã thêm vào hàng đợi tải. Xem tiến độ ở icon tác vụ trên thanh trên.')
+      toast.success(
+        'Đã thêm vào hàng đợi tải. Xem tiến độ ở icon tác vụ trên thanh trên.'
+      )
     },
     onError: (error) =>
       toast.error(
@@ -111,7 +119,9 @@ export function VideoRow({
       </TableCell>
       <TableCell>{formatDuration(video.duration_seconds)}</TableCell>
       <TableCell>
-        <Badge variant={isFailed ? 'destructive' : 'outline'}>{video.status}</Badge>
+        <Badge variant={isFailed ? 'destructive' : 'outline'}>
+          {video.status}
+        </Badge>
         {/* Thanh % ngay tại dòng: trước đây phải mở panel Tác vụ mới biết tiến
             độ, mà panel lại không nói rõ dòng nào đang tải. */}
         {task?.is_running && (
@@ -120,7 +130,9 @@ export function VideoRow({
               <div
                 data-testid='download-progress-bar'
                 className='h-full rounded-full bg-primary transition-[width] duration-300'
-                style={{ width: `${Math.min(100, Math.max(0, task.percent))}%` }}
+                style={{
+                  width: `${Math.min(100, Math.max(0, task.percent))}%`,
+                }}
               />
             </div>
             <span className='text-[10px] text-muted-foreground tabular-nums'>
@@ -131,17 +143,24 @@ export function VideoRow({
       </TableCell>
       <TableCell>
         {canDownload && (
-          <Button size='sm' disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+          <Button
+            size='sm'
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
             {mutation.isPending ? 'Đang thêm...' : 'Tải video'}
           </Button>
         )}
         {video.status === 'downloading' && (
           <span className='text-xs text-muted-foreground'>
-            {task?.is_running ? (task.stage_label || 'Đang tải…') : 'Đang xử lý…'}
+            {task?.is_running ? task.stage_label || 'Đang tải…' : 'Đang xử lý…'}
           </span>
         )}
         {!canDownload && video.status !== 'downloading' && (
-          <Link to='/files' className='text-xs text-muted-foreground hover:underline'>
+          <Link
+            to='/files'
+            className='text-xs text-muted-foreground hover:underline'
+          >
             Xử lý ở Quản lý file →
           </Link>
         )}
@@ -167,6 +186,13 @@ export function Crawl() {
       if (data.translation_failed) {
         toast.warning(
           `Dịch từ khoá thất bại, đã tìm bằng nguyên văn "${data.keyword}" (dễ ra ít/không có kết quả). Kiểm tra lại API key dịch trong Cài đặt.`
+        )
+      }
+      // Bilibili trả gần như cùng một tập video mỗi lần tìm. Không nói rõ thì
+      // "0 video" trông y như bị chặn, trong khi thực ra là đã tải hết rồi.
+      if (data.videos.length === 0 && data.skipped_existing > 0) {
+        toast.info(
+          `Tìm được ${data.total_found} video nhưng tất cả đã có trong thư viện. Xem ở Quản lý file, hoặc bấm "Tải thêm" để lấy trang sau.`
         )
       }
     },
@@ -234,14 +260,19 @@ export function Crawl() {
                   onChange={(e) => setKeyword(e.target.value)}
                   disabled={mutation.isPending}
                 />
-                <Button type='submit' disabled={mutation.isPending || !keyword.trim()}>
+                <Button
+                  type='submit'
+                  disabled={mutation.isPending || !keyword.trim()}
+                >
                   {mutation.isPending ? 'Đang tìm...' : 'Crawl'}
                 </Button>
               </div>
               <label className='flex items-center gap-2 text-sm text-muted-foreground'>
                 <Checkbox
                   checked={translateKeyword}
-                  onCheckedChange={(checked) => setTranslateKeyword(checked === true)}
+                  onCheckedChange={(checked) =>
+                    setTranslateKeyword(checked === true)
+                  }
                   disabled={mutation.isPending}
                 />
                 Dịch từ khoá sang tiếng Trung giản thể trước khi tìm
@@ -259,45 +290,96 @@ export function Crawl() {
           <Card className='mt-4'>
             <CardHeader>
               <CardTitle>
-                Kết quả cho &quot;{job.keyword}&quot; ({job.videos.length} video)
+                Kết quả cho &quot;{job.keyword}&quot; ({job.videos.length}{' '}
+                video)
               </CardTitle>
+              {job.skipped_existing > 0 && (
+                <CardDescription>
+                  Đã lọc {job.skipped_existing}/{job.total_found} video vì có
+                  sẵn trong thư viện.
+                </CardDescription>
+              )}
             </CardHeader>
             <CardContent>
+              {job.videos.length === 0 && (
+                <div className='rounded-lg border border-dashed p-6 text-center'>
+                  {job.skipped_existing > 0 ? (
+                    <>
+                      <p className='text-sm font-medium'>
+                        Cả {job.total_found} video tìm được đều đã có trong thư
+                        viện
+                      </p>
+                      <p className='mt-1 text-sm text-muted-foreground'>
+                        Bilibili trả gần như cùng một tập video cho mỗi lần tìm.
+                        Bấm &quot;Tải thêm&quot; để lấy trang sau, hoặc thử từ
+                        khoá khác.
+                      </p>
+                      <div className='mt-3 flex justify-center gap-2'>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={loadMore.isPending}
+                          onClick={() => loadMore.mutate()}
+                        >
+                          {loadMore.isPending
+                            ? 'Đang tải…'
+                            : 'Tải thêm trang sau'}
+                        </Button>
+                        <Button size='sm' variant='ghost' asChild>
+                          <Link to='/files'>Xem thư viện →</Link>
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className='text-sm font-medium'>
+                        Không tìm thấy video nào
+                      </p>
+                      <p className='mt-1 text-sm text-muted-foreground'>
+                        Thử từ khoá khác, hoặc bật &quot;Dịch từ khoá sang tiếng
+                        Trung&quot; nếu đang nhập tiếng Việt.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
               {/* table-fixed: không có nó, browser tự chia lại bề rộng cột theo nội
                   dung — tiêu đề tiếng Trung dài sẽ bóp cột ảnh nhỏ dần khi load
                   thêm video. Bề rộng cố định cho mọi cột trừ tiêu đề (co giãn). */}
-              <Table className='table-fixed'>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className='w-[132px]'>Ảnh</TableHead>
-                    <TableHead className='min-w-0'>Tiêu đề</TableHead>
-                    <TableHead className='w-32'>Tác giả</TableHead>
-                    <TableHead className='w-24'>Thời lượng</TableHead>
-                    <TableHead className='w-28'>Trạng thái</TableHead>
-                    <TableHead className='w-36'>Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {job.videos.map((video) => (
-                    <VideoRow
-                      key={video.id}
-                      video={video}
-                      onUpdate={(id, patch) =>
-                        setJob((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                videos: prev.videos.map((v) =>
-                                  v.id === id ? { ...v, ...patch } : v
-                                ),
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  ))}
-                </TableBody>
-              </Table>
+              {job.videos.length > 0 && (
+                <Table className='table-fixed'>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-[132px]'>Ảnh</TableHead>
+                      <TableHead className='min-w-0'>Tiêu đề</TableHead>
+                      <TableHead className='w-32'>Tác giả</TableHead>
+                      <TableHead className='w-24'>Thời lượng</TableHead>
+                      <TableHead className='w-28'>Trạng thái</TableHead>
+                      <TableHead className='w-36'>Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {job.videos.map((video) => (
+                      <VideoRow
+                        key={video.id}
+                        video={video}
+                        onUpdate={(id, patch) =>
+                          setJob((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  videos: prev.videos.map((v) =>
+                                    v.id === id ? { ...v, ...patch } : v
+                                  ),
+                                }
+                              : prev
+                          )
+                        }
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
 
               {/* Sentinel: lọt vào tầm nhìn thì tải thêm trang kết quả. */}
               <div ref={sentinelRef} className='h-px' />

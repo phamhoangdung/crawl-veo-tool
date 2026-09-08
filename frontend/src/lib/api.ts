@@ -50,6 +50,10 @@ export interface JobWithVideosRead {
   created_at: string
   videos: VideoRead[]
   translation_failed: boolean
+  /** Số video bị lọc vì đã có trong DB, và tổng số tìm được — không có 2 số này
+   *  thì "0 video" trông giống hệt "không tìm thấy gì". */
+  skipped_existing: number
+  total_found: number
 }
 
 export interface TrendingCategory {
