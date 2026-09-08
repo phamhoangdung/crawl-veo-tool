@@ -91,3 +91,29 @@ def render_timeline_for_video(db: Session, video_id: int) -> Path:
     video.timeline_rendered_path = str(output_path)
     db.commit()
     return output_path
+
+
+def get_audio_stems(db: Session, video_id: int) -> dict[str, str | None]:
+    """Đường dẫn các track audio đã tách, để timeline dựng track riêng cho từng loại.
+
+    Bước lồng tiếng (dubbing_service) ghi ra `voice_timeline.mp3` (giọng đọc
+    tiếng Việt) và demucs tách `no_vocals.wav` (nhạc nền gốc). Tách riêng thì
+    chỉnh được âm lượng từng loại — bản `dubbed.mp4` đã trộn sẵn nên không tách
+    lại được.
+    """
+    video = db.get(Video, video_id)
+    if video is None:
+        raise VideoNotFoundError(video_id)
+    if not video.local_path:
+        return {"voice": None, "background": None, "mixed": None}
+
+    video_dir = Path(video.local_path).parent
+    voice = video_dir / "voice_timeline.mp3"
+    background = video_dir / "demucs_out" / "htdemucs" / "original_audio" / "no_vocals.wav"
+
+    return {
+        "voice": str(voice) if voice.exists() else None,
+        "background": str(background) if background.exists() else None,
+        # Bản trộn sẵn — dùng khi chưa tách được stem riêng.
+        "mixed": video.dubbed_path,
+    }

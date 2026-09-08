@@ -477,6 +477,18 @@ export interface TimelineOperations {
   tracks: TimelineTrack[]
 }
 
+export interface AudioStems {
+  voice: string | null
+  background: string | null
+  mixed: string | null
+}
+
+/** Track audio đã tách rời, để chỉnh âm lượng giọng đọc và nhạc nền riêng. */
+export async function getAudioStems(videoId: number) {
+  const { data } = await api.get<AudioStems>(`/api/videos/${videoId}/audio-stems`)
+  return data
+}
+
 export async function getTimeline(videoId: number) {
   const { data } = await api.get<{ tracks: TimelineTrack[] | null }>(
     `/api/videos/${videoId}/timeline`

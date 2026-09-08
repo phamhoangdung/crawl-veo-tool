@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.video import Video
 from app.schemas.timeline import (
+    AudioStemsRead,
     TimelineRead,
     TimelineRenderRead,
     TimelineSaveRequest,
@@ -47,6 +48,16 @@ def render_timeline(video_id: int, db: Session = Depends(get_db)) -> TimelineRen
     except timeline_service.TimelineValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     return TimelineRenderRead(rendered_path=str(output_path))
+
+
+@router.get("/{video_id}/audio-stems", response_model=AudioStemsRead)
+def get_audio_stems(video_id: int, db: Session = Depends(get_db)) -> AudioStemsRead:
+    """Các track audio đã tách (giọng đọc / nhạc nền) để chỉnh âm lượng riêng."""
+    try:
+        stems = timeline_service.get_audio_stems(db, video_id)
+    except timeline_service.VideoNotFoundError:
+        raise HTTPException(status_code=404, detail="Video not found") from None
+    return AudioStemsRead(**stems)
 
 
 @router.get("/{video_id}/waveform", response_model=WaveformRead)

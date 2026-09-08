@@ -56,3 +56,20 @@ Xây timeline đa track chạy trong web UI hiện có (và trong desktop app �
 - **Playwright browser chưa cài sẵn trong môi trường** — phải chạy `pnpm exec playwright install chromium` trước khi test browser chạy được lần đầu (nếu máy bạn build lại từ đầu/CI mới, nhớ bước này — đã có sẵn script `test:browser:install` trong `package.json`).
 - **Waveform trong Timeline UI**: chỉ hiển thị cho track audio ĐẦU TIÊN (thường là giọng đọc) — đơn giản hoá cho MVP, chưa tính waveform riêng biệt cho từng clip/track audio khác nhau (vd nhạc nền sẽ không có waveform riêng, dù vẫn kéo-chỉnh được bình thường).
 - **Không hỗ trợ kéo đổi THỨ TỰ clip video** (chỉ resize 2 đầu) — vị trí clip video trên timeline tổng suy ra từ thứ tự trong mảng, đổi thứ tự cần thao tác khác (kéo-thả sắp xếp lại mảng) chưa làm ở bản này; đủ dùng cho nhu cầu hiện tại (trim/cắt), có thể bổ sung sau nếu Phase 10 cần sắp xếp lại nhiều đoạn nền thường xuyên.
+
+## Sửa UX + tách track audio (phiên 2026-09-08)
+
+**Editor bắt "thêm video" dù đang ở trang chi tiết video.** `previewSource` đọc từ `operations.tracks` — tức timeline ĐÃ LƯU. Video chưa lưu timeline nào thì `operations` rỗng → hiện "Chưa có video", phải bấm "Dùng gợi ý AI" mới thấy gì. Sửa: query timeline tự dựng gợi ý khi `getTimeline` trả rỗng, người dùng vào là thấy ngay nội dung.
+
+Kèm 2 lỗi phát hiện lúc sửa:
+- `getTimeline` trả **`null`** (không phải mảng rỗng) khi chưa có timeline — code gọi `.length` sẽ nổ.
+- URL preview hardcode `variant=dubbed`, video chưa lồng tiếng thì khung preview hỏng. Đổi sang chọn theo `dubbed_path` có hay không.
+
+**Bỏ popup.** Editor chuyển từ Dialog sang section full-width ngay trong trang chi tiết, đặt dưới 2 cột — nó cần nhiều chiều ngang, nhét vào cột phải hoặc popup đều chật.
+
+**Chỉnh âm lượng giọng đọc / nhạc nền riêng.** Trước đó gợi ý AI dùng `dubbed.mp4` làm 1 track audio duy nhất — file này đã trộn sẵn nên không tách âm lượng được. Nhưng pipeline vốn đã ghi ra 2 file riêng: `voice_timeline.mp3` (giọng đọc) và `demucs_out/htdemucs/original_audio/no_vocals.wav` (nhạc nền tách bằng demucs).
+
+- `GET /api/videos/{id}/audio-stems` trả đường dẫn 2 stem đó (+ `mixed` làm dự phòng khi chưa chạy lồng tiếng).
+- Gợi ý AI dựng **2 track audio riêng**: giọng đọc volume 1.0, nhạc nền volume 0.3 (để nhỏ hơn cho khỏi át lời).
+- `volume-mixer.tsx`: thanh trượt + nút tắt tiếng cho từng track, **luôn hiện** dưới khung preview — khác `ClipInspector` phải chọn clip mới thấy. Dùng `input[type=range]` thuần vì dự án chưa có component Slider.
+- Backend không phải sửa: `render_timeline` vốn đã `amix` nhiều track với volume riêng. Verify render thật 2 track (1.0 + 0.3) ra file có audio stream AAC.

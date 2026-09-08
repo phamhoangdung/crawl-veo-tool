@@ -9,6 +9,7 @@ import {
   createClip,
   getClipCandidates,
   getTimeline,
+  getAudioStems,
   getVideoDetail,
   getWaveform,
   renderTimeline,
@@ -23,6 +24,7 @@ import { Label } from '@/components/ui/label'
 import { CropBoxSelector } from './crop-box-selector'
 import { defaultVerticalCrop } from './layout'
 import { OverlayLayer } from './overlay-layer'
+import { VolumeMixer } from './volume-mixer'
 import { useEditorStore } from './store'
 import { Timeline } from './timeline'
 
@@ -41,21 +43,47 @@ interface TimelineEditorProps {
  * bộ sinh gợi ý riêng theo từng use-case. Chỉ điền vào state, KHÔNG lưu/render tự
  * động — người dùng bấm "Lưu" rồi "Render" riêng. */
 async function buildSuggestionFromPipeline(videoId: number): Promise<TimelineOperations> {
-  const video = await getVideoDetail(videoId)
+  const [video, stems] = await Promise.all([
+    getVideoDetail(videoId),
+    getAudioStems(videoId),
+  ])
   const duration = video.duration_seconds ?? 0
   const videoSource = video.local_path
-  const voiceSource = video.dubbed_path ?? video.local_path
 
   const tracks: TimelineOperations['tracks'] = []
   if (videoSource) {
     tracks.push({ type: 'video', clips: [{ source: videoSource, start: 0, end: duration }] })
   }
-  if (voiceSource) {
-    tracks.push({
-      type: 'audio',
-      role: 'voice',
-      clips: [{ source: voiceSource, start: 0, end: duration, track_start: 0, volume: 1.0 }],
-    })
+
+  // Tách giọng đọc và nhạc nền thành 2 track để chỉnh âm lượng riêng. Chỉ khi
+  // chưa chạy lồng tiếng (chưa có stem) mới dùng bản trộn sẵn làm 1 track.
+  if (stems.voice || stems.background) {
+    if (stems.voice) {
+      tracks.push({
+        type: 'audio',
+        role: 'voice',
+        clips: [{ source: stems.voice, start: 0, end: duration, track_start: 0, volume: 1.0 }],
+      })
+    }
+    if (stems.background) {
+      tracks.push({
+        type: 'audio',
+        role: 'music',
+        clips: [
+          // Nhạc nền để nhỏ hơn giọng đọc, nếu không sẽ át lời.
+          { source: stems.background, start: 0, end: duration, track_start: 0, volume: 0.3 },
+        ],
+      })
+    }
+  } else {
+    const fallback = stems.mixed ?? video.local_path
+    if (fallback) {
+      tracks.push({
+        type: 'audio',
+        role: 'voice',
+        clips: [{ source: fallback, start: 0, end: duration, track_start: 0, volume: 1.0 }],
+      })
+    }
   }
   const captionClips = video.transcript
     .filter((seg) => seg.translated_text?.trim())
@@ -104,9 +132,22 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
     onError: () => toast.error('Tạo clip thất bại.'),
   })
 
+  // Chưa lưu timeline nào thì dựng luôn từ pipeline: người dùng đã ở trang
+  // video này rồi, bắt bấm thêm một nút mới thấy nội dung là bước thừa.
   const { data: savedTracks, isLoading } = useQuery({
     queryKey: ['timeline', videoId],
-    queryFn: () => getTimeline(videoId),
+    queryFn: async () => {
+      const saved = await getTimeline(videoId)
+      // Backend trả null khi chưa lưu timeline nào (không phải mảng rỗng).
+      if (saved && saved.length > 0) return saved
+      const suggested = await buildSuggestionFromPipeline(videoId)
+      return suggested.tracks
+    },
+  })
+
+  const { data: videoDetail } = useQuery({
+    queryKey: ['video', videoId],
+    queryFn: () => getVideoDetail(videoId),
   })
 
   const { data: waveformPeaks } = useQuery({
@@ -145,6 +186,10 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
 
   const previewSource = operations.tracks.find((t) => t.type === 'video')?.clips[0]?.source
 
+  // Ưu tiên bản đã lồng tiếng để nghe được giọng đọc khi kéo-chỉnh; video chưa
+  // dub thì phát bản gốc thay vì hỏng hẳn khung preview.
+  const previewVariant = videoDetail?.dubbed_path ? 'dubbed' : 'original'
+
   return (
     <div className='space-y-4'>
       <div className='flex flex-wrap items-center gap-2'>
@@ -182,7 +227,7 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
             {previewSource ? (
               <video
                 ref={videoRef}
-                src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=dubbed`}
+                src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=${previewVariant}`}
                 controls
                 className='w-full'
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
@@ -195,7 +240,9 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
               />
             ) : (
               <div className='flex h-48 items-center justify-center text-sm text-muted-foreground'>
-                {isLoading ? 'Đang tải...' : 'Chưa có video — bấm "Dùng gợi ý AI" để bắt đầu.'}
+                {isLoading
+                  ? 'Đang tải...'
+                  : 'Video chưa được tải về máy — chạy bước "Tải video" trước.'}
               </div>
             )}
             <OverlayLayer currentTime={currentTime} />
@@ -207,6 +254,10 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
                 onChange={setCrop}
               />
             )}
+          </div>
+
+          <div className='mx-auto mt-4 w-full max-w-md'>
+            <VolumeMixer />
           </div>
         </CardContent>
       </Card>
