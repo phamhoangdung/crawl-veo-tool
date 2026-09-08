@@ -122,6 +122,14 @@ export function VideoRow({
         <Badge variant={isFailed ? 'destructive' : 'outline'}>
           {video.status}
         </Badge>
+        {/* Video vẫn hiện trong kết quả (đúng những gì Bilibili tìm được), chỉ
+            đánh dấu để không tải lại — trạng thái không đủ để suy ra vì video
+            đã tải mà chưa xử lý vẫn là "queued". */}
+        {video.already_in_library && (
+          <span className='mt-1 block text-[10px] text-muted-foreground'>
+            đã có trong thư viện
+          </span>
+        )}
         {/* Thanh % ngay tại dòng: trước đây phải mở panel Tác vụ mới biết tiến
             độ, mà panel lại không nói rõ dòng nào đang tải. */}
         {task?.is_running && (
@@ -186,13 +194,6 @@ export function Crawl() {
       if (data.translation_failed) {
         toast.warning(
           `Dịch từ khoá thất bại, đã tìm bằng nguyên văn "${data.keyword}" (dễ ra ít/không có kết quả). Kiểm tra lại API key dịch trong Cài đặt.`
-        )
-      }
-      // Bilibili trả gần như cùng một tập video mỗi lần tìm. Không nói rõ thì
-      // "0 video" trông y như bị chặn, trong khi thực ra là đã tải hết rồi.
-      if (data.videos.length === 0 && data.skipped_existing > 0) {
-        toast.info(
-          `Tìm được ${data.total_found} video nhưng tất cả đã có trong thư viện. Xem ở Quản lý file, hoặc bấm "Tải thêm" để lấy trang sau.`
         )
       }
     },
@@ -293,54 +294,23 @@ export function Crawl() {
                 Kết quả cho &quot;{job.keyword}&quot; ({job.videos.length}{' '}
                 video)
               </CardTitle>
-              {job.skipped_existing > 0 && (
+              {job.already_in_library > 0 && (
                 <CardDescription>
-                  Đã lọc {job.skipped_existing}/{job.total_found} video vì có
-                  sẵn trong thư viện.
+                  {job.already_in_library}/{job.total_found} video đã có trong
+                  thư viện — được đánh dấu bên dưới, bấm tải sẽ không tải lại.
                 </CardDescription>
               )}
             </CardHeader>
             <CardContent>
               {job.videos.length === 0 && (
                 <div className='rounded-lg border border-dashed p-6 text-center'>
-                  {job.skipped_existing > 0 ? (
-                    <>
-                      <p className='text-sm font-medium'>
-                        Cả {job.total_found} video tìm được đều đã có trong thư
-                        viện
-                      </p>
-                      <p className='mt-1 text-sm text-muted-foreground'>
-                        Bilibili trả gần như cùng một tập video cho mỗi lần tìm.
-                        Bấm &quot;Tải thêm&quot; để lấy trang sau, hoặc thử từ
-                        khoá khác.
-                      </p>
-                      <div className='mt-3 flex justify-center gap-2'>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          disabled={loadMore.isPending}
-                          onClick={() => loadMore.mutate()}
-                        >
-                          {loadMore.isPending
-                            ? 'Đang tải…'
-                            : 'Tải thêm trang sau'}
-                        </Button>
-                        <Button size='sm' variant='ghost' asChild>
-                          <Link to='/files'>Xem thư viện →</Link>
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className='text-sm font-medium'>
-                        Không tìm thấy video nào
-                      </p>
-                      <p className='mt-1 text-sm text-muted-foreground'>
-                        Thử từ khoá khác, hoặc bật &quot;Dịch từ khoá sang tiếng
-                        Trung&quot; nếu đang nhập tiếng Việt.
-                      </p>
-                    </>
-                  )}
+                  <p className='text-sm font-medium'>
+                    Không tìm thấy video nào
+                  </p>
+                  <p className='mt-1 text-sm text-muted-foreground'>
+                    Thử từ khoá khác, hoặc bật &quot;Dịch từ khoá sang tiếng
+                    Trung&quot; nếu đang nhập tiếng Việt.
+                  </p>
                 </div>
               )}
               {/* table-fixed: không có nó, browser tự chia lại bề rộng cột theo nội

@@ -77,12 +77,15 @@ async def translate_keyword_to_chinese(db: Session, user_id: int, keyword: str) 
     if _looks_chinese(keyword):
         return keyword, True
 
+    # Cache trong RAM cho các lần gọi liên tiếp trong cùng phiên.
     cached = _get_cached_translation(keyword)
     if cached is not None:
         return cached, True
 
     try:
-        translated = await translate_service.translate_text(
+        # `translate_cached` lưu bản dịch vào bảng translation_cache nên từ khoá
+        # đã dịch còn nguyên sau khi restart — cache RAM ở trên mất khi restart.
+        translated, _ = await translate_service.translate_cached(
             db, user_id, keyword, source_lang="vi", target_lang="zh-CN"
         )
     except Exception as exc:  # noqa: BLE001 — dịch hỏng không được làm chết job
@@ -117,22 +120,25 @@ async def create_bilibili_crawl_job(
     async with BilibiliClient() as client:
         results = await client.search_videos(search_keyword)
 
-    # Đếm số video bị lọc vì đã có trong DB. Bilibili trả gần như cùng một tập
-    # video cho mỗi lần tìm, nên khi đã tải hết thì job mới ra 0 video — trước đây
-    # UI báo "0 video" y như không tìm thấy gì, khiến người dùng tưởng bị chặn.
-    skipped_existing = 0
+    # Hiện ĐẦY ĐỦ kết quả Bilibili trả về, kể cả video đã có trong thư viện —
+    # người dùng muốn thấy đúng những gì Bilibili tìm được. Video đã có chỉ được
+    # đánh dấu (`already_in_library`) để không tải lại, chứ không bị ẩn đi.
+    bvids = [item["bvid"] for item in results if item.get("bvid")]
+    existing_bvids = {
+        row[0]
+        for row in db.query(Video.platform_video_id)
+        .filter(
+            Video.platform == Platform.BILIBILI,
+            Video.platform_video_id.in_(bvids),
+        )
+        .all()
+    }
 
+    # Chỉ INSERT video chưa có: bảng có UniqueConstraint(platform,
+    # platform_video_id) nên chèn lại bvid cũ sẽ vi phạm ràng buộc.
     for item in results:
         bvid = item.get("bvid")
-        if not bvid:
-            continue
-        already_downloaded = (
-            db.query(Video)
-            .filter(Video.platform == Platform.BILIBILI, Video.platform_video_id == bvid)
-            .first()
-        )
-        if already_downloaded:
-            skipped_existing += 1
+        if not bvid or bvid in existing_bvids:
             continue
         db.add(
             Video(
@@ -152,9 +158,37 @@ async def create_bilibili_crawl_job(
     job.status = JobStatus.COMPLETED
     db.commit()
     db.refresh(job)
+
+    # Trả về ĐỦ những gì Bilibili tìm được, theo đúng thứ tự — kể cả video đã có
+    # trong thư viện (thuộc job cũ nên không nằm trong `job.videos`).
+    #
+    # KHÔNG gán vào `job.videos`: đó là quan hệ SQLAlchemy, gán vào sẽ dời
+    # `job_id` của video cũ sang job này và làm mất liên kết với job gốc (đã thử
+    # và xác nhận). Dùng thuộc tính tạm riêng để schema đọc.
+    all_rows = {
+        v.platform_video_id: v
+        for v in db.query(Video)
+        .filter(
+            Video.platform == Platform.BILIBILI,
+            Video.platform_video_id.in_(bvids),
+        )
+        .all()
+    }
+    ordered = [
+        all_rows[item["bvid"]]
+        for item in results
+        if item.get("bvid") and item["bvid"] in all_rows
+    ]
+    # Đánh dấu từng video: cờ tạm trên ORM object, schema đọc ra. Trạng thái
+    # không đủ để suy ra — video đã tải nhưng chưa xử lý vẫn là `queued`.
+    for video in ordered:
+        video.already_in_library = video.platform_video_id in existing_bvids
+    job.result_videos = ordered
+
     # Cờ tạm, không lưu DB — chỉ để router trả về cho frontend cảnh báo ngay lần này.
     job.translation_failed = translation_failed
-    job.skipped_existing = skipped_existing
+    # Số video đã có trong thư viện — vẫn hiện trong danh sách, chỉ để UI đánh dấu.
+    job.already_in_library = len(existing_bvids)
     job.total_found = len(results)
     return job
 

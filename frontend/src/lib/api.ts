@@ -40,6 +40,8 @@ export interface VideoRead {
   source_url: string
   status: VideoStatus
   created_at: string
+  /** Video đã có trong thư viện từ trước (chỉ có ở kết quả search). */
+  already_in_library?: boolean
 }
 
 export interface JobWithVideosRead {
@@ -50,9 +52,9 @@ export interface JobWithVideosRead {
   created_at: string
   videos: VideoRead[]
   translation_failed: boolean
-  /** Số video bị lọc vì đã có trong DB, và tổng số tìm được — không có 2 số này
-   *  thì "0 video" trông giống hệt "không tìm thấy gì". */
-  skipped_existing: number
+  /** Số video trong kết quả đã có sẵn trong thư viện — vẫn hiện đầy đủ, chỉ để
+   *  đánh dấu "đã tải" thay vì ẩn đi. */
+  already_in_library: number
   total_found: number
 }
 
@@ -232,28 +234,37 @@ export interface JobPage {
 
 /** Tải thêm 1 trang kết quả search vào job đã có (infinite scroll trang Crawl). */
 export async function loadMoreJobVideos(jobId: number, page: number) {
-  const { data } = await api.post<JobPage>(`/api/jobs/${jobId}/load-more`, null, {
-    params: { page },
-  })
+  const { data } = await api.post<JobPage>(
+    `/api/jobs/${jobId}/load-more`,
+    null,
+    {
+      params: { page },
+    }
+  )
   return data
 }
 
 /** Tạo job tải từ các video người dùng tick chọn ở trang Trending. */
 export async function createJobFromSelection(videos: TrendingVideo[]) {
-  const { data } = await api.post<JobWithVideosRead>('/api/jobs/from-selection', {
-    videos: videos.map((v) => ({
-      bvid: v.bvid,
-      title: v.title,
-      author_name: v.author_name,
-      duration_seconds: v.duration_seconds,
-      cover_url: v.cover_url,
-    })),
-  })
+  const { data } = await api.post<JobWithVideosRead>(
+    '/api/jobs/from-selection',
+    {
+      videos: videos.map((v) => ({
+        bvid: v.bvid,
+        title: v.title,
+        author_name: v.author_name,
+        duration_seconds: v.duration_seconds,
+        cover_url: v.cover_url,
+      })),
+    }
+  )
   return data
 }
 
 export async function getTrendingCategories() {
-  const { data } = await api.get<TrendingCategory[]>('/api/trending/bilibili/categories')
+  const { data } = await api.get<TrendingCategory[]>(
+    '/api/trending/bilibili/categories'
+  )
   return data
 }
 
@@ -265,21 +276,29 @@ export async function refreshCategories() {
 }
 
 export async function getFollowedCategories() {
-  const { data } = await api.get<number[]>('/api/trending/bilibili/categories/followed')
+  const { data } = await api.get<number[]>(
+    '/api/trending/bilibili/categories/followed'
+  )
   return data
 }
 
 export async function setFollowedCategories(rids: number[]) {
-  const { data } = await api.put<number[]>('/api/trending/bilibili/categories/followed', {
-    rids,
-  })
+  const { data } = await api.put<number[]>(
+    '/api/trending/bilibili/categories/followed',
+    {
+      rids,
+    }
+  )
   return data
 }
 
 export async function getCategoryHistory(rids: number[], days = 30) {
-  const { data } = await api.get<CategoryHistory[]>('/api/trending/bilibili/history', {
-    params: { rids: rids.join(','), days },
-  })
+  const { data } = await api.get<CategoryHistory[]>(
+    '/api/trending/bilibili/history',
+    {
+      params: { rids: rids.join(','), days },
+    }
+  )
   return data
 }
 
@@ -311,31 +330,44 @@ export async function getStorageLocation(videoId?: number) {
 
 /** Mở thư mục chứa file trong Finder/Explorer — chỉ chạy được vì tool ở local. */
 export async function revealInFileManager(videoId?: number) {
-  const { data } = await api.post<{ opened: string }>('/api/downloads/reveal', null, {
-    params: videoId ? { video_id: videoId } : undefined,
-  })
+  const { data } = await api.post<{ opened: string }>(
+    '/api/downloads/reveal',
+    null,
+    {
+      params: videoId ? { video_id: videoId } : undefined,
+    }
+  )
   return data
 }
 
 /** 1 trang video của category — trang 1 từ bảng xếp hạng, trang sau từ search. */
 export async function getCategoryPage(rid: number, page: number) {
-  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/category-page', {
-    params: { rid, page },
-  })
+  const { data } = await api.get<TrendingPage>(
+    '/api/trending/bilibili/category-page',
+    {
+      params: { rid, page },
+    }
+  )
   return data
 }
 
 export async function getCategoryStats(rids: number[]) {
-  const { data } = await api.get<CategoryStats[]>('/api/trending/bilibili/stats', {
-    params: { rids: rids.join(',') },
-  })
+  const { data } = await api.get<CategoryStats[]>(
+    '/api/trending/bilibili/stats',
+    {
+      params: { rids: rids.join(',') },
+    }
+  )
   return data
 }
 
 export async function getTrendingRanking(rid: number) {
-  const { data } = await api.get<TrendingVideo[]>('/api/trending/bilibili/ranking', {
-    params: { rid },
-  })
+  const { data } = await api.get<TrendingVideo[]>(
+    '/api/trending/bilibili/ranking',
+    {
+      params: { rid },
+    }
+  )
   return data
 }
 
@@ -345,37 +377,60 @@ export async function getVideoDetail(videoId: number) {
 }
 
 export async function downloadVideo(videoId: number) {
-  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/download`)
+  const { data } = await api.post<VideoDetail>(
+    `/api/videos/${videoId}/download`
+  )
   return data
 }
 
 export async function transcribeVideo(videoId: number) {
-  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/transcribe`)
+  const { data } = await api.post<VideoDetail>(
+    `/api/videos/${videoId}/transcribe`
+  )
   return data
 }
 
-export async function translateVideo(videoId: number, sourceLang = 'zh', targetLang = 'vi') {
-  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/translate`, {
-    source_lang: sourceLang,
-    target_lang: targetLang,
-  })
+export async function translateVideo(
+  videoId: number,
+  sourceLang = 'zh',
+  targetLang = 'vi'
+) {
+  const { data } = await api.post<VideoDetail>(
+    `/api/videos/${videoId}/translate`,
+    {
+      source_lang: sourceLang,
+      target_lang: targetLang,
+    }
+  )
   return data
 }
 
-export async function updateTranscript(videoId: number, segments: TranscriptSegment[]) {
-  const { data } = await api.put<VideoDetail>(`/api/videos/${videoId}/transcript`, segments)
+export async function updateTranscript(
+  videoId: number,
+  segments: TranscriptSegment[]
+) {
+  const { data } = await api.put<VideoDetail>(
+    `/api/videos/${videoId}/transcript`,
+    segments
+  )
   return data
 }
 
 export async function dubVideo(videoId: number, keepBackground = true) {
-  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/dub`, null, {
-    params: { keep_background: keepBackground },
-  })
+  const { data } = await api.post<VideoDetail>(
+    `/api/videos/${videoId}/dub`,
+    null,
+    {
+      params: { keep_background: keepBackground },
+    }
+  )
   return data
 }
 
 export async function burnSubtitles(videoId: number) {
-  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/burn-subtitles`)
+  const { data } = await api.post<VideoDetail>(
+    `/api/videos/${videoId}/burn-subtitles`
+  )
   return data
 }
 
@@ -384,11 +439,17 @@ export async function getLibrary() {
   return data
 }
 
-export function getDownloadUrl(videoId: number, variant: 'dubbed' | 'burned' | 'original') {
+export function getDownloadUrl(
+  videoId: number,
+  variant: 'dubbed' | 'burned' | 'original'
+) {
   return `${API_BASE_URL}/api/library/${videoId}/download?variant=${variant}`
 }
 
-export function getZipDownloadUrl(videoIds: number[], variant: 'dubbed' | 'burned' | 'original') {
+export function getZipDownloadUrl(
+  videoIds: number[],
+  variant: 'dubbed' | 'burned' | 'original'
+) {
   return `${API_BASE_URL}/api/library/download-zip?video_ids=${videoIds.join(',')}&variant=${variant}`
 }
 
@@ -413,17 +474,23 @@ export async function getStorageSummary() {
 }
 
 export async function deleteFileVariant(videoId: number, variant: string) {
-  const { data } = await api.delete<{ deleted: boolean }>(`/api/files/${videoId}/${variant}`)
+  const { data } = await api.delete<{ deleted: boolean }>(
+    `/api/files/${videoId}/${variant}`
+  )
   return data
 }
 
 export async function deleteVideoFiles(videoId: number) {
-  const { data } = await api.delete<{ freed_bytes: number }>(`/api/files/${videoId}`)
+  const { data } = await api.delete<{ freed_bytes: number }>(
+    `/api/files/${videoId}`
+  )
   return data
 }
 
 export async function cleanupOrphanFiles() {
-  const { data } = await api.post<{ freed_bytes: number }>('/api/files/cleanup-orphans')
+  const { data } = await api.post<{ freed_bytes: number }>(
+    '/api/files/cleanup-orphans'
+  )
   return data
 }
 
@@ -432,7 +499,11 @@ export async function getApiKeys() {
   return data
 }
 
-export async function addApiKey(provider: string, apiKey: string, label?: string) {
+export async function addApiKey(
+  provider: string,
+  apiKey: string,
+  label?: string
+) {
   const { data } = await api.post<ApiKeyRead>('/api/api-keys', {
     provider,
     api_key: apiKey,
@@ -493,7 +564,11 @@ export interface TranslateResult {
   cached: boolean
 }
 
-export async function translateText(text: string, sourceLang = 'zh', targetLang = 'vi') {
+export async function translateText(
+  text: string,
+  sourceLang = 'zh',
+  targetLang = 'vi'
+) {
   const { data } = await api.post<TranslateResult>('/api/translate', {
     text,
     source_lang: sourceLang,
@@ -503,7 +578,11 @@ export async function translateText(text: string, sourceLang = 'zh', targetLang 
 }
 
 /** Dịch cả trang trong 1 request — 40 request rời rạc sẽ đụng rate limit. */
-export async function translateBatch(texts: string[], sourceLang = 'zh', targetLang = 'vi') {
+export async function translateBatch(
+  texts: string[],
+  sourceLang = 'zh',
+  targetLang = 'vi'
+) {
   const { data } = await api.post<{ translations: Record<string, string> }>(
     '/api/translate/batch',
     { texts, source_lang: sourceLang, target_lang: targetLang }
@@ -526,7 +605,9 @@ export interface Asset {
 }
 
 export async function listAssets(kind?: AssetKind) {
-  const { data } = await api.get<Asset[]>('/api/assets', { params: kind ? { kind } : undefined })
+  const { data } = await api.get<Asset[]>('/api/assets', {
+    params: kind ? { kind } : undefined,
+  })
   return data
 }
 
@@ -554,7 +635,9 @@ export interface AudioStems {
 
 /** Track audio đã tách rời, để chỉnh âm lượng giọng đọc và nhạc nền riêng. */
 export async function getAudioStems(videoId: number) {
-  const { data } = await api.get<AudioStems>(`/api/videos/${videoId}/audio-stems`)
+  const { data } = await api.get<AudioStems>(
+    `/api/videos/${videoId}/audio-stems`
+  )
   return data
 }
 
@@ -565,7 +648,10 @@ export async function getTimeline(videoId: number) {
   return data.tracks
 }
 
-export async function saveTimeline(videoId: number, operations: TimelineOperations) {
+export async function saveTimeline(
+  videoId: number,
+  operations: TimelineOperations
+) {
   const { data } = await api.put<{ tracks: TimelineTrack[] }>(
     `/api/videos/${videoId}/timeline`,
     operations
@@ -581,9 +667,12 @@ export async function renderTimeline(videoId: number) {
 }
 
 export async function getWaveform(videoId: number, variant: string = 'dubbed') {
-  const { data } = await api.get<{ peaks: number[] }>(`/api/videos/${videoId}/waveform`, {
-    params: { variant },
-  })
+  const { data } = await api.get<{ peaks: number[] }>(
+    `/api/videos/${videoId}/waveform`,
+    {
+      params: { variant },
+    }
+  )
   return data.peaks
 }
 
@@ -603,7 +692,9 @@ export interface CropBox {
 }
 
 export async function getClipCandidates(videoId: number) {
-  const { data } = await api.get<ClipCandidate[]>(`/api/videos/${videoId}/clip-candidates`)
+  const { data } = await api.get<ClipCandidate[]>(
+    `/api/videos/${videoId}/clip-candidates`
+  )
   return data
 }
 
@@ -611,6 +702,9 @@ export async function createClip(
   videoId: number,
   payload: { start: number; end: number; crop?: CropBox; cta_text?: string }
 ) {
-  const { data } = await api.post<{ output_path: string }>(`/api/videos/${videoId}/clips`, payload)
+  const { data } = await api.post<{ output_path: string }>(
+    `/api/videos/${videoId}/clips`,
+    payload
+  )
   return data
 }

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.models.job import JobStatus, Platform
 from app.models.video import VideoStatus
@@ -41,6 +41,9 @@ class VideoRead(BaseModel):
     source_url: str
     status: VideoStatus
     created_at: datetime
+    # Chỉ set ở luồng search: video này đã có trong thư viện từ trước (không phải
+    # vừa thêm bởi job này). Mặc định False cho các luồng khác.
+    already_in_library: bool = False
 
 
 class JobPageRead(BaseModel):
@@ -62,11 +65,14 @@ class JobRead(BaseModel):
 
 
 class JobWithVideosRead(JobRead):
-    videos: list[VideoRead]
+    # Đọc từ `result_videos` (toàn bộ kết quả Bilibili, gồm cả video đã có trong
+    # thư viện) khi service set thuộc tính đó; nếu không thì về `videos` như cũ —
+    # các luồng khác (from-selection) không set `result_videos`.
+    videos: list[VideoRead] = Field(validation_alias=AliasChoices("result_videos", "videos"))
     # Không lưu DB — chỉ set tạm ở create_bilibili_crawl_job để frontend cảnh
     # báo khi dịch từ khoá thất bại (search bằng nguyên văn gần như 0 kết quả).
     translation_failed: bool = False
-    # Số video Bilibili trả về nhưng bị lọc vì đã có trong DB, và tổng số tìm
-    # được. Không có 2 số này thì "0 video" trông giống hệt "không tìm thấy gì".
-    skipped_existing: int = 0
+    # Số video trong kết quả đã có sẵn trong thư viện — vẫn hiện đầy đủ, chỉ để
+    # UI đánh dấu "đã tải" thay vì ẩn đi.
+    already_in_library: int = 0
     total_found: int = 0

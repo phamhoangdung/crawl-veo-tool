@@ -47,6 +47,13 @@ Endpoint đã dùng thật (xác nhận hoạt động qua request thật tới 
 
 ## Ghi chú phát sinh trong lúc làm
 
+### Search hiện đủ kết quả Bilibili, cache chỉ dùng cho từ khoá (2026-09-08)
+- Chốt hướng: kết quả search phải là **đúng những gì Bilibili trả về**, không lọc bớt. Video đã có trong thư viện vẫn hiện, chỉ đánh dấu `already_in_library` (theo từng video) để không tải lại.
+- **KHÔNG gán vào `job.videos`**: đó là quan hệ SQLAlchemy — gán vào sẽ dời `job_id` của video cũ sang job mới và làm mất liên kết với job gốc. Đã thử và xác nhận phá dữ liệu, nên dùng thuộc tính tạm `job.result_videos` + `AliasChoices` ở schema.
+- Chỉ INSERT video chưa có: bảng `videos` có `UniqueConstraint(platform, platform_video_id)`.
+- Trạng thái không đủ để suy ra "đã có": video đã tải mà chưa xử lý vẫn là `queued` — phải có cờ riêng.
+- Cache từ khoá đã dịch chuyển từ RAM (TTL 1h, mất khi restart) sang bảng `translation_cache`. Verify: xoá cache RAM rồi gọi lại vẫn chỉ 1 lần gọi API.
+
 ### "Search không ra kết quả" — hoá ra là lọc trùng (2026-09-08)
 - Triệu chứng: cùng từ khoá, lần trước ra 19-40 video, lần sau ra **0 video**. Nghi Bilibili chặn, nhưng đo thật thì API vẫn trả 20 video ở mọi trang (1→30) và cả khi bắn 12 request dồn dập — **không phải risk control**.
 - Nguyên nhân: `create_bilibili_crawl_job` bỏ qua video đã có trong DB (`continue`). Bilibili trả gần như cùng một tập video cho mỗi lần tìm, nên khi đã tải hết thì job mới rỗng. Đo thật: 20/20 video đã có trong DB (tổng 308 video Bilibili).
