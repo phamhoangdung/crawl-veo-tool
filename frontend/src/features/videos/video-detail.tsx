@@ -9,7 +9,6 @@ import {
   FolderOpen,
   Languages,
   Mic,
-  Pencil,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -49,6 +48,7 @@ import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { TimelineEditor } from '@/features/editor'
 import { SubtitleEditor } from './subtitle-editor'
+import { SubtitleReview } from './subtitle-review'
 
 function formatBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
@@ -457,52 +457,19 @@ export function VideoDetail() {
               </TabsContent>
 
               <TabsContent value='subtitles'>
-                <Card>
-                  <CardHeader>
-                    <div className='flex flex-wrap items-start justify-between gap-3'>
-                      <div>
-                        <CardTitle className='text-base'>
-                          Phụ đề ({transcript.length} câu)
-                        </CardTitle>
-                        <CardDescription>
-                          {hasTranslation
-                            ? 'Nên soát lại trước khi lồng tiếng — giọng đọc theo đúng bản dịch này.'
-                            : 'Chưa dịch sang tiếng Việt.'}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        className='gap-1'
-                        onClick={() => setEditorOpen(true)}
-                      >
-                        <Pencil className='size-3.5' />
-                        Sửa kèm video
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {/* Có cả trang nên hiện hết, không cắt 5 câu như trước. */}
-                    <ul className='space-y-2'>
-                      {transcript.map((segment, index) => (
-                        <li
-                          key={index}
-                          className='grid gap-1 rounded border px-3 py-2 text-sm sm:grid-cols-[4rem_1fr]'
-                        >
-                          <span className='text-xs text-muted-foreground tabular-nums'>
-                            {formatDuration(Math.floor(segment.start))}
-                          </span>
-                          <div>
-                            <p>{segment.text}</p>
-                            {segment.translated_text && (
-                              <p className='text-primary'>{segment.translated_text}</p>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
+                <SubtitleReview
+                  videoId={videoId}
+                  segments={transcript}
+                  hasTranslation={hasTranslation}
+                  variant={
+                    fileList.some((f) => f.variant === 'burned' && f.exists)
+                      ? 'burned'
+                      : fileList.some((f) => f.variant === 'dubbed' && f.exists)
+                        ? 'dubbed'
+                        : 'original'
+                  }
+                  onEdit={() => setEditorOpen(true)}
+                />
               </TabsContent>
 
               <TabsContent value='editor'>

@@ -1,6 +1,11 @@
 import type { CropBox, TimelineClip, TimelineTrack } from '@/lib/api'
 
-export const PX_PER_SECOND = 40
+export const DEFAULT_PX_PER_SECOND = 40
+export const MIN_PX_PER_SECOND = 5
+export const MAX_PX_PER_SECOND = 400
+
+/** Giữ tên cũ cho code/test đã dùng; zoom truyền tỉ lệ riêng qua tham số. */
+export const PX_PER_SECOND = DEFAULT_PX_PER_SECOND
 export const MIN_CLIP_DURATION = 0.1
 
 /** Crop dọc 9:16 mặc định, canh giữa theo chiều ngang — điểm bắt đầu hợp lý cho
@@ -16,12 +21,12 @@ export function defaultVerticalCrop(videoWidth: number, videoHeight: number): Cr
   }
 }
 
-export function secondsToPx(seconds: number): number {
-  return seconds * PX_PER_SECOND
+export function secondsToPx(seconds: number, pxPerSecond = DEFAULT_PX_PER_SECOND): number {
+  return seconds * pxPerSecond
 }
 
-export function pxToSeconds(px: number): number {
-  return px / PX_PER_SECOND
+export function pxToSeconds(px: number, pxPerSecond = DEFAULT_PX_PER_SECOND): number {
+  return px / pxPerSecond
 }
 
 export interface LayoutedClip {

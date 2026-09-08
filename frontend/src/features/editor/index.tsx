@@ -24,7 +24,9 @@ import { Label } from '@/components/ui/label'
 import { CropBoxSelector } from './crop-box-selector'
 import { defaultVerticalCrop } from './layout'
 import { OverlayLayer } from './overlay-layer'
+import { EditorToolbar } from './toolbar'
 import { VolumeMixer } from './volume-mixer'
+import { useEditorShortcuts } from '@/hooks/use-editor-shortcuts'
 import { useEditorStore } from './store'
 import { Timeline } from './timeline'
 
@@ -101,6 +103,8 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
   const setOperations = useEditorStore((s) => s.setOperations)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [currentTime, setCurrentTime] = useState(0)
+  const seekRequest = useEditorStore((s) => s.seekRequest)
+  const consumeSeek = useEditorStore((s) => s.consumeSeek)
   const [videoDims, setVideoDims] = useState({ width: 0, height: 0 })
   const [selectedCandidate, setSelectedCandidate] = useState<ClipCandidate | null>(null)
   const [crop, setCrop] = useState<CropBox | null>(null)
@@ -159,6 +163,45 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
   useEffect(() => {
     if (savedTracks) setOperations({ tracks: savedTracks })
   }, [savedTracks, setOperations])
+
+  const selected = useEditorStore((s) => s.selected)
+  const splitClip = useEditorStore((s) => s.splitClip)
+  const duplicateClip = useEditorStore((s) => s.duplicateClip)
+  const removeClip = useEditorStore((s) => s.removeClip)
+  const undo = useEditorStore((s) => s.undo)
+  const redo = useEditorStore((s) => s.redo)
+
+  useEditorShortcuts({
+    onTogglePlay: () => {
+      const video = videoRef.current
+      if (!video) return
+      if (video.paused) void video.play()
+      else video.pause()
+    },
+    onSplit: () => selected && splitClip(selected.trackIndex, selected.clipIndex, currentTime),
+    onDelete: () => selected && removeClip(selected.trackIndex, selected.clipIndex),
+    onDuplicate: () => selected && duplicateClip(selected.trackIndex, selected.clipIndex),
+    onUndo: undo,
+    onRedo: redo,
+    onNudge: (delta) => {
+      const video = videoRef.current
+      if (!video) return
+      video.currentTime = Math.max(0, video.currentTime + delta)
+      setCurrentTime(video.currentTime)
+    },
+  })
+
+  // Chọn clip ở timeline → tua preview tới đầu clip đó. Đọc yêu cầu từ store vì
+  // timeline và thẻ <video> nằm ở 2 component khác nhau.
+  useEffect(() => {
+    if (!seekRequest) return
+    const video = videoRef.current
+    if (video) {
+      video.currentTime = seekRequest.seconds
+      setCurrentTime(seekRequest.seconds)
+    }
+    consumeSeek()
+  }, [seekRequest, consumeSeek])
 
   const applySuggestion = useMutation({
     mutationFn: () => buildSuggestionFromPipeline(videoId),
@@ -267,7 +310,10 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
           <CardTitle className='text-base'>Timeline</CardTitle>
         </CardHeader>
         <CardContent>
-          <Timeline waveformPeaks={waveformPeaks} />
+          <EditorToolbar currentTime={currentTime} />
+          <div className='mt-3'>
+            <Timeline waveformPeaks={waveformPeaks} currentTime={currentTime} />
+          </div>
         </CardContent>
       </Card>
 

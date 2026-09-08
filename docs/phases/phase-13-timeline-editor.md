@@ -73,3 +73,24 @@ Kèm 2 lỗi phát hiện lúc sửa:
 - Gợi ý AI dựng **2 track audio riêng**: giọng đọc volume 1.0, nhạc nền volume 0.3 (để nhỏ hơn cho khỏi át lời).
 - `volume-mixer.tsx`: thanh trượt + nút tắt tiếng cho từng track, **luôn hiện** dưới khung preview — khác `ClipInspector` phải chọn clip mới thấy. Dùng `input[type=range]` thuần vì dự án chưa có component Slider.
 - Backend không phải sửa: `render_timeline` vốn đã `amix` nhiều track với volume riêng. Verify render thật 2 track (1.0 + 0.3) ra file có audio stream AAC.
+
+## Nâng editor lên mức dùng được thật (phiên 2026-09-08, phần 2)
+
+**Chọn clip giờ tua video tới đúng giây bắt đầu clip đó.** Trước chỉ đổi state, không biết đang sửa đoạn nào. Timeline và thẻ `<video>` nằm ở 2 component khác nhau nên đi qua store: `requestSeek(seconds)` đặt `{seconds, nonce}`, preview hưởng ứng rồi `consumeSeek()`. Dùng nonce chứ không phải số trần để **chọn lại đúng clip cũ vẫn tua lại được**.
+
+**Điều khiển cơ bản** (`toolbar.tsx` + `hooks/use-editor-shortcuts.ts`):
+- **Playhead** — vạch đỏ theo thời điểm đang phát, phủ mọi track. `pointer-events-none` để không chặn kéo clip.
+- **Thước thời gian** — bấm để tua. Mốc thưa dần khi zoom out (1s → 5s → 15s → 60s) cho khỏi chi chít chữ.
+- **Zoom** 5–400 px/giây. `PX_PER_SECOND` từ hằng số cố định đổi thành tham số của `secondsToPx`/`pxToSeconds` (giữ export cũ để test hiện có không vỡ). Listener kéo gắn 1 lần nên không thấy zoom mới → đồng bộ qua ref **trong effect**, không ghi lúc render (lint `react-hooks/refs` chặn đúng).
+- **Undo/redo** 50 bước. Thao tác mới xoá nhánh redo; nạp timeline mới (server/gợi ý AI) xoá sạch lịch sử vì đó là điểm bắt đầu mới.
+- **Phím tắt**: Space play/pause, S cắt đôi, Delete xoá, Ctrl+D nhân bản, Ctrl+Z / Ctrl+Shift+Z, mũi tên trái/phải nhích 1 frame (Shift = 5 giây). Bỏ qua khi đang gõ trong input.
+
+**Thao tác cắt/ghép**:
+- **Cắt đôi tại playhead** — quy đổi vị trí output về offset trong file nguồn (audio phải trừ `track_start`), clip sau được dời `track_start` tương ứng. Bỏ qua khi cắt sát mép để không tạo clip 0 giây.
+- **Nhân bản** — bản sao audio dời ra sau bản gốc để không chồng tiếng.
+- **Đổi thứ tự clip video** — nút ←/→ (hạn chế cũ đã gỡ). Chỉ hiện với track video vì audio/overlay đã có `track_start`/`start` riêng.
+- 13 test store thuần cho các thao tác này, gồm ca khó: split clip audio phải dời `track_start` đúng.
+
+**Tab Phụ đề chạy theo video** (`subtitle-review.tsx`): video bên trái, danh sách câu bên phải tự cuộn và tô sáng câu đang phát, bấm câu để nhảy tới đoạn đó. Có nút tắt tự-cuộn (người dùng có thể muốn đọc chỗ khác trong lúc video chạy). Chọn biến thể phát theo thứ tự burned → dubbed → original.
+
+**Còn thiếu** (chưa làm trong phiên này): preview chưa phản ánh đúng bản render (vẫn phát 1 file gốc, không thấy hiệu ứng cắt/chuyển cảnh/trộn âm lượng); chưa thêm ảnh/logo/watermark, nhạc nền từ file ngoài, chỉnh tốc độ phát, fade in/out âm thanh; chưa snap khi kéo.
