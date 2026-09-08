@@ -26,3 +26,24 @@ async def translate(
     )
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"].strip()
+
+
+async def complete(
+    client: httpx.AsyncClient, api_key: str, prompt: str, *, temperature: float = 0.7
+) -> str:
+    """Gọi model với prompt tự do — dùng cho sinh metadata, không phải dịch.
+
+    Temperature cao hơn `translate` vì viết tiêu đề/mô tả cần đa dạng, tránh mọi
+    video ra cùng một khuôn (đúng thứ chính sách inauthentic content nhắm tới).
+    """
+    response = await client.post(
+        _ENDPOINT,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+        },
+    )
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"].strip()

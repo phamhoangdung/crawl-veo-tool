@@ -1,31 +1,36 @@
 # Phase 9: Compliance & value-add cho re-up
 
-Trạng thái: Chưa bắt đầu.
+Trạng thái: **Phần lõi xong & verify thật** (ffmpeg thật, API thật) — trừ source ledger và checklist disclosure (chưa làm, xem Ghi chú).
 
-## Mục tiêu
-Tăng "giá trị transform" thật cho video re-up (dịch + lồng tiếng đã có từ Phase 2-5) để giảm rủi ro bị tính là reused/inauthentic content theo chính sách YouTube 2026 — xem phân tích chi tiết ở [docs/scale-reup-features/plan.md](../scale-reup-features/plan.md) mục "A. Re-up video". Đây là hướng tăng giá trị nội dung thật, không phải kỹ thuật né phát hiện.
+## Nghiên cứu quy trình thực tế (2026-09-08)
 
-## Phạm vi
-**Trong phạm vi:** source & rights ledger (lưu nguồn gốc video), title/description/tag generator theo văn phong riêng (chống lặp template giữa các video), gợi ý commentary/intro-outro do AI soạn (user duyệt/sửa trước khi dùng, không tự chèn thẳng), checklist disclosure trước khi xuất video hoàn chỉnh.
+Đối chiếu tool với quy trình re-up phổ biến trên mạng ([itcenter.vn](https://itcenter.vn/2025/06/cach-kiem-tien-tu-video-trung-quoc-bilibili-tren-youtube-theo-phuong-phap-reup-chinh-chu/), [tcc-agency.com](https://tcc-agency.com/cach-reup-video-tiktok-trung-quoc/)) và chính sách YouTube hiện hành:
 
-**Ngoài phạm vi:** tự động đăng lên YouTube (tool chỉ xuất file, đăng tay — không đổi trong phase này), auto-detect vi phạm bản quyền nội dung gốc (không có công cụ tool tự làm đáng tin cậy, vẫn là trách nhiệm của bạn khi chọn nguồn).
+**Chính sách quan trọng**: 15/07 YouTube đổi tên "repetitious content" → **"inauthentic content"**, nhắm nội dung sản xuất hàng loạt/lặp lại/ít giá trị gốc. Nhưng **không đổi** chính sách reused content — clip/compilation/commentary vẫn kiếm tiền được **nếu thêm giá trị gốc thật** (biên tập kể chuyện, bình luận có phân tích, khung giáo dục). Vi phạm → tắt kiếm tiền **cả kênh**, 30 ngày sau mới xin lại được. ([vidiq](https://vidiq.com/blog/post/youtube-reused-content-policy-guide/), [creatorhandbook](https://www.creatorhandbook.net/youtube-updates-monetization-policy-for-inauthentic-content/))
 
-## Nguyên liệu cần chuẩn bị trước khi bắt đầu
-- [ ] Research yêu cầu "disclosure nội dung AI/synthetic" hiện hành của YouTube tại thời điểm implement (chính sách có thể đã đổi so với lúc research plan gốc) — quyết định còn để mở từ `docs/scale-reup-features/plan.md`.
-- [ ] Quyết định: commentary/intro-outro do AI soạn full-auto hay bắt buộc user duyệt/sửa trước khi dùng? Đề xuất trong plan gốc: bắt buộc duyệt, để giữ "góc nhìn riêng" thật thay vì tự động hoá thuần tuý.
-- [ ] 2-3 ví dụ title/description bạn thích (văn phong/tone kênh mong muốn) để AI generator học theo, tránh ra kết quả chung chung.
+Hệ quả cho tool: dịch + lồng tiếng giữ nhạc nền gốc **là transform thật**, không phải mẹo né. Nhưng chạy hàng loạt N video cùng một khuôn metadata lại đúng thứ chính sách nhắm tới → prompt sinh metadata dùng `temperature=0.7` để tránh mọi video ra cùng một giọng.
 
-## Việc cần làm
-- [ ] `app/models/video.py` hoặc bảng mới `source_ledger`: lưu tác giả gốc, ghi chú review bản quyền, trạng thái đã thêm disclosure hay chưa.
-- [ ] `app/services/metadata_service.py` (mới): sinh title/description/tag qua provider AI đã chọn, dựa trên transcript + văn phong mẫu — đảm bảo prompt vary theo nội dung thật, không dùng 1 template cố định.
-- [ ] `app/services/commentary_service.py` (mới): gợi ý đoạn intro/outro dựa trên transcript, trả về bản draft để user sửa qua UI, không tự chèn thẳng vào video.
-- [ ] API + UI: form sửa metadata/commentary (text, không cần kéo-thả); vị trí chèn đoạn intro/outro vào video dùng chung timeline editor ở Phase 13 (kéo đặt đoạn commentary vào track chính) thay vì tự làm UI riêng; checklist disclosure (checkbox xác nhận) chặn trước khi cho tải video hoàn chỉnh.
-- [ ] Test cho `metadata_service`/`commentary_service` (mock provider AI, không gọi API thật trong test).
+**Các mẹo "lách bản quyền" phổ biến trên mạng (tăng tốc âm thanh 105-110%, chèn tiếng chim/mưa) KHÔNG được implement** — chúng không còn tác dụng với chính sách hiện hành và không tăng giá trị thật.
 
-## Tiêu chí hoàn thành (Definition of Done)
-- [ ] Sinh được title/description khác nhau có ý nghĩa cho 2 video khác nhau (không giống hệt cấu trúc/câu chữ).
-- [ ] Có bản draft commentary hiển thị trên UI, sửa được trước khi dùng cho video output.
-- [ ] Checklist disclosure hiển thị và chặn tải file cuối cho tới khi user tick xác nhận.
+Đánh giá độ phủ trước phiên này: ~65% YouTube / ~70% TikTok. Thiếu: intro/outro, watermark, nhạc nền ngoài, metadata SEO, đăng bài.
 
-## Ghi chú phát sinh trong lúc làm
-(Điền khi bắt đầu code.)
+## Việc đã làm
+
+### Media overlay (ffmpeg)
+- [x] `render_timeline` nhận thêm track `"image"` — chèn logo/watermark/ảnh. Bề rộng theo **tỉ lệ khung hình** (`scale2ref`) nên co giãn đúng khi video đổi độ phân giải; x/y là **toạ độ tâm** khớp cách đặt của overlay text.
+- [x] `opacity` cho watermark mờ; `start`/`end` để logo hiện theo mốc thời gian (intro branding).
+- [x] **Intro/outro và nhạc nền ngoài không cần code mới** — track video nhận nhiều clip nguồn bất kỳ (có transition fade), track audio nhận file ngoài với volume riêng. Chỉ thiếu UI chọn file. Verify thật: intro 1s + video 2s + nhạc nền → đúng 3.0s, có audio stream.
+- [x] 4 test ffmpeg thật cho các ca trên.
+
+### Sinh metadata SEO
+- [x] `services/metadata_service.py` — sinh tiêu đề/mô tả/tag theo quy tắc từ skill `youtube-seo` (đã cài trong `.claude/skills/`): tiêu đề dưới 60 ký tự với từ khoá chính ở 5-55 ký tự đầu, 2-3 câu mở mô tả chứa từ khoá tự nhiên, tối đa 15 tag.
+- [x] Bóc JSON khỏi markdown fence / lời dẫn (model hay bọc thêm), cắt về giới hạn thay vì từ chối nhưng **báo lại `title_truncated`** để không âm thầm mất chữ.
+- [x] `translate_service.complete_text()` — gọi LLM với prompt tự do, **dùng chung pool key** (Phase 8) với xoay vòng khi hết quota. KHÔNG fallback Google Translate vì endpoint dịch free không nhận prompt tự do; hết key thì báo lỗi rõ.
+- [x] `POST /api/videos/{id}/metadata` nhận `prompt_template` tuỳ chỉnh — **n8n truyền prompt riêng cho từng chủ đề** (ẩm thực/vlog/tin tức cần văn phong khác nhau).
+- [x] `GET /api/videos/metadata/default-prompt` — lấy prompt mặc định làm điểm bắt đầu. Khai báo **sau** route có path param để không bị bắt nhầm (verify thật).
+- [x] 14 test service.
+
+## Ghi chú
+- **Chưa làm**: source & rights ledger (lưu nguồn gốc video), checklist disclosure trước khi xuất. Cả hai là việc ghi chép/nhắc nhở, không chặn sản xuất.
+- **Chưa làm**: UI chọn file intro/outro/logo/nhạc nền — backend đã sẵn sàng, chỉ cần thêm nút chọn file vào timeline editor.
+- **Ngoài phạm vi (không đổi)**: tự động đăng lên YouTube/TikTok. Cả 2 nền tảng đều phải đăng tay.

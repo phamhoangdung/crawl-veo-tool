@@ -193,6 +193,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
     video_track = next((t for t in tracks if t.get("type") == "video"), None)
     audio_tracks = [t for t in tracks if t.get("type") == "audio"]
     overlay_track = next((t for t in tracks if t.get("type") == "overlay"), None)
+    image_track = next((t for t in tracks if t.get("type") == "image"), None)
 
     if not video_track or not video_track.get("clips"):
         raise ValueError("Timeline cần ít nhất 1 track video có clip")
@@ -258,6 +259,48 @@ def render_timeline(operations: dict, output_path: Path) -> None:
                 f"x={x_expr}:y={y_expr}:"
                 f"fontsize={ov.get('font_size', 32)}:fontcolor=white:box=1:boxcolor=black@0.5:"
                 f"enable='between(t,{ov['start']},{ov['end']})'[{out_label}]"
+            )
+            final_video_label = out_label
+
+    # --- ảnh/logo/watermark: chồng lên trên cùng, sau chữ ---
+    if image_track and image_track.get("clips"):
+        for i, img in enumerate(image_track["clips"]):
+            idx = add_input(img["source"])
+            scaled = f"imgs{i}"
+            out_label = f"img{i}"
+
+            # Bề rộng theo TỈ LỆ khung hình [0,1] để logo co giãn đúng dù video
+            # đổi độ phân giải. Dùng `scale2ref` để biết kích thước video nền;
+            # -1 giữ nguyên tỉ lệ ảnh gốc.
+            width_ratio = img.get("width", 0.15)
+            filter_parts.append(
+                f"[{idx}:v][{final_video_label}]scale2ref=w=iw*{width_ratio}:h=-1[{scaled}][vref{i}]"
+            )
+            # scale2ref trả lại luôn nhánh video nền — phải dùng nhãn mới của nó.
+            final_video_label = f"vref{i}"
+
+            # x/y là toạ độ TÂM ảnh theo tỉ lệ khung hình, khớp cách đặt của
+            # overlay text để 2 loại dùng chung logic kéo-thả ở frontend.
+            x_expr = f"main_w*{img.get('x', 0.9)}-overlay_w/2"
+            y_expr = f"main_h*{img.get('y', 0.1)}-overlay_h/2"
+
+            enable = ""
+            if img.get("start") is not None and img.get("end") is not None:
+                enable = f":enable='between(t,{img['start']},{img['end']})'"
+
+            opacity = img.get("opacity", 1.0)
+            if opacity < 1.0:
+                faded = f"imgf{i}"
+                filter_parts.append(
+                    f"[{scaled}]format=rgba,colorchannelmixer=aa={opacity}[{faded}]"
+                )
+                source_label = faded
+            else:
+                source_label = scaled
+
+            filter_parts.append(
+                f"[{final_video_label}][{source_label}]"
+                f"overlay=x={x_expr}:y={y_expr}{enable}[{out_label}]"
             )
             final_video_label = out_label
 

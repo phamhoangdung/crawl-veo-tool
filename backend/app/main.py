@@ -13,6 +13,7 @@ from app.api import (
     health,
     image_proxy,
     library,
+    metadata,
     pipeline,
     timeline,
     trending,
@@ -46,6 +47,7 @@ app.include_router(image_proxy.router)
 app.include_router(downloads.router)
 app.include_router(files.router)
 app.include_router(batch.router)
+app.include_router(metadata.router)
 
 
 @app.on_event("startup")

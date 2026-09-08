@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "youtube-seo": {
+      "source": "kostja94/marketing-skills",
+      "sourceType": "github",
+      "skillPath": "skills/platforms/youtube/SKILL.md",
+      "computedHash": "2233fea25e273835753e733115cecddd6a566d7e09c3f26e1a265e2ab7335e53"
+    }
+  }
+}

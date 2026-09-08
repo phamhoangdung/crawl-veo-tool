@@ -233,3 +233,136 @@ class TestCropVertical:
 
         width, height = ffmpeg.get_video_dimensions(output)
         assert (width, height) == (200, 240)
+
+
+@pytest.fixture
+def logo_image(tmp_path: Path) -> Path:
+    """Ảnh PNG nhỏ làm logo/watermark."""
+    path = tmp_path / "logo.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=green:size=64x64:duration=1",
+         "-frames:v", "1", str(path)],
+        check=True,
+        capture_output=True,
+    )
+    return path
+
+
+class TestImageOverlay:
+    """Logo/watermark — chèn ảnh ngoài vào video, phần còn thiếu để re-up chỉn chu."""
+
+    def test_renders_logo_without_breaking_video(
+        self, clip_a: Path, logo_image: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "out.mp4"
+        ffmpeg.render_timeline(
+            {
+                "tracks": [
+                    {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                    {
+                        "type": "image",
+                        "clips": [
+                            {"source": str(logo_image), "x": 0.9, "y": 0.1, "width": 0.15}
+                        ],
+                    },
+                ]
+            },
+            out,
+        )
+
+        info = _probe(out)
+        video_stream = next(s for s in info["streams"] if s["codec_type"] == "video")
+        # Logo không được làm đổi kích thước video nền.
+        assert video_stream["width"] == 320
+        assert video_stream["height"] == 240
+
+    def test_semi_transparent_watermark(
+        self, clip_a: Path, logo_image: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "out.mp4"
+        ffmpeg.render_timeline(
+            {
+                "tracks": [
+                    {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                    {
+                        "type": "image",
+                        "clips": [
+                            {
+                                "source": str(logo_image),
+                                "x": 0.5,
+                                "y": 0.5,
+                                "width": 0.2,
+                                "opacity": 0.4,
+                            }
+                        ],
+                    },
+                ]
+            },
+            out,
+        )
+        assert out.exists() and out.stat().st_size > 0
+
+    def test_logo_limited_to_time_range(
+        self, clip_a: Path, logo_image: Path, tmp_path: Path
+    ) -> None:
+        """Logo hiện/ẩn theo mốc thời gian — dùng cho intro branding."""
+        out = tmp_path / "out.mp4"
+        ffmpeg.render_timeline(
+            {
+                "tracks": [
+                    {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                    {
+                        "type": "image",
+                        "clips": [
+                            {
+                                "source": str(logo_image),
+                                "x": 0.5,
+                                "y": 0.2,
+                                "width": 0.3,
+                                "start": 0.5,
+                                "end": 1.5,
+                            }
+                        ],
+                    },
+                ]
+            },
+            out,
+        )
+        assert float(_probe(out)["format"]["duration"]) == pytest.approx(2.0, abs=0.3)
+
+    def test_intro_concat_with_external_music(
+        self, clip_a: Path, clip_b: Path, music_clip: Path, tmp_path: Path
+    ) -> None:
+        """Intro + video chính + nhạc nền ngoài — luồng re-up điển hình."""
+        out = tmp_path / "out.mp4"
+        ffmpeg.render_timeline(
+            {
+                "tracks": [
+                    {
+                        "type": "video",
+                        "clips": [
+                            {"source": str(clip_b), "start": 0, "end": 1},
+                            {"source": str(clip_a), "start": 0, "end": 2},
+                        ],
+                    },
+                    {
+                        "type": "audio",
+                        "role": "music",
+                        "clips": [
+                            {
+                                "source": str(music_clip),
+                                "start": 0,
+                                "end": 3,
+                                "track_start": 0,
+                                "volume": 0.3,
+                            }
+                        ],
+                    },
+                ]
+            },
+            out,
+        )
+
+        info = _probe(out)
+        assert float(info["format"]["duration"]) == pytest.approx(3.0, abs=0.3)
+        assert any(s["codec_type"] == "audio" for s in info["streams"])

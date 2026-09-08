@@ -86,3 +86,39 @@ async def translate_text(db: Session, user_id: int, text: str, source_lang: str,
                 "Dịch thất bại: hết quota toàn bộ key OpenAI trong pool "
                 "và Google Translate (free) cũng lỗi"
             ) from exc
+
+
+async def complete_text(db: Session, user_id: int, prompt: str) -> str:
+    """Gọi LLM với prompt tự do (sinh metadata...), dùng chung pool key với dịch.
+
+    Khác `translate_text`: KHÔNG fallback sang Google Translate — endpoint dịch
+    free không nhận prompt tự do. Hết key thì báo lỗi để người dùng biết cần cấu
+    hình API key, thay vì trả rác.
+    """
+    async with httpx.AsyncClient(timeout=60) as client:
+        tried_key_ids: set[int] = set()
+        while True:
+            picked = api_key_service.pick_decrypted_key(db, user_id, "openai")
+            if picked is None or picked[0] in tried_key_ids:
+                break
+            key_id, api_key = picked
+            tried_key_ids.add(key_id)
+            try:
+                result = await _call_with_retry(
+                    "OpenAI complete",
+                    lambda: openai_translate.complete(client, api_key, prompt),
+                )
+                api_key_service.mark_key_result(db, key_id, success=True)
+                return result
+            except ProviderQuotaExceededError:
+                api_key_service.mark_key_result(db, key_id, success=False)
+                logger.warning("OpenAI key #%d hết quota, thử key khác trong pool", key_id)
+                continue
+            except httpx.HTTPError as exc:
+                api_key_service.mark_key_result(db, key_id, success=False)
+                logger.warning("OpenAI complete lỗi với key #%d: %s", key_id, exc)
+                continue
+
+    raise AllProvidersExhaustedError(
+        "Cần API key OpenAI để sinh metadata — thêm ở trang API Keys."
+    )
