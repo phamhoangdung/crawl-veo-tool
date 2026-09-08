@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     api_keys,
+    batch,
     clips,
     crawl,
     downloads,
@@ -44,6 +45,7 @@ app.include_router(library.router)
 app.include_router(image_proxy.router)
 app.include_router(downloads.router)
 app.include_router(files.router)
+app.include_router(batch.router)
 
 
 @app.on_event("startup")

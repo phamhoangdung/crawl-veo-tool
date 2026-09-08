@@ -229,10 +229,8 @@ def get_subtitles(video_id: int, db: Session = Depends(get_db)) -> str:
     return subtitle_service.build_bilingual_srt(video.transcript_json or [])
 
 
-@router.post("/{video_id}/burn-subtitles", response_model=VideoDetailRead)
-def burn_subtitles(video_id: int, db: Session = Depends(get_db)) -> VideoDetailRead:
-    """Burn phụ đề song ngữ vào video đã lồng tiếng (ưu tiên) hoặc video gốc nếu chưa dub."""
-    video = _get_video_or_404(db, video_id)
+def _burn_subtitles_for(video: Video) -> None:
+    """Ghép phụ đề cứng vào bản đã lồng tiếng (ưu tiên) hoặc bản gốc nếu chưa dub."""
     source_path = Path(video.dubbed_path or video.local_path)
     video_dir = source_path.parent
 
@@ -242,7 +240,58 @@ def burn_subtitles(video_id: int, db: Session = Depends(get_db)) -> VideoDetailR
 
     output_path = video_dir / "burned.mp4"
     ffmpeg.burn_subtitles(source_path, srt_path, output_path, font_size=font_size)
-
     video.burned_path = str(output_path)
+
+
+@router.post("/{video_id}/burn-subtitles", response_model=VideoDetailRead)
+def burn_subtitles(video_id: int, db: Session = Depends(get_db)) -> VideoDetailRead:
+    """Ghép phụ đề cứng vào video."""
+    video = _get_video_or_404(db, video_id)
+    _burn_subtitles_for(video)
     db.commit()
     return _to_detail(video)
+
+
+async def run_step(step: str, video_id: int) -> None:
+    """Chạy 1 bước pipeline và **ném lỗi ra ngoài** nếu hỏng.
+
+    Khác các hàm `_run_*` (chạy nền, nuốt lỗi vì không ai bắt được): batch cần
+    biết bước nào hỏng để đánh dấu đúng video và bỏ qua các bước sau của nó.
+    """
+    with SessionLocal() as db:
+        video = db.get(Video, video_id)
+        if video is None:
+            raise ValueError(f"Video {video_id} không còn tồn tại")
+
+        progress_service.start(video.id, video.title, kind=step)  # type: ignore[arg-type]
+        try:
+            if step == "download":
+                async with BilibiliClient() as client:
+                    cid = await client.get_video_cid(video.platform_video_id)
+                output_path = await download_service.download_bilibili_video(
+                    job_id=video.job_id,
+                    video_id=video.id,
+                    bvid=video.platform_video_id,
+                    cid=cid,
+                )
+                video.local_path = str(output_path)
+                video.status = VideoStatus.DOWNLOADED
+            elif step == "transcribe":
+                dubbing_service.run_transcribe(db, video)
+            elif step == "translate":
+                await dubbing_service.run_translate(db, _DEFAULT_USER_ID, video, "zh", "vi")
+            elif step == "dub":
+                await dubbing_service.run_dub_and_mux(db, _DEFAULT_USER_ID, video)
+            elif step == "burn":
+                _burn_subtitles_for(video)
+            else:
+                raise ValueError(f"Bước không hợp lệ: {step}")
+
+            video.error_message = None
+            db.commit()
+            progress_service.finish(video.id, kind=step)  # type: ignore[arg-type]
+        except Exception as exc:
+            video.error_message = str(exc)
+            db.commit()
+            progress_service.finish(video.id, error=str(exc), kind=step)  # type: ignore[arg-type]
+            raise

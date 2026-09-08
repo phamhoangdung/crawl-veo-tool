@@ -130,3 +130,28 @@ Chia thành **3 tab** theo 3 việc khác nhau:
 Ảnh cover to ở cột trái bị bỏ (không mang thông tin gì, đã thấy ở danh sách video) — thay bằng thumbnail nhỏ cạnh tiêu đề ở header, ẩn trên mobile.
 
 `SubtitleEditor` (Dialog) đặt **ngoài** `Tabs` — nó phủ toàn màn hình nên không thuộc tab nào.
+
+### Tối ưu cho sản xuất hàng loạt (phiên 2026-09-08, phần 2)
+
+**Đo thật trước khi tối ưu** (5 câu rồi ngoại suy cho video 32 câu):
+
+| Bước | Tuần tự | Song song | Nhanh hơn |
+|---|---|---|---|
+| Dịch | ~8s | ~2s | 3.8x |
+| TTS (sinh giọng) | ~54s | ~5s | **10.2x** |
+
+TTS là điểm nghẽn lớn nhất — cả 2 bước đều chờ mạng nên song song có tác dụng rõ.
+
+**Đã sửa** (`dubbing_service.py`): dịch và TTS chạy song song với `asyncio.Semaphore(8)`. Giới hạn 8 để không bị provider chặn rate limit; cao hơn cũng không nhanh thêm vì nghẽn ở mạng. Riêng TTS **tách 2 giai đoạn**: sinh giọng song song (chờ I/O) rồi mới ghép tuần tự (`overlay` là xử lý audio CPU, song song không nhanh hơn). `asyncio.gather` giữ nguyên thứ tự đầu vào nên timeline không bị xáo.
+
+**Batch API** (`app/api/batch.py` + `services/batch_service.py`) — thứ thực sự chặn sản xuất hàng loạt: trước đó 191 video chờ mà mỗi video phải bấm 5 nút, và bước sau chỉ bấm được khi bước trước xong.
+
+- `POST /api/batch/start` — chạy cả pipeline cho danh sách video, **trả về ngay** rồi chạy nền (n8n không phải giữ kết nối mở hàng giờ). Tách `prepare_batch` (dựng job, trả trạng thái ban đầu) khỏi `execute_batch` (chạy thật).
+- `GET /api/batch/status` — tiến độ từng video, biết đang ở bước nào.
+- `POST /api/batch/cancel` — dừng **sau khi video đang chạy xong**, không cắt ngang để khỏi bỏ file dở dang.
+- `GET /api/batch/pending-videos?limit=` — id video chưa xử lý xong, đưa thẳng vào `/start`. Dành cho n8n gọi theo lịch.
+- **Bỏ qua bước đã có kết quả** (`_pick_pending_steps`): chạy lại batch không làm lại từ đầu. Verify thật: video 101 đã xong → `done` ngay, không chạy bước nào.
+- **1 video lỗi không chặn cả batch** — đánh dấu `failed` kèm bước hỏng rồi chuyển video tiếp theo.
+- `DEFAULT_CONCURRENCY = 1`: whisper/demucs đã ăn hết CPU, chạy 2 video song song chỉ làm cả hai cùng chậm và tranh RAM. Cho phép chỉnh lên tối đa 4 nếu máy khoẻ.
+
+`run_step()` trong `pipeline.py` **ném lỗi ra ngoài**, khác các hàm `_run_*` chạy nền nuốt lỗi — batch cần biết bước nào hỏng.
