@@ -184,3 +184,80 @@ class TestImageTrackValidation:
         }
         with pytest.raises(timeline_service.TimelineValidationError):
             timeline_service.save_timeline(db, 1, operations)
+
+
+class TestBlurTrackValidation:
+    """Vùng che logo/phụ đề gốc — validator phải chặn hình dạng sai trước khi
+    tới ffmpeg, vì lỗi filter của ffmpeg rất khó đọc."""
+
+    def test_accepts_blur_region(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {
+                    "type": "blur",
+                    "clips": [{"x": 0.7, "y": 0.05, "width": 0.25, "height": 0.15}],
+                },
+            ]
+        }
+        assert timeline_service.save_timeline(db, 1, operations) == operations
+
+    def test_accepts_pixelate_mode(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {
+                    "type": "blur",
+                    "clips": [
+                        {"x": 0, "y": 0, "width": 0.2, "height": 0.2, "mode": "pixelate"}
+                    ],
+                },
+            ]
+        }
+        assert timeline_service.save_timeline(db, 1, operations) == operations
+
+    def test_rejects_missing_dimensions(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {"type": "blur", "clips": [{"x": 0, "y": 0, "height": 0.2}]},
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError, match="width"):
+            timeline_service.save_timeline(db, 1, operations)
+
+    def test_rejects_zero_size(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {"type": "blur", "clips": [{"x": 0, "y": 0, "width": 0, "height": 0.2}]},
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError, match="kích thước dương"):
+            timeline_service.save_timeline(db, 1, operations)
+
+    def test_rejects_unknown_mode(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {
+                    "type": "blur",
+                    "clips": [{"x": 0, "y": 0, "width": 0.2, "height": 0.2, "mode": "xyz"}],
+                },
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError, match="không hợp lệ"):
+            timeline_service.save_timeline(db, 1, operations)
+
+    def test_rejects_half_specified_time_range(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {
+                    "type": "blur",
+                    "clips": [{"x": 0, "y": 0, "width": 0.2, "height": 0.2, "start": 1}],
+                },
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError, match="cả 'start' và 'end'"):
+            timeline_service.save_timeline(db, 1, operations)

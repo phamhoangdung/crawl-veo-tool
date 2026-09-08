@@ -541,14 +541,22 @@ export interface TimelineClip {
   x?: number
   y?: number
   font_size?: number
-  /** Track ảnh (logo/watermark): bề rộng theo tỉ lệ khung hình [0,1]. */
+  /** Track ảnh (logo/watermark) và vùng làm mờ: bề rộng theo tỉ lệ khung hình [0,1]. */
   width?: number
+  /** Vùng làm mờ: chiều cao theo tỉ lệ khung hình [0,1]. */
+  height?: number
+  /** Vùng làm mờ: độ mạnh (sigma của gblur, hoặc kích thước ô khi pixelate). */
+  strength?: number
+  /** Vùng làm mờ: 'blur' làm nhoè, 'pixelate' che kiểu ô vuông (che chữ tốt hơn). */
+  mode?: 'blur' | 'pixelate'
+  /** Overlay text: giới hạn bề rộng khung phụ đề theo tỉ lệ [0,1]; câu dài tự chia dòng. */
+  box_width?: number
   /** Track ảnh: độ mờ [0,1] — watermark thường để 0.3-0.6. */
   opacity?: number
 }
 
 export interface TimelineTrack {
-  type: 'video' | 'audio' | 'overlay' | 'image'
+  type: 'video' | 'audio' | 'overlay' | 'image' | 'blur'
   role?: string
   clips: TimelineClip[]
 }

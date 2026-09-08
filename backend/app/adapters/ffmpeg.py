@@ -1,7 +1,10 @@
+import logging
 import platform
 import shutil
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Font mặc định cho drawtext (Phase 13 overlay) — chỉ định trực tiếp `fontfile`
 # thay vì để filter tự dò qua fontconfig. Trên nhiều bản ffmpeg đóng gói sẵn
@@ -156,6 +159,65 @@ def _escape_drawtext(text: str) -> str:
     return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
+def probe_video_width(path: str | Path) -> int:
+    """Bề rộng thật của video, để quy đổi khung phụ đề theo tỉ lệ thành số ký tự.
+
+    Trả 1080 khi không đọc được (video dọc phổ biến nhất) — thà wrap hơi lệch
+    còn hơn làm chết cả lần render.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=width", "-of", "csv=p=0", str(path),
+            ],
+            capture_output=True, text=True, check=True, timeout=15,
+        )
+        return int(result.stdout.strip().splitlines()[0])
+    except (subprocess.SubprocessError, ValueError, IndexError, OSError) as exc:
+        logger.warning("Không đọc được bề rộng video %s (%s), dùng 1080", path, exc)
+        return 1080
+
+
+def _has_cjk(text: str) -> bool:
+    """Chữ Hán rộng gần gấp đôi chữ Latin nên số ký tự vừa một dòng khác nhau."""
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text)
+
+
+def _wrap_text_to_box(text: str, max_chars: int) -> str:
+    """Chia câu thành nhiều dòng cho vừa khung phụ đề.
+
+    `drawtext` KHÔNG tự xuống dòng — câu dài sẽ tràn ra ngoài khung hình và bị
+    cắt mất. Phải tự chèn '\n' ở đây.
+
+    Cắt theo từ, nhưng từ nào dài hơn cả dòng thì cắt cứng giữa từ (thà xuống
+    dòng giữa từ còn hơn tràn ra ngoài). Tiếng Trung không có dấu cách giữa chữ
+    nên gần như luôn đi vào nhánh cắt cứng — đó là hành vi đúng cho tiếng Trung.
+    """
+    if max_chars <= 0:
+        return text
+
+    lines: list[str] = []
+    for paragraph in text.split("\n"):
+        current = ""
+        for word in paragraph.split(" "):
+            while len(word) > max_chars:
+                if current:
+                    lines.append(current)
+                    current = ""
+                lines.append(word[:max_chars])
+                word = word[max_chars:]
+            candidate = f"{current} {word}".strip()
+            if len(candidate) <= max_chars:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        lines.append(current)
+    return "\n".join(lines)
+
+
 def render_timeline(operations: dict, output_path: Path) -> None:
     """Render 1 timeline (Phase 13) thành video hoàn chỉnh — dựng `-filter_complex`
     động từ "edit operations" JSON thay vì các hàm đơn lẻ cố định ở trên.
@@ -194,6 +256,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
     audio_tracks = [t for t in tracks if t.get("type") == "audio"]
     overlay_track = next((t for t in tracks if t.get("type") == "overlay"), None)
     image_track = next((t for t in tracks if t.get("type") == "image"), None)
+    blur_track = next((t for t in tracks if t.get("type") == "blur"), None)
 
     if not video_track or not video_track.get("clips"):
         raise ValueError("Timeline cần ít nhất 1 track video có clip")
@@ -243,12 +306,83 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             cumulative_duration += clip_duration
         final_video_label = out_label
 
+    # --- blur: che logo / phụ đề gốc bằng vùng mờ ---
+    # Đặt TRƯỚC overlay text và ảnh: mục đích là che thứ có sẵn trong video gốc,
+    # nếu làm sau thì mờ luôn chữ và logo mà mình vừa thêm vào.
+    if blur_track and blur_track.get("clips"):
+        for i, region in enumerate(blur_track["clips"]):
+            # Phải `split` trước: ffmpeg KHÔNG cho dùng lại cùng một nhãn cho 2
+            # nhánh filter (một nhánh cắt vùng để làm mờ, một nhánh làm nền).
+            base = f"blurbase{i}"
+            copy = f"blurcopy{i}"
+            blurred = f"blurb{i}"
+            out_label = f"blur{i}"
+            filter_parts.append(f"[{final_video_label}]split=2[{base}][{copy}]")
+
+            # x/y/w/h theo TỈ LỆ khung hình [0,1] để vùng che đúng chỗ dù video
+            # đổi độ phân giải — khớp cách đặt của overlay text và ảnh.
+            x = region.get("x", 0.0)
+            y = region.get("y", 0.0)
+            w = region.get("width", 0.2)
+            h = region.get("height", 0.1)
+
+            # Cắt riêng vùng cần che, làm mờ, rồi chồng lại đúng vị trí. Làm mờ cả
+            # khung rồi mới cắt thì mép vùng che bị lẫn màu từ ngoài vào.
+            strength = region.get("strength", 20)
+            mode = region.get("mode", "blur")
+            crop_expr = f"crop=iw*{w}:ih*{h}:iw*{x}:ih*{y}"
+
+            if mode == "pixelate":
+                # Làm nhoè kiểu ô vuông: thu nhỏ rồi phóng to lại bằng nội suy
+                # điểm gần nhất. Che chữ Trung tốt hơn blur vì không còn đọc được
+                # nét chữ, trong khi blur mạnh vẫn để lại hình dáng.
+                block = max(2, int(strength))
+                filter_parts.append(
+                    f"[{copy}]{crop_expr},"
+                    f"scale=iw/{block}:ih/{block},scale=iw*{block}:ih*{block}"
+                    f":flags=neighbor[{blurred}]"
+                )
+            else:
+                # gblur chứ không boxblur: boxblur giới hạn radius theo kích
+                # thước vùng cắt (vùng 80x36px chỉ cho radius < 18) nên vùng che
+                # nhỏ sẽ lỗi hẳn. gblur nhận sigma tuỳ ý.
+                filter_parts.append(
+                    f"[{copy}]{crop_expr},gblur=sigma={strength}[{blurred}]"
+                )
+
+            enable = ""
+            if region.get("start") is not None and region.get("end") is not None:
+                enable = f":enable='between(t,{region['start']},{region['end']})'"
+
+            filter_parts.append(
+                f"[{base}][{blurred}]"
+                f"overlay=x=main_w*{x}:y=main_h*{y}{enable}[{out_label}]"
+            )
+            final_video_label = out_label
+
     # --- overlay: chồng drawtext lên track video đã ghép ---
+    source_video_width: int | None = None
     if overlay_track and overlay_track.get("clips"):
         fontfile = _escape_filter_path(_resolve_default_fontfile())
         for i, ov in enumerate(overlay_track["clips"]):
             out_label = f"ov{i}"
-            text = _escape_drawtext(ov["text"])
+            font_size = ov.get("font_size", 32)
+
+            raw_text = ov["text"]
+            # Khung giới hạn phụ đề (`box_width` theo tỉ lệ bề rộng khung hình):
+            # tự chia dòng cho vừa, vì drawtext không tự wrap. Ước lượng số ký tự
+            # mỗi dòng từ font_size — chữ Hán rộng ~1 font_size, chữ Latin ~0.5.
+            box_width = ov.get("box_width")
+            if box_width:
+                # Đọc từ video nguồn 1 lần, không phải mỗi clip.
+                if source_video_width is None:
+                    source_video_width = probe_video_width(video_track["clips"][0]["source"])
+                video_width = source_video_width
+                usable_px = video_width * float(box_width)
+                char_px = font_size if _has_cjk(raw_text) else font_size * 0.55
+                raw_text = _wrap_text_to_box(raw_text, int(usable_px / char_px))
+
+            text = _escape_drawtext(raw_text)
             # x/y là toạ độ TÂM chữ theo tỉ lệ khung hình [0,1] (0.5/0.5 = giữa
             # khung hình) — khớp đúng cách frontend kéo-thả overlay đặt điểm giữa,
             # không phải mép hộp chữ, để preview và bản render khớp nhau.
@@ -257,7 +391,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             filter_parts.append(
                 f"[{final_video_label}]drawtext=fontfile='{fontfile}':text='{text}':"
                 f"x={x_expr}:y={y_expr}:"
-                f"fontsize={ov.get('font_size', 32)}:fontcolor=white:box=1:boxcolor=black@0.5:"
+                f"fontsize={font_size}:fontcolor=white:box=1:boxcolor=black@0.5:"
                 f"enable='between(t,{ov['start']},{ov['end']})'[{out_label}]"
             )
             final_video_label = out_label

@@ -17,19 +17,27 @@ import {
   type TimelineOperations,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useEditorShortcuts } from '@/hooks/use-editor-shortcuts'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AssetPanel } from './asset-panel'
+import { BlurRegionLayer } from './blur-region-layer'
 import { CropBoxSelector } from './crop-box-selector'
 import { defaultVerticalCrop } from './layout'
 import { OverlayLayer } from './overlay-layer'
+import { useEditorStore } from './store'
+import { SubtitleBoxPanel } from './subtitle-box-panel'
+import { Timeline } from './timeline'
 import { EditorToolbar } from './toolbar'
 import { VolumeMixer } from './volume-mixer'
-import { useEditorShortcuts } from '@/hooks/use-editor-shortcuts'
-import { useEditorStore } from './store'
-import { Timeline } from './timeline'
 
 function formatClipTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -45,7 +53,9 @@ interface TimelineEditorProps {
  * tiếng + phụ đề đã dịch) — đóng vai trò "gợi ý AI" cho tới khi Phase 9/10/11 có
  * bộ sinh gợi ý riêng theo từng use-case. Chỉ điền vào state, KHÔNG lưu/render tự
  * động — người dùng bấm "Lưu" rồi "Render" riêng. */
-async function buildSuggestionFromPipeline(videoId: number): Promise<TimelineOperations> {
+async function buildSuggestionFromPipeline(
+  videoId: number
+): Promise<TimelineOperations> {
   const [video, stems] = await Promise.all([
     getVideoDetail(videoId),
     getAudioStems(videoId),
@@ -55,7 +65,10 @@ async function buildSuggestionFromPipeline(videoId: number): Promise<TimelineOpe
 
   const tracks: TimelineOperations['tracks'] = []
   if (videoSource) {
-    tracks.push({ type: 'video', clips: [{ source: videoSource, start: 0, end: duration }] })
+    tracks.push({
+      type: 'video',
+      clips: [{ source: videoSource, start: 0, end: duration }],
+    })
   }
 
   // Tách giọng đọc và nhạc nền thành 2 track để chỉnh âm lượng riêng. Chỉ khi
@@ -65,7 +78,15 @@ async function buildSuggestionFromPipeline(videoId: number): Promise<TimelineOpe
       tracks.push({
         type: 'audio',
         role: 'voice',
-        clips: [{ source: stems.voice, start: 0, end: duration, track_start: 0, volume: 1.0 }],
+        clips: [
+          {
+            source: stems.voice,
+            start: 0,
+            end: duration,
+            track_start: 0,
+            volume: 1.0,
+          },
+        ],
       })
     }
     if (stems.background) {
@@ -74,7 +95,13 @@ async function buildSuggestionFromPipeline(videoId: number): Promise<TimelineOpe
         role: 'music',
         clips: [
           // Nhạc nền để nhỏ hơn giọng đọc, nếu không sẽ át lời.
-          { source: stems.background, start: 0, end: duration, track_start: 0, volume: 0.3 },
+          {
+            source: stems.background,
+            start: 0,
+            end: duration,
+            track_start: 0,
+            volume: 0.3,
+          },
         ],
       })
     }
@@ -84,13 +111,27 @@ async function buildSuggestionFromPipeline(videoId: number): Promise<TimelineOpe
       tracks.push({
         type: 'audio',
         role: 'voice',
-        clips: [{ source: fallback, start: 0, end: duration, track_start: 0, volume: 1.0 }],
+        clips: [
+          {
+            source: fallback,
+            start: 0,
+            end: duration,
+            track_start: 0,
+            volume: 1.0,
+          },
+        ],
       })
     }
   }
   const captionClips = video.transcript
     .filter((seg) => seg.translated_text?.trim())
-    .map((seg) => ({ text: seg.translated_text, start: seg.start, end: seg.end, x: 0.5, y: 0.9 }))
+    .map((seg) => ({
+      text: seg.translated_text,
+      start: seg.start,
+      end: seg.end,
+      x: 0.5,
+      y: 0.9,
+    }))
   if (captionClips.length > 0) {
     tracks.push({ type: 'overlay', clips: captionClips })
   }
@@ -107,7 +148,8 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
   const seekRequest = useEditorStore((s) => s.seekRequest)
   const consumeSeek = useEditorStore((s) => s.consumeSeek)
   const [videoDims, setVideoDims] = useState({ width: 0, height: 0 })
-  const [selectedCandidate, setSelectedCandidate] = useState<ClipCandidate | null>(null)
+  const [selectedCandidate, setSelectedCandidate] =
+    useState<ClipCandidate | null>(null)
   const [crop, setCrop] = useState<CropBox | null>(null)
   const [ctaText, setCtaText] = useState('')
 
@@ -179,9 +221,13 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
       if (video.paused) void video.play()
       else video.pause()
     },
-    onSplit: () => selected && splitClip(selected.trackIndex, selected.clipIndex, currentTime),
-    onDelete: () => selected && removeClip(selected.trackIndex, selected.clipIndex),
-    onDuplicate: () => selected && duplicateClip(selected.trackIndex, selected.clipIndex),
+    onSplit: () =>
+      selected &&
+      splitClip(selected.trackIndex, selected.clipIndex, currentTime),
+    onDelete: () =>
+      selected && removeClip(selected.trackIndex, selected.clipIndex),
+    onDuplicate: () =>
+      selected && duplicateClip(selected.trackIndex, selected.clipIndex),
     onUndo: undo,
     onRedo: redo,
     onNudge: (delta) => {
@@ -210,7 +256,8 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
       setOperations(ops)
       toast.success('Đã điền gợi ý — kéo-chỉnh rồi bấm Lưu.')
     },
-    onError: () => toast.error('Không tạo được gợi ý (video chưa có đủ dữ liệu?).'),
+    onError: () =>
+      toast.error('Không tạo được gợi ý (video chưa có đủ dữ liệu?).'),
   })
 
   const save = useMutation({
@@ -228,7 +275,8 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
     onError: () => toast.error('Render thất bại — kiểm tra lại timeline.'),
   })
 
-  const previewSource = operations.tracks.find((t) => t.type === 'video')?.clips[0]?.source
+  const previewSource = operations.tracks.find((t) => t.type === 'video')
+    ?.clips[0]?.source
 
   // Ưu tiên bản đã lồng tiếng để nghe được giọng đọc khi kéo-chỉnh; video chưa
   // dub thì phát bản gốc thay vì hỏng hẳn khung preview.
@@ -274,7 +322,9 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
                 src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=${previewVariant}`}
                 controls
                 className='max-h-[55vh] w-full object-contain'
-                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                onTimeUpdate={(e) =>
+                  setCurrentTime(e.currentTarget.currentTime)
+                }
                 onLoadedMetadata={(e) =>
                   setVideoDims({
                     width: e.currentTarget.videoWidth,
@@ -290,6 +340,7 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
               </div>
             )}
             <OverlayLayer currentTime={currentTime} />
+            <BlurRegionLayer currentTime={currentTime} />
             {selectedCandidate && crop && (
               <CropBoxSelector
                 videoWidth={videoDims.width}
@@ -308,6 +359,8 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
 
       <AssetPanel />
 
+      <SubtitleBoxPanel />
+
       <Card>
         <CardHeader>
           <CardTitle className='text-base'>Timeline</CardTitle>
@@ -324,10 +377,13 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className='text-base'>Cắt clip ngắn (TikTok/Shorts)</CardTitle>
+          <CardTitle className='text-base'>
+            Cắt clip ngắn (TikTok/Shorts)
+          </CardTitle>
           <CardDescription>
-            Gợi ý đoạn nổi bật từ transcript chỉ để tham khảo thứ tự — không tự chọn/loại bỏ
-            thay bạn, tự chọn đoạn ưng ý rồi kéo khung crop trên khung preview phía trên.
+            Gợi ý đoạn nổi bật từ transcript chỉ để tham khảo thứ tự — không tự
+            chọn/loại bỏ thay bạn, tự chọn đoạn ưng ý rồi kéo khung crop trên
+            khung preview phía trên.
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-3'>
@@ -344,13 +400,17 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
                   onClick={() => selectCandidate(candidate)}
                   className={cn(
                     'rounded-md border p-2 text-start text-xs hover:bg-muted/60',
-                    selectedCandidate === candidate && 'border-primary bg-primary/5'
+                    selectedCandidate === candidate &&
+                      'border-primary bg-primary/5'
                   )}
                 >
                   <span className='font-medium'>
-                    {formatClipTime(candidate.start)} → {formatClipTime(candidate.end)}
+                    {formatClipTime(candidate.start)} →{' '}
+                    {formatClipTime(candidate.end)}
                   </span>
-                  <p className='line-clamp-2 text-muted-foreground'>{candidate.text}</p>
+                  <p className='line-clamp-2 text-muted-foreground'>
+                    {candidate.text}
+                  </p>
                 </button>
               ))}
             </div>
@@ -396,7 +456,9 @@ function ClipInspector() {
   return (
     <Card>
       <CardHeader className='flex flex-row items-center justify-between'>
-        <CardTitle className='text-base'>Chi tiết clip đang chọn ({track.type})</CardTitle>
+        <CardTitle className='text-base'>
+          Chi tiết clip đang chọn ({track.type})
+        </CardTitle>
         <Button
           size='icon'
           variant='ghost'
@@ -416,7 +478,9 @@ function ClipInspector() {
             className='w-24'
             value={clip.start}
             onChange={(e) =>
-              updateClip(selected.trackIndex, selected.clipIndex, { start: Number(e.target.value) })
+              updateClip(selected.trackIndex, selected.clipIndex, {
+                start: Number(e.target.value),
+              })
             }
           />
         </div>
@@ -428,7 +492,9 @@ function ClipInspector() {
             className='w-24'
             value={clip.end}
             onChange={(e) =>
-              updateClip(selected.trackIndex, selected.clipIndex, { end: Number(e.target.value) })
+              updateClip(selected.trackIndex, selected.clipIndex, {
+                end: Number(e.target.value),
+              })
             }
           />
         </div>
@@ -456,7 +522,9 @@ function ClipInspector() {
             <Input
               value={clip.text ?? ''}
               onChange={(e) =>
-                updateClip(selected.trackIndex, selected.clipIndex, { text: e.target.value })
+                updateClip(selected.trackIndex, selected.clipIndex, {
+                  text: e.target.value,
+                })
               }
             />
           </div>

@@ -366,3 +366,214 @@ class TestImageOverlay:
         info = _probe(out)
         assert float(info["format"]["duration"]) == pytest.approx(3.0, abs=0.3)
         assert any(s["codec_type"] == "audio" for s in info["streams"])
+
+
+class TestWrapTextToBox:
+    """drawtext KHÔNG tự xuống dòng — câu dài tràn ra ngoài khung và bị cắt mất."""
+
+    def test_wraps_vietnamese_at_word_boundary(self) -> None:
+        result = ffmpeg._wrap_text_to_box("Cảm giác thật tuyệt khi nó chạm vào miệng", 20)
+
+        lines = result.split("\n")
+        assert len(lines) > 1
+        assert all(len(line) <= 20 for line in lines)
+        # Không được cắt giữa từ khi còn chỗ xuống dòng.
+        assert "Cảm giác thật" in lines[0]
+
+    def test_hard_splits_chinese(self) -> None:
+        """Tiếng Trung không có dấu cách giữa chữ nên phải cắt cứng."""
+        result = ffmpeg._wrap_text_to_box("这么长是不是就在说话", 5)
+
+        lines = result.split("\n")
+        assert lines == ["这么长是不", "是就在说话"]
+
+    def test_short_text_unchanged(self) -> None:
+        assert ffmpeg._wrap_text_to_box("ngắn", 20) == "ngắn"
+
+    def test_zero_width_returns_original(self) -> None:
+        """Chia cho 0 ký tự sẽ lặp vô hạn — phải trả nguyên văn."""
+        assert ffmpeg._wrap_text_to_box("abc", 0) == "abc"
+
+    def test_word_longer_than_line_is_split(self) -> None:
+        result = ffmpeg._wrap_text_to_box("khonngonvakhongdaudacbiet", 10)
+
+        assert all(len(line) <= 10 for line in result.split("\n"))
+
+
+class TestHasCjk:
+    def test_detects_chinese(self) -> None:
+        assert ffmpeg._has_cjk("匹克球") is True
+
+    def test_latin_is_not_cjk(self) -> None:
+        assert ffmpeg._has_cjk("pickleball") is False
+
+    def test_vietnamese_is_not_cjk(self) -> None:
+        assert ffmpeg._has_cjk("Cảm giác thật tuyệt") is False
+
+
+class TestProbeVideoWidth:
+    def test_reads_real_width(self, clip_a: Path) -> None:
+        assert ffmpeg.probe_video_width(clip_a) == 320
+
+    def test_missing_file_falls_back(self) -> None:
+        """Thà wrap hơi lệch còn hơn làm chết cả lần render."""
+        assert ffmpeg.probe_video_width("/khong/ton/tai.mp4") == 1080
+
+
+class TestRenderTimelineBlur:
+    """Che logo / phụ đề gốc — render bằng ffmpeg thật vì lỗi hay gặp nhất là
+    cú pháp filter (dùng lại nhãn, radius vượt giới hạn)."""
+
+    def test_blur_region_renders(self, tmp_path: Path, clip_a: Path) -> None:
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "blur",
+                    "clips": [{"x": 0.7, "y": 0.05, "width": 0.25, "height": 0.15, "strength": 18}],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+        assert any(s["codec_type"] == "video" for s in _probe(output)["streams"])
+
+    def test_pixelate_mode_renders(self, tmp_path: Path, clip_a: Path) -> None:
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "blur",
+                    "clips": [
+                        {
+                            "x": 0.1,
+                            "y": 0.1,
+                            "width": 0.3,
+                            "height": 0.2,
+                            "strength": 8,
+                            "mode": "pixelate",
+                        }
+                    ],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+    def test_small_region_with_high_strength(self, tmp_path: Path, clip_a: Path) -> None:
+        """boxblur giới hạn radius theo kích thước vùng cắt (vùng nhỏ chỉ cho
+        radius < 18) nên từng lỗi hẳn — gblur không có hạn chế đó."""
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "blur",
+                    "clips": [{"x": 0.8, "y": 0.8, "width": 0.1, "height": 0.05, "strength": 40}],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+    def test_multiple_blur_regions(self, tmp_path: Path, clip_a: Path) -> None:
+        """Nhiều vùng che (logo góc + phụ đề dưới) phải chồng được lên nhau."""
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "blur",
+                    "clips": [
+                        {"x": 0.7, "y": 0.02, "width": 0.25, "height": 0.12},
+                        {"x": 0.1, "y": 0.85, "width": 0.8, "height": 0.12},
+                    ],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+    def test_blur_with_time_range(self, tmp_path: Path, clip_a: Path) -> None:
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "blur",
+                    "clips": [
+                        {
+                            "x": 0.5,
+                            "y": 0.5,
+                            "width": 0.2,
+                            "height": 0.2,
+                            "start": 0.5,
+                            "end": 1.5,
+                        }
+                    ],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+    def test_blur_applied_before_overlay_text(self, tmp_path: Path, clip_a: Path) -> None:
+        """Blur phải chạy TRƯỚC drawtext, nếu không mờ luôn chữ mình vừa thêm."""
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "blur",
+                    "clips": [{"x": 0.1, "y": 0.8, "width": 0.8, "height": 0.15}],
+                },
+                {
+                    "type": "overlay",
+                    "clips": [{"text": "Phu de moi", "start": 0, "end": 2, "x": 0.5, "y": 0.85}],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+
+class TestRenderTimelineSubtitleBox:
+    def test_box_width_renders(self, tmp_path: Path, clip_a: Path) -> None:
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "overlay",
+                    "clips": [
+                        {
+                            "text": "Cam giac that tuyet khi no cham vao mieng ban rat ngon",
+                            "start": 0,
+                            "end": 2,
+                            "x": 0.5,
+                            "y": 0.8,
+                            "font_size": 14,
+                            "box_width": 0.5,
+                        }
+                    ],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.adapters import ffmpeg
 from app.models.video import Video
 
-_VALID_TRACK_TYPES = {"video", "audio", "overlay", "image"}
+_VALID_TRACK_TYPES = {"video", "audio", "overlay", "image", "blur"}
 
 
 class TimelineValidationError(ValueError):
@@ -48,6 +48,26 @@ def _validate_operations(operations: dict) -> None:
             elif track_type == "overlay":
                 if "text" not in clip or "start" not in clip or "end" not in clip:
                     raise TimelineValidationError("Clip overlay cần đủ 'text', 'start', 'end'")
+            elif track_type == "blur":
+                # Vùng che logo/phụ đề gốc: cần đủ toạ độ và kích thước, thời
+                # gian là tuỳ chọn (không có = che suốt video).
+                missing = [k for k in ("x", "y", "width", "height") if k not in clip]
+                if missing:
+                    raise TimelineValidationError(
+                        f"Vùng làm mờ cần đủ 'x', 'y', 'width', 'height' (thiếu: {missing})"
+                    )
+                if clip["width"] <= 0 or clip["height"] <= 0:
+                    raise TimelineValidationError("Vùng làm mờ phải có kích thước dương")
+                if clip.get("mode", "blur") not in ("blur", "pixelate"):
+                    raise TimelineValidationError(
+                        f"Chế độ làm mờ không hợp lệ: {clip.get('mode')!r} (chỉ 'blur' hoặc 'pixelate')"
+                    )
+                has_start = clip.get("start") is not None
+                has_end = clip.get("end") is not None
+                if has_start != has_end:
+                    raise TimelineValidationError(
+                        "Vùng làm mờ phải có cả 'start' và 'end', hoặc không có cái nào"
+                    )
             elif track_type == "image":
                 # Logo/watermark chỉ bắt buộc có file nguồn: hiện suốt video là
                 # mặc định hợp lý, còn start/end là tuỳ chọn để hiện theo mốc.

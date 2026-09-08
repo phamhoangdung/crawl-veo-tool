@@ -47,6 +47,15 @@ Xây timeline đa track chạy trong web UI hiện có (và trong desktop app �
 - [x] Chỉnh âm lượng riêng track nhạc nền — field `volume` per-clip, verify `amix` chạy đúng qua ffmpeg thật (`test_mixes_multiple_audio_tracks`).
 - [x] Không thao tác nào tự render khi chưa bấm nút riêng — verify qua test (`test_does_not_render_automatically_on_save`) + code: `save_timeline`/`saveTimeline` không gọi `render_timeline` ở đâu cả.
 
+## Che logo/phụ đề gốc + khung phụ đề (2026-09-08)
+- Track `blur` mới: che logo hoặc phụ đề tiếng Trung có sẵn trong video gốc. Toạ độ theo **tỉ lệ khung hình** [0,1] nên đúng chỗ dù video đổi độ phân giải. Hai chế độ: `blur` (gblur) và `pixelate` (thu nhỏ rồi phóng to bằng nội suy neighbor — che chữ tốt hơn vì không còn nét chữ).
+- **Áp TRƯỚC overlay text và ảnh**: mục đích là che thứ có sẵn trong video gốc; làm sau thì mờ luôn chữ và logo mình vừa thêm. Có test kiểm tra thứ tự này.
+- **`gblur` chứ không `boxblur`**: boxblur giới hạn radius theo kích thước vùng cắt (vùng 80x36px chỉ cho radius < 18) nên vùng che nhỏ lỗi hẳn — phát hiện khi render thật, đã có test cho ca này.
+- **Phải `split` trước khi phân nhánh**: ffmpeg không cho dùng lại cùng một nhãn cho 2 nhánh filter (một nhánh cắt vùng làm mờ, một nhánh làm nền).
+- Khung giới hạn phụ đề (`box_width` theo tỉ lệ): `drawtext` KHÔNG tự xuống dòng nên phải tự wrap ở Python. Cắt theo từ với tiếng Việt, cắt cứng với tiếng Trung (không có dấu cách giữa chữ). Bề rộng video đọc bằng `probe_video_width` (fallback 1080).
+- Verify thật bằng đo pixel: vùng blur đúng **x 0.253-0.747, y 0.250-0.746** so với yêu cầu 0.25-0.75, không tràn. Khung phụ đề: không giới hạn thì chữ tràn **100%** khung hình (bị cắt 2 đầu), `box_width=0.5` thì gọn trong **0.39** và tự chia 6 dòng.
+- Kéo-thả phụ đề đã có sẵn từ trước (`OverlayLayer`), không cần làm lại.
+
 ## Ghi chú phát sinh trong lúc làm
 - **KHÔNG thay thế `subtitle-editor.tsx`** như kế hoạch ban đầu ghi — phát hiện ra 2 tool phục vụ 2 mục đích khác nhau: `SubtitleEditor` sửa `translated_text` dùng để **sinh giọng đọc TTS** (ảnh hưởng bước dubbing ở Phase 2), còn track "overlay" ở timeline editor mới là **caption hiển thị trực quan** trên bản render cuối (không ảnh hưởng giọng đọc). Xoá `SubtitleEditor` sẽ mất tính năng sửa bản dịch trước khi lồng tiếng — quyết định giữ cả 2, thêm entry point riêng ("Trình chỉnh sửa timeline") thay vì gộp.
 - **Bug ffmpeg thật phát hiện khi test, không phải chỉ lỗi lý thuyết**: filter `drawtext` (overlay text) **CRASH** (access violation, không phải lỗi cú pháp thường) trên máy dev vì thiếu file cấu hình fontconfig ("Fontconfig error: Cannot load default config file"). Sửa bằng cách **chỉ định `fontfile` trực tiếp** (dò `C:\Windows\Fonts\arial.ttf` hoặc tương đương macOS/Linux) thay vì để filter tự dò qua fontconfig. Đáng chú ý cho Phase 12 (đóng gói desktop): ffmpeg portable đóng gói sẵn nhiều khả năng cũng thiếu fontconfig y hệt — fix này giúp tránh crash tương tự khi đóng gói.
