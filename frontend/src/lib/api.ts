@@ -456,8 +456,9 @@ export async function deleteApiKey(keyId: number) {
 export interface TimelineClip {
   source?: string
   text?: string
-  start: number
-  end: number
+  /** Clip ảnh hiện suốt video thì bỏ trống start/end; các loại khác luôn có. */
+  start?: number
+  end?: number
   track_start?: number
   volume?: number
   transition_in?: 'cut' | 'fade'
@@ -465,16 +466,55 @@ export interface TimelineClip {
   x?: number
   y?: number
   font_size?: number
+  /** Track ảnh (logo/watermark): bề rộng theo tỉ lệ khung hình [0,1]. */
+  width?: number
+  /** Track ảnh: độ mờ [0,1] — watermark thường để 0.3-0.6. */
+  opacity?: number
 }
 
 export interface TimelineTrack {
-  type: 'video' | 'audio' | 'overlay'
+  type: 'video' | 'audio' | 'overlay' | 'image'
   role?: string
   clips: TimelineClip[]
 }
 
 export interface TimelineOperations {
   tracks: TimelineTrack[]
+}
+
+// --- Kho file dùng chung: logo, intro/outro, nhạc nền (Phase 9) ---
+// Asset dùng lại cho NHIỀU video nên lưu riêng, không nằm trong thư mục 1 video.
+
+export type AssetKind = 'image' | 'video' | 'audio'
+
+export interface Asset {
+  id: string
+  name: string
+  kind: AssetKind
+  /** Đường dẫn tuyệt đối trên máy — đây là thứ đưa vào `source` của clip. */
+  path: string
+  size: number
+}
+
+export async function listAssets(kind?: AssetKind) {
+  const { data } = await api.get<Asset[]>('/api/assets', { params: kind ? { kind } : undefined })
+  return data
+}
+
+export async function uploadAsset(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await api.post<Asset>('/api/assets', form)
+  return data
+}
+
+export async function deleteAsset(assetId: string) {
+  await api.delete(`/api/assets/${assetId}`)
+}
+
+/** URL xem trước (ảnh logo, nghe thử nhạc nền) — dùng trực tiếp trong <img>/<audio>. */
+export function assetFileUrl(assetId: string) {
+  return `${API_BASE_URL}/api/assets/${assetId}/file`
 }
 
 export interface AudioStems {

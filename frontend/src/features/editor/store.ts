@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { TimelineClip, TimelineOperations } from '@/lib/api'
+import type { TimelineClip, TimelineOperations, TimelineTrack } from '@/lib/api'
 import { DEFAULT_PX_PER_SECOND, MAX_PX_PER_SECOND, MIN_PX_PER_SECOND } from './layout'
 
 export interface Selection {
@@ -30,6 +30,12 @@ interface EditorStore {
   splitClip: (trackIndex: number, clipIndex: number, atSeconds: number) => void
   duplicateClip: (trackIndex: number, clipIndex: number) => void
   moveClip: (trackIndex: number, clipIndex: number, direction: -1 | 1) => void
+  /** Thêm clip vào track có sẵn cùng type+role, hoặc tạo track mới nếu chưa có. */
+  addClipToTrack: (
+    type: TimelineTrack['type'],
+    clip: TimelineClip,
+    role?: string
+  ) => void
   setOperations: (operations: TimelineOperations) => void
   updateClip: (trackIndex: number, clipIndex: number, patch: Partial<TimelineClip>) => void
   removeClip: (trackIndex: number, clipIndex: number) => void
@@ -102,6 +108,27 @@ export const useEditorStore = create<EditorStore>((set) => ({
         future: state.future.slice(1),
         selected: null,
       }
+    }),
+
+  addClipToTrack: (type, clip, role) =>
+    set((state) => {
+      const index = state.operations.tracks.findIndex(
+        (t) => t.type === type && t.role === role
+      )
+
+      if (index >= 0) {
+        return withHistory(
+          state,
+          mapTrack(state.operations, index, (t) => ({ ...t, clips: [...t.clips, clip] }))
+        )
+      }
+
+      const track: TimelineTrack = { type, clips: [clip], ...(role ? { role } : {}) }
+      // Track video phải đứng đầu: intro/outro nối vào đúng chỗ và renderer lấy
+      // track video đầu tiên làm nền.
+      const tracks =
+        type === 'video' ? [track, ...state.operations.tracks] : [...state.operations.tracks, track]
+      return withHistory(state, { tracks })
     }),
 
   // Nạp timeline mới (từ server hoặc gợi ý AI) — xoá lịch sử vì đây là điểm bắt đầu mới.

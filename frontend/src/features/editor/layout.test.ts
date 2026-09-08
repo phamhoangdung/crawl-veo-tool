@@ -131,3 +131,32 @@ describe('defaultVerticalCrop', () => {
     expect(crop.x).toBe(0)
   })
 })
+
+describe('getClipOutputRange — track ảnh (logo/watermark)', () => {
+  const videoLayout = computeVideoTrackLayout([
+    { source: 'a.mp4', start: 0, end: 10 },
+  ])
+
+  it('logo không có mốc thời gian trải suốt chiều dài video', () => {
+    // Trước đây trả về undefined rồi thành NaN khi tính bề rộng — clip biến mất.
+    const track = { type: 'image' as const, clips: [{ source: 'logo.png', x: 0.85 }] }
+
+    expect(getClipOutputRange(track, 0, videoLayout)).toEqual({ start: 0, end: 10 })
+  })
+
+  it('không sinh NaN khi chưa có track video nào', () => {
+    const track = { type: 'image' as const, clips: [{ source: 'logo.png' }] }
+    const range = getClipOutputRange(track, 0, [])
+
+    expect(Number.isNaN(range.end - range.start)).toBe(false)
+  })
+
+  it('logo có mốc thời gian dùng đúng mốc đó', () => {
+    const track = {
+      type: 'image' as const,
+      clips: [{ source: 'logo.png', start: 2, end: 6 }],
+    }
+
+    expect(getClipOutputRange(track, 0, videoLayout)).toEqual({ start: 2, end: 6 })
+  })
+})

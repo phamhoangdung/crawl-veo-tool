@@ -151,3 +151,51 @@ describe('requestSeek', () => {
     expect(second?.nonce).toBeGreaterThan(first?.nonce ?? 0)
   })
 })
+
+describe('addClipToTrack', () => {
+  beforeEach(() => {
+    useEditorStore.setState({ operations: { tracks: [] }, past: [], future: [], selected: null })
+  })
+
+  it('tạo track mới khi chưa có loại đó', () => {
+    useEditorStore.getState().addClipToTrack('image', { source: 'logo.png', x: 0.85 })
+
+    const { tracks } = useEditorStore.getState().operations
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0].type).toBe('image')
+    expect(tracks[0].clips[0].source).toBe('logo.png')
+  })
+
+  it('thêm vào track đã có thay vì tạo track trùng loại', () => {
+    const store = useEditorStore.getState()
+    store.addClipToTrack('image', { source: 'a.png' })
+    useEditorStore.getState().addClipToTrack('image', { source: 'b.png' })
+
+    const { tracks } = useEditorStore.getState().operations
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0].clips.map((c) => c.source)).toEqual(['a.png', 'b.png'])
+  })
+
+  it('track audio khác role thì tách riêng để chỉnh âm lượng độc lập', () => {
+    useEditorStore.getState().addClipToTrack('audio', { source: 'voice.mp3', start: 0, end: 5 }, 'voice')
+    useEditorStore.getState().addClipToTrack('audio', { source: 'nhac.mp3', start: 0, end: 5 }, 'music')
+
+    const { tracks } = useEditorStore.getState().operations
+    expect(tracks).toHaveLength(2)
+    expect(tracks.map((t) => t.role)).toEqual(['voice', 'music'])
+  })
+
+  it('track video được đặt lên đầu để renderer lấy đúng nền', () => {
+    useEditorStore.getState().addClipToTrack('audio', { source: 'nhac.mp3', start: 0, end: 5 }, 'music')
+    useEditorStore.getState().addClipToTrack('video', { source: 'intro.mp4', start: 0, end: 5 })
+
+    expect(useEditorStore.getState().operations.tracks[0].type).toBe('video')
+  })
+
+  it('undo được sau khi thêm', () => {
+    useEditorStore.getState().addClipToTrack('image', { source: 'logo.png' })
+    useEditorStore.getState().undo()
+
+    expect(useEditorStore.getState().operations.tracks).toHaveLength(0)
+  })
+})

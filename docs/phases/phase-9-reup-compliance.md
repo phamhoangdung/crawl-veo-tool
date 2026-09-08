@@ -19,7 +19,8 @@ Hệ quả cho tool: dịch + lồng tiếng giữ nhạc nền gốc **là tran
 ### Media overlay (ffmpeg)
 - [x] `render_timeline` nhận thêm track `"image"` — chèn logo/watermark/ảnh. Bề rộng theo **tỉ lệ khung hình** (`scale2ref`) nên co giãn đúng khi video đổi độ phân giải; x/y là **toạ độ tâm** khớp cách đặt của overlay text.
 - [x] `opacity` cho watermark mờ; `start`/`end` để logo hiện theo mốc thời gian (intro branding).
-- [x] **Intro/outro và nhạc nền ngoài không cần code mới** — track video nhận nhiều clip nguồn bất kỳ (có transition fade), track audio nhận file ngoài với volume riêng. Chỉ thiếu UI chọn file. Verify thật: intro 1s + video 2s + nhạc nền → đúng 3.0s, có audio stream.
+- [x] **Intro/outro và nhạc nền ngoài không cần code mới** — track video nhận nhiều clip nguồn bất kỳ (có transition fade), track audio nhận file ngoài với volume riêng. Verify thật: intro 1s + video 2s + nhạc nền → đúng 3.0s, có audio stream.
+- [x] Mở `image` trong `timeline_service._VALID_TRACK_TYPES` — **thiếu bước này thì logo không lưu nổi** dù renderer đã hỗ trợ (xem Ghi chú).
 - [x] 4 test ffmpeg thật cho các ca trên.
 
 ### Sinh metadata SEO
@@ -30,7 +31,19 @@ Hệ quả cho tool: dịch + lồng tiếng giữ nhạc nền gốc **là tran
 - [x] `GET /api/videos/metadata/default-prompt` — lấy prompt mặc định làm điểm bắt đầu. Khai báo **sau** route có path param để không bị bắt nhầm (verify thật).
 - [x] 14 test service.
 
+### Kho asset + UI chọn file
+- [x] `services/asset_service.py` — kho file dùng chung ở `storage/assets/` (logo dùng cho MỌI video nên không nằm trong thư mục của 1 video, và không bị xoá khi dọn file video đó).
+- [x] Phân loại theo **công dụng** (image/video/audio) chứ không theo đuôi file, kèm giới hạn dung lượng riêng từng loại (ảnh 10 MB, audio 50 MB, video 500 MB).
+- [x] Làm sạch tên file: **bỏ dấu tiếng Việt** (ffmpeg `filter_complex` xử lý đường dẫn non-ASCII không ổn định), chặn path traversal, bỏ nháy đơn/kép phá cú pháp filter. Tiền tố id để 2 file trùng tên không đè nhau.
+- [x] `POST /api/assets` (upload), `POST /api/assets/import` (nhập từ đường dẫn có sẵn — bản desktop dùng đường này, không đẩy file 500 MB qua HTTP), `GET/DELETE`, `GET /{id}/file` để xem trước.
+- [x] Thêm `python-multipart` vào requirements (FastAPI cần để nhận upload).
+- [x] Frontend: `AssetPicker` (dialog kéo-thả + kho file, lọc theo loại) và `AssetPanel` (4 nút: intro / outro / logo / nhạc nền). Mỗi nút tự dựng clip đúng hình dạng — người dùng không phải nhớ logo là track `image` còn intro là clip đầu track `video`.
+- [x] Store: `addClipToTrack` — gộp vào track cùng type+role có sẵn, track video luôn đẩy lên đầu; undo được.
+- [x] 23 test asset service, 5 test validator, 5 test store, 3 test layout.
+
 ## Ghi chú
+- **Lỗi đã sửa (quan trọng)**: phiên trước ghi track `image` là "xong & verify thật", nhưng thực tế chỉ verify ở tầng `ffmpeg.render_timeline`. `timeline_service._validate_operations` vẫn chỉ nhận `{video, audio, overlay}` nên **mọi timeline có logo đều bị chặn ngay khi lưu** — tính năng không dùng được qua UI lẫn API. Đã mở `image` và verify lại bằng cách đi đúng đường `save_timeline → render_timeline`.
+- **Quy ước clip ảnh**: không có `start`/`end` = logo hiện suốt video (mặc định hợp lý). Có thì phải có **cả hai** — chỉ một cái thường là gõ nhầm.
+- **Lỗi đã sửa**: `getClipOutputRange` trả `undefined` cho clip ảnh không mốc thời gian → bề rộng `NaN` → clip không hiện trên timeline. Nay trải suốt chiều dài video. Có test chạy đỏ khi gỡ bản vá.
 - **Chưa làm**: source & rights ledger (lưu nguồn gốc video), checklist disclosure trước khi xuất. Cả hai là việc ghi chép/nhắc nhở, không chặn sản xuất.
-- **Chưa làm**: UI chọn file intro/outro/logo/nhạc nền — backend đã sẵn sàng, chỉ cần thêm nút chọn file vào timeline editor.
 - **Ngoài phạm vi (không đổi)**: tự động đăng lên YouTube/TikTok. Cả 2 nền tảng đều phải đăng tay.

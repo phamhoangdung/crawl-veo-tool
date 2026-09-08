@@ -81,10 +81,16 @@ export function getClipOutputRange(
   const clip = track.clips[clipIndex]
   if (track.type === 'audio') {
     const start = clip.track_start ?? 0
-    return { start, end: start + (clip.end - clip.start) }
+    return { start, end: start + ((clip.end ?? 0) - (clip.start ?? 0)) }
   }
-  // overlay
-  return { start: clip.start, end: clip.end }
+  if (track.type === 'image' && (clip.start == null || clip.end == null)) {
+    // Logo không khai báo mốc thời gian nghĩa là hiện suốt video — vẽ kín chiều
+    // dài timeline thay vì để undefined lọt xuống phép trừ thành NaN.
+    const videoEnd = videoLayout.at(-1)?.outputEnd ?? 0
+    return { start: 0, end: videoEnd }
+  }
+  // overlay + image có mốc thời gian
+  return { start: clip.start ?? 0, end: clip.end ?? 0 }
 }
 
 export type DragMode = 'move' | 'resize-start' | 'resize-end'

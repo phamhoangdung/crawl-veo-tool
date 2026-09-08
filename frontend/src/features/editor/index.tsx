@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AssetPanel } from './asset-panel'
 import { CropBoxSelector } from './crop-box-selector'
 import { defaultVerticalCrop } from './layout'
 import { OverlayLayer } from './overlay-layer'
@@ -304,6 +305,8 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
           </div>
         </CardContent>
       </Card>
+
+      <AssetPanel />
 
       <Card>
         <CardHeader>

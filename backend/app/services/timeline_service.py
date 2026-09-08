@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.adapters import ffmpeg
 from app.models.video import Video
 
-_VALID_TRACK_TYPES = {"video", "audio", "overlay"}
+_VALID_TRACK_TYPES = {"video", "audio", "overlay", "image"}
 
 
 class TimelineValidationError(ValueError):
@@ -48,6 +48,20 @@ def _validate_operations(operations: dict) -> None:
             elif track_type == "overlay":
                 if "text" not in clip or "start" not in clip or "end" not in clip:
                     raise TimelineValidationError("Clip overlay cần đủ 'text', 'start', 'end'")
+            elif track_type == "image":
+                # Logo/watermark chỉ bắt buộc có file nguồn: hiện suốt video là
+                # mặc định hợp lý, còn start/end là tuỳ chọn để hiện theo mốc.
+                if "source" not in clip:
+                    raise TimelineValidationError("Clip ảnh cần 'source'")
+                has_start = clip.get("start") is not None
+                has_end = clip.get("end") is not None
+                if has_start != has_end:
+                    raise TimelineValidationError(
+                        "Clip ảnh phải có cả 'start' và 'end', hoặc không có cái nào "
+                        "(hiện suốt video)"
+                    )
+                if has_start and clip["end"] <= clip["start"]:
+                    raise TimelineValidationError("Clip ảnh có 'end' phải lớn hơn 'start'")
         if track_type == "video" and clips:
             has_video_track = True
 

@@ -126,3 +126,61 @@ class TestRenderTimelineForVideo:
             timeline_service.save_timeline(db, 1, _VALID_OPERATIONS)
 
         mock_render.assert_not_called()
+
+
+class TestImageTrackValidation:
+    """Track ảnh (logo/watermark, Phase 9) — renderer đã hỗ trợ từ trước nhưng
+    validator lại chặn, khiến không lưu nổi timeline có logo."""
+
+    def test_accepts_image_track_without_time_range(self, db: Session) -> None:
+        """Không có start/end nghĩa là logo hiện suốt video — mặc định hợp lý."""
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 2}]},
+                {
+                    "type": "image",
+                    "clips": [{"source": "logo.png", "x": 0.9, "y": 0.1, "width": 0.15}],
+                },
+            ]
+        }
+        assert timeline_service.save_timeline(db, 1, operations) == operations
+
+    def test_accepts_image_track_with_time_range(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {"type": "image", "clips": [{"source": "logo.png", "start": 1, "end": 4}]},
+            ]
+        }
+        assert timeline_service.save_timeline(db, 1, operations) == operations
+
+    def test_rejects_image_clip_without_source(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 2}]},
+                {"type": "image", "clips": [{"x": 0.5}]},
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError, match="'source'"):
+            timeline_service.save_timeline(db, 1, operations)
+
+    def test_rejects_half_specified_time_range(self, db: Session) -> None:
+        """Chỉ có start mà thiếu end thường là lỗi gõ nhầm, không phải chủ ý."""
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 2}]},
+                {"type": "image", "clips": [{"source": "logo.png", "start": 1}]},
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError, match="cả 'start' và 'end'"):
+            timeline_service.save_timeline(db, 1, operations)
+
+    def test_rejects_end_before_start(self, db: Session) -> None:
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 5}]},
+                {"type": "image", "clips": [{"source": "logo.png", "start": 4, "end": 2}]},
+            ]
+        }
+        with pytest.raises(timeline_service.TimelineValidationError):
+            timeline_service.save_timeline(db, 1, operations)

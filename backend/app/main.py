@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     api_keys,
+    assets,
     batch,
     clips,
     crawl,
@@ -48,6 +49,7 @@ app.include_router(downloads.router)
 app.include_router(files.router)
 app.include_router(batch.router)
 app.include_router(metadata.router)
+app.include_router(assets.router)
 
 
 @app.on_event("startup")

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Music2, Type, Video as VideoIcon } from 'lucide-react'
+import { Image as ImageIcon, Music2, Type, Video as VideoIcon } from 'lucide-react'
 import type { TimelineClip, TimelineTrack } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -28,11 +28,13 @@ const TRACK_ICON: Record<TimelineTrack['type'], typeof VideoIcon> = {
   video: VideoIcon,
   audio: Music2,
   overlay: Type,
+  image: ImageIcon,
 }
 const TRACK_COLOR: Record<TimelineTrack['type'], string> = {
   video: 'bg-blue-500/80 border-blue-600',
   audio: 'bg-emerald-500/80 border-emerald-600',
   overlay: 'bg-amber-500/80 border-amber-600',
+  image: 'bg-fuchsia-500/80 border-fuchsia-600',
 }
 
 function formatTime(seconds: number): string {
@@ -106,7 +108,10 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
     dragRef.current = { mode, startX: e.clientX, original: clip }
   }
 
-  const canMove = track.type !== 'video'
+  // Logo hiện suốt video (không có start/end) thì không kéo được: kéo sẽ tạo ra
+  // mốc thời gian mà người dùng không hề yêu cầu.
+  const isFullSpanImage = track.type === 'image' && (clip.start == null || clip.end == null)
+  const canMove = track.type !== 'video' && !isFullSpanImage
 
   return (
     <div
