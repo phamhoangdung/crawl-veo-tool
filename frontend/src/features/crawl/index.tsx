@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import {
   type VideoRead,
 } from '@/lib/api'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
+import { useVideoTaskProgress } from '@/hooks/use-task-progress'
 import { ThumbPreview } from '@/components/thumb-preview'
 import { TranslatedTitle } from '@/components/translated-title'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +45,8 @@ function formatDuration(seconds: number | null) {
 // nằm ở trang Quản lý file — nơi thấy được file thật.
 const DOWNLOADABLE: string[] = ['queued', 'failed_download']
 
-function VideoRow({
+// Export để test riêng hành vi đồng bộ trạng thái theo SSE.
+export function VideoRow({
   video,
   onUpdate,
 }: {
@@ -52,6 +54,22 @@ function VideoRow({
   onUpdate: (id: number, patch: Partial<VideoRead>) => void
 }) {
   const queryClient = useQueryClient()
+  const task = useVideoTaskProgress(video.id, 'download')
+
+  // Bảng này giữ danh sách trong local state (không phải TanStack Query) nên
+  // không có gì tự làm mới nó. Không đồng bộ ở đây thì dòng vẫn hiện
+  // "downloading" mãi dù panel Tác vụ đã báo "Hoàn tất".
+  const finishedRef = useRef(false)
+  useEffect(() => {
+    if (!task || task.is_running || finishedRef.current) return
+    finishedRef.current = true
+    if (task.error) {
+      onUpdate(video.id, { status: 'failed_download' })
+      return
+    }
+    onUpdate(video.id, { status: 'downloaded' })
+    queryClient.invalidateQueries({ queryKey: ['files'] })
+  }, [task, video.id, onUpdate, queryClient])
 
   const mutation = useMutation({
     mutationFn: () => downloadVideo(video.id),
@@ -94,6 +112,22 @@ function VideoRow({
       <TableCell>{formatDuration(video.duration_seconds)}</TableCell>
       <TableCell>
         <Badge variant={isFailed ? 'destructive' : 'outline'}>{video.status}</Badge>
+        {/* Thanh % ngay tại dòng: trước đây phải mở panel Tác vụ mới biết tiến
+            độ, mà panel lại không nói rõ dòng nào đang tải. */}
+        {task?.is_running && (
+          <div className='mt-1.5 space-y-0.5'>
+            <div className='h-1 overflow-hidden rounded-full bg-muted'>
+              <div
+                data-testid='download-progress-bar'
+                className='h-full rounded-full bg-primary transition-[width] duration-300'
+                style={{ width: `${Math.min(100, Math.max(0, task.percent))}%` }}
+              />
+            </div>
+            <span className='text-[10px] text-muted-foreground tabular-nums'>
+              {Math.round(task.percent)}%
+            </span>
+          </div>
+        )}
       </TableCell>
       <TableCell>
         {canDownload && (
@@ -102,7 +136,9 @@ function VideoRow({
           </Button>
         )}
         {video.status === 'downloading' && (
-          <span className='text-xs text-muted-foreground'>Đang tải...</span>
+          <span className='text-xs text-muted-foreground'>
+            {task?.is_running ? (task.stage_label || 'Đang tải…') : 'Đang xử lý…'}
+          </span>
         )}
         {!canDownload && video.status !== 'downloading' && (
           <Link to='/files' className='text-xs text-muted-foreground hover:underline'>

@@ -1,6 +1,11 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { API_BASE_URL, getTaskProgress, type TaskProgress } from '@/lib/api'
+import {
+  API_BASE_URL,
+  getTaskProgress,
+  type TaskKind,
+  type TaskProgress,
+} from '@/lib/api'
 
 export const TASKS_QUERY_KEY = ['tasks'] as const
 
@@ -93,4 +98,15 @@ export function useTaskProgress() {
   })
 
   return query.data ?? []
+}
+
+/**
+ * Tiến độ của MỘT video (tuỳ chọn lọc theo loại tác vụ) — để hiện thanh % ngay
+ * tại dòng đó thay vì bắt người dùng mở panel Tác vụ ra đối chiếu.
+ */
+export function useVideoTaskProgress(videoId: number, kind?: TaskKind) {
+  const tasks = useTaskProgress()
+  return (
+    tasks.find((t) => t.video_id === videoId && (kind === undefined || t.kind === kind)) ?? null
+  )
 }
