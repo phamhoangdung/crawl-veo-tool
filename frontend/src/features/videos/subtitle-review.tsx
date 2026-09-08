@@ -80,13 +80,17 @@ export function SubtitleReview({
         </div>
       </CardHeader>
 
-      <CardContent className='grid gap-4 lg:grid-cols-2'>
-        <div className='space-y-3'>
+      <CardContent className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start'>
+        <div className='flex flex-col gap-3'>
+          {/* Khoá theo CHIỀU CAO chứ không chỉ bề rộng: video dọc 9:16 mà chỉ đặt
+              w-full thì cao gấp ~1.8 lần bề rộng cột, đẩy phần còn lại ra ngoài
+              màn hình. object-contain giữ nguyên tỉ lệ gốc — video dọc và ngang
+              dùng chung khung này, chỉ khác phần nền đen hai bên. */}
           <video
             ref={videoRef}
             src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=${variant}`}
             controls
-            className='w-full rounded-lg bg-black'
+            className='max-h-[min(60vh,32rem)] w-full rounded-lg bg-black object-contain'
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
           />
 
@@ -117,7 +121,7 @@ export function SubtitleReview({
           </label>
         </div>
 
-        <ul ref={listRef} className='max-h-[28rem] space-y-1.5 overflow-y-auto pe-1'>
+        <ul ref={listRef} className='h-[min(70vh,40rem)] space-y-1.5 overflow-y-auto pe-1'>
           {segments.map((segment, index) => (
             <li key={index}>
               <button

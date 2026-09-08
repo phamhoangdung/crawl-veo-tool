@@ -273,7 +273,7 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
                 ref={videoRef}
                 src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=${previewVariant}`}
                 controls
-                className='w-full'
+                className='max-h-[55vh] w-full object-contain'
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 onLoadedMetadata={(e) =>
                   setVideoDims({

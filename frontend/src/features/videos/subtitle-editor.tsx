@@ -125,7 +125,7 @@ function SubtitleEditorContent({
                   ref={videoRef}
                   src={videoUrl}
                   controls
-                  className='w-full rounded-lg bg-black'
+                  className='max-h-[50vh] w-full rounded-lg bg-black object-contain'
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 />
                 <p className='text-xs text-muted-foreground'>
