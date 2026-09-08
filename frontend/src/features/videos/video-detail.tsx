@@ -37,7 +37,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { CoverImage } from '@/components/cover-image'
@@ -308,7 +308,12 @@ export function VideoDetail() {
           </div>
         ) : (
           <>
-            <div className='mb-6'>
+            <div className='mb-6 flex gap-4'>
+              <CoverImage
+                src={files?.cover_url ?? detail?.cover_url ?? null}
+                className='hidden w-40 shrink-0 rounded-lg sm:block'
+              />
+              <div className='min-w-0'>
               <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
               <div className='mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground'>
                 <Badge variant='outline'>{detail?.status ?? files?.status}</Badge>
@@ -327,6 +332,7 @@ export function VideoDetail() {
                   </a>
                 )}
               </div>
+              </div>
             </div>
 
             {detail?.error_message && (
@@ -335,14 +341,29 @@ export function VideoDetail() {
               </p>
             )}
 
-            <div className='grid gap-6 lg:grid-cols-3'>
-              {/* Cột trái: ảnh + file. Cột phải rộng hơn cho luồng xử lý. */}
-              <div className='space-y-6 lg:col-span-1'>
-                <CoverImage
-                  src={files?.cover_url ?? detail?.cover_url ?? null}
-                  className='w-full rounded-lg'
-                />
+            {/* 3 tab cho 3 việc khác nhau: chạy pipeline, soát phụ đề, dựng
+                video. Đổ hết lên 1 trang thì thành 7 card ngang hàng, không
+                thấy đâu là việc đang cần làm. */}
+            <Tabs defaultValue='pipeline' className='space-y-6'>
+              <TabsList>
+                <TabsTrigger value='pipeline'>Xử lý</TabsTrigger>
+                <TabsTrigger value='subtitles' disabled={!hasTranscript}>
+                  Phụ đề
+                  {hasTranscript && (
+                    <span className='ms-1.5 text-xs text-muted-foreground'>
+                      {transcript.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value='editor' disabled={!hasFile}>
+                  Dựng video
+                </TabsTrigger>
+              </TabsList>
 
+              {/* Các bước xử lý là việc chính nên chiếm phần lớn; File là thông
+                  tin phụ, đặt cột hẹp bên cạnh. */}
+              <TabsContent value='pipeline' className='grid gap-6 lg:grid-cols-5'>
+              <div className='space-y-6 lg:order-2 lg:col-span-2'>
                 <Card>
                   <CardHeader>
                     <div className='flex items-center justify-between'>
@@ -408,7 +429,7 @@ export function VideoDetail() {
                 </Card>
               </div>
 
-              <div className='space-y-6 lg:col-span-2'>
+              <div className='space-y-6 lg:order-1 lg:col-span-3'>
                 <Card>
                   <CardHeader>
                     <CardTitle className='text-base'>Các bước xử lý</CardTitle>
@@ -432,64 +453,72 @@ export function VideoDetail() {
                   </CardContent>
                 </Card>
 
-                {hasTranscript && (
-                  <Card>
-                    <CardHeader>
-                      <div className='flex items-center justify-between'>
-                        <div>
-                          <CardTitle className='text-base'>
-                            Phụ đề ({transcript.length} câu)
-                          </CardTitle>
-                          <CardDescription>
-                            {hasTranslation
-                              ? 'Nên xem lại và sửa trước khi lồng tiếng — giọng đọc theo đúng bản dịch này.'
-                              : 'Chưa dịch sang tiếng Việt.'}
-                          </CardDescription>
-                        </div>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          className='gap-1'
-                          onClick={() => setEditorOpen(true)}
-                        >
-                          <Pencil className='size-3.5' />
-                          Xem trước & sửa
-                        </Button>
+              </div>
+              </TabsContent>
+
+              <TabsContent value='subtitles'>
+                <Card>
+                  <CardHeader>
+                    <div className='flex flex-wrap items-start justify-between gap-3'>
+                      <div>
+                        <CardTitle className='text-base'>
+                          Phụ đề ({transcript.length} câu)
+                        </CardTitle>
+                        <CardDescription>
+                          {hasTranslation
+                            ? 'Nên soát lại trước khi lồng tiếng — giọng đọc theo đúng bản dịch này.'
+                            : 'Chưa dịch sang tiếng Việt.'}
+                        </CardDescription>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className='space-y-2'>
-                        {transcript.slice(0, 5).map((segment, index) => (
-                          <li key={index} className='rounded border px-3 py-2 text-sm'>
-                            <p className='text-xs text-muted-foreground tabular-nums'>
-                              {formatDuration(Math.floor(segment.start))}
-                            </p>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='gap-1'
+                        onClick={() => setEditorOpen(true)}
+                      >
+                        <Pencil className='size-3.5' />
+                        Sửa kèm video
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Có cả trang nên hiện hết, không cắt 5 câu như trước. */}
+                    <ul className='space-y-2'>
+                      {transcript.map((segment, index) => (
+                        <li
+                          key={index}
+                          className='grid gap-1 rounded border px-3 py-2 text-sm sm:grid-cols-[4rem_1fr]'
+                        >
+                          <span className='text-xs text-muted-foreground tabular-nums'>
+                            {formatDuration(Math.floor(segment.start))}
+                          </span>
+                          <div>
                             <p>{segment.text}</p>
                             {segment.translated_text && (
                               <p className='text-primary'>{segment.translated_text}</p>
                             )}
-                          </li>
-                        ))}
-                      </ul>
-                      {transcript.length > 5 && (
-                        <>
-                          <Separator className='my-3' />
-                          <button
-                            type='button'
-                            onClick={() => setEditorOpen(true)}
-                            className='text-sm text-muted-foreground hover:underline'
-                          >
-                            Xem tất cả {transcript.length} câu →
-                          </button>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-              </div>
-            </div>
+              <TabsContent value='editor'>
+                <div className='mb-4'>
+                  <p className='text-sm text-muted-foreground'>
+                    Cắt/sắp xếp lại video, thêm overlay/CTA, chỉnh âm lượng — AI chỉ
+                    gợi ý, bạn kéo-chỉnh rồi bấm Render.
+                  </p>
+                </div>
+                {/* Chỉ mount khi mở tab: editor tải waveform + video, không nên
+                    chạy nền khi người dùng đang ở tab khác. */}
+                <TimelineEditor videoId={videoId} />
+              </TabsContent>
+            </Tabs>
 
+            {/* Dialog nên nằm ngoài Tabs: nó phủ toàn màn hình, không thuộc tab nào. */}
             <SubtitleEditor
               videoId={videoId}
               title={title}
@@ -502,21 +531,6 @@ export function VideoDetail() {
               open={editorOpen}
               onOpenChange={setEditorOpen}
             />
-
-            {/* Editor cần nhiều chiều ngang nên đặt full-width dưới 2 cột,
-                không nhét vào cột phải và không bọc trong popup. */}
-            {hasFile && (
-              <section className='mt-6'>
-                <div className='mb-3'>
-                  <h2 className='text-lg font-semibold'>Trình chỉnh sửa timeline</h2>
-                  <p className='text-sm text-muted-foreground'>
-                    Cắt/sắp xếp lại video, thêm overlay/CTA, chuyển cảnh, chỉnh âm lượng —
-                    AI chỉ gợi ý, bạn kéo-chỉnh rồi bấm Render.
-                  </p>
-                </div>
-                <TimelineEditor videoId={videoId} />
-              </section>
-            )}
           </>
         )}
       </Main>

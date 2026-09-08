@@ -117,3 +117,16 @@ Lợi ích ngoài không gian: URL chia sẻ/bookmark được, nút back của 
 **Endpoint mới** `GET /api/files/{video_id}` trả file của 1 video — trang chi tiết không cần nạp cả danh sách. **Khai báo cuối file `api/files.py`**: route có path param sẽ bắt nhầm `/summary` và `/dashboard-stats` nếu đặt trước chúng (đã gặp thật khi thêm, verify lại cả 3 route sau khi sửa thứ tự).
 
 **Lưu ý fast-refresh**: file route chỉ export `Route`; component lấy `videoId` qua `useParams({ from: ... })` thay vì nhận props. Export thêm component trong file route làm lint `react-refresh/only-export-components` cảnh báo.
+
+### Bố cục lại trang chi tiết video (phiên 2026-09-08)
+
+Trang đổ **7 card ngang hàng** lên cùng một màn hình (ảnh cover, File, Các bước xử lý, Phụ đề, rồi Xem trước + Timeline + Cắt clip từ editor) — không có thứ bậc, không thấy đâu là việc đang cần làm.
+
+Chia thành **3 tab** theo 3 việc khác nhau:
+- **Xử lý** — các bước pipeline (cột rộng, `lg:col-span-3`) + danh sách File (cột hẹp, `lg:col-span-2`, đặt `order-2` nên nằm bên phải trên màn rộng và xuống dưới trên mobile).
+- **Phụ đề** — bảng phụ đề song ngữ. Bỏ giới hạn 5 câu vì giờ có cả trang; nút "Sửa kèm video" mở `SubtitleEditor` như cũ. Tab bị disable khi chưa tách lời thoại.
+- **Dựng video** — `TimelineEditor`. Tab bị disable khi chưa tải video. Chỉ mount khi mở tab: editor tải waveform + video, không nên chạy nền khi đang ở tab khác.
+
+Ảnh cover to ở cột trái bị bỏ (không mang thông tin gì, đã thấy ở danh sách video) — thay bằng thumbnail nhỏ cạnh tiêu đề ở header, ẩn trên mobile.
+
+`SubtitleEditor` (Dialog) đặt **ngoài** `Tabs` — nó phủ toàn màn hình nên không thuộc tab nào.
