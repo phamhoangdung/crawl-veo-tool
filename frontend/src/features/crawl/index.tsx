@@ -74,14 +74,25 @@ function VideoRow({
   return (
     <TableRow>
       <TableCell>
-        <CoverImage src={video.cover_url} className='w-24 rounded' />
+        {/* w-28 cố định (CoverImage đã tự lo aspect-video + object-cover) — cột
+            đã table-fixed nên ảnh không co lại khi tiêu đề dài. */}
+        <CoverImage src={video.cover_url} className='w-28 rounded' />
       </TableCell>
-      <TableCell>
-        <a href={video.source_url} target='_blank' rel='noreferrer' className='hover:underline'>
+      <TableCell className='min-w-0'>
+        {/* title= để xem đủ tiêu đề khi hover, vì phần thừa bị cắt bằng "…". */}
+        <a
+          href={video.source_url}
+          target='_blank'
+          rel='noreferrer'
+          title={video.title}
+          className='block truncate hover:underline'
+        >
           {video.title}
         </a>
       </TableCell>
-      <TableCell>{video.author_name ?? '—'}</TableCell>
+      <TableCell className='truncate' title={video.author_name ?? undefined}>
+        {video.author_name ?? '—'}
+      </TableCell>
       <TableCell>{formatDuration(video.duration_seconds)}</TableCell>
       <TableCell>
         <Badge variant={isFailed ? 'destructive' : 'outline'}>{video.status}</Badge>
@@ -218,15 +229,18 @@ export function Crawl() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
+              {/* table-fixed: không có nó, browser tự chia lại bề rộng cột theo nội
+                  dung — tiêu đề tiếng Trung dài sẽ bóp cột ảnh nhỏ dần khi load
+                  thêm video. Bề rộng cố định cho mọi cột trừ tiêu đề (co giãn). */}
+              <Table className='table-fixed'>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='w-28'>Ảnh</TableHead>
-                    <TableHead>Tiêu đề</TableHead>
-                    <TableHead>Tác giả</TableHead>
-                    <TableHead>Thời lượng</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Thao tác</TableHead>
+                    <TableHead className='w-[132px]'>Ảnh</TableHead>
+                    <TableHead className='min-w-0'>Tiêu đề</TableHead>
+                    <TableHead className='w-32'>Tác giả</TableHead>
+                    <TableHead className='w-24'>Thời lượng</TableHead>
+                    <TableHead className='w-28'>Trạng thái</TableHead>
+                    <TableHead className='w-36'>Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
