@@ -13,3 +13,7 @@ storage/
 .DS_Store
 target/
 src-tauri/gen/
+
+# Khung hình trích từ video YouTube của người khác — chỉ để tham chiếu UI khi
+# thiết kế, giữ trên máy chứ không đưa lên repo (nội dung có bản quyền của họ).
+docs/ai-video-generation/goha-screenshots/
