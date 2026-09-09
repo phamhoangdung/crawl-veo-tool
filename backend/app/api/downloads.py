@@ -26,7 +26,9 @@ _HEARTBEAT_SECONDS = 15.0
 
 
 class TaskProgressRead(BaseModel):
+    # Với subject_type="project" thì đây là project_id (Phase 16).
     video_id: int
+    subject_type: str = "video"
     title: str
     kind: str
     kind_label: str
@@ -56,6 +58,7 @@ def list_progress() -> list[TaskProgressRead]:
     return [
         TaskProgressRead(
             video_id=p.video_id,
+            subject_type=p.subject_type,
             title=p.title,
             kind=p.kind,
             kind_label=p.kind_label,

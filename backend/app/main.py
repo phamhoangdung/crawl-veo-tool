@@ -3,7 +3,11 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Import cả package models để `create_all()` thấy hết bảng — model nào không được
+# module nào import thì bảng của nó sẽ không được tạo.
+from app import models  # noqa: F401
 from app.api import (
+    ai_generation,
     api_keys,
     assets,
     batch,
@@ -14,8 +18,10 @@ from app.api import (
     health,
     image_proxy,
     library,
+    mcp_tokens,
     metadata,
     pipeline,
+    projects,
     timeline,
     translate,
     trending,
@@ -52,6 +58,9 @@ app.include_router(batch.router)
 app.include_router(metadata.router)
 app.include_router(assets.router)
 app.include_router(translate.router)
+app.include_router(ai_generation.router)
+app.include_router(mcp_tokens.router)
+app.include_router(projects.router)
 
 
 @app.on_event("startup")

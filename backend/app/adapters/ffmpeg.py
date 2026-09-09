@@ -130,6 +130,61 @@ def get_video_dimensions(video_path: Path) -> tuple[int, int]:
     return int(width_str), int(height_str)
 
 
+def probe_duration_seconds(video_path: Path) -> float | None:
+    """Thời lượng thật của video. Trả None khi không đọc được, để phía gọi tự
+    quyết (khác `probe_video_width` có giá trị mặc định hợp lý — thời lượng thì
+    không có con số nào đoán được mà vẫn đúng)."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "csv=p=0",
+                str(video_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return float(result.stdout.strip().splitlines()[0])
+    except (subprocess.SubprocessError, ValueError, IndexError, OSError) as exc:
+        logger.warning("Không đọc được thời lượng video %s (%s)", video_path, exc)
+        return None
+
+
+def extract_last_frame(
+    video_path: Path, output_path: Path, *, offset_from_end: float = 0.05
+) -> None:
+    """Trích khung cuối clip thành ảnh — dùng làm keyframe mở đầu cảnh kế tiếp
+    (nối frame, xem docs/phases/phase-15-node-canvas.md).
+
+    Lùi `offset_from_end` giây so với điểm cuối: seek đúng vào mốc cuối cùng
+    thường rơi qua frame cuối decode được và ra ảnh rỗng.
+    """
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    duration = probe_duration_seconds(video_path)
+    seek_args: list[str] = []
+    if duration is not None:
+        # -ss trước -i để seek nhanh (không decode từ đầu clip).
+        seek_args = ["-ss", str(max(0.0, duration - offset_from_end))]
+
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            *seek_args,
+            "-i", str(video_path),
+            "-frames:v", "1",
+            "-q:v", "2",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
 def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, *, font_size: int) -> None:
     """Burn phụ đề vào video. `font_size` nên chọn theo tỉ lệ khung hình (video dọc 9:16
     cần chữ to hơn tương đối vì khung hẹp) — xem `subtitle_service.pick_font_size_for`.
@@ -278,9 +333,15 @@ def render_timeline(operations: dict, output_path: Path) -> None:
         crop_filter = (
             f",crop={crop['width']}:{crop['height']}:{crop['x']}:{crop['y']}" if crop else ""
         )
+        # `fps` + `settb` là bắt buộc, không phải tối ưu: `concat` xuất timebase
+        # 1/1000000 và framerate "1/0" (không xác định), còn clip chưa qua concat
+        # giữ timebase gốc (vd 1/15360). Khi có `transition_in="fade"` ở clip nào
+        # đó sau một chuỗi cut, `xfade` sẽ fail với "timebase do not match" /
+        # "needs to be a constant frame rate". Chuẩn hoá từng clip trước khi nối
+        # để mọi tổ hợp cut/fade đều dựng được.
         filter_parts.append(
             f"[{idx}:v]trim=start={clip['start']}:end={clip['end']},"
-            f"setpts=PTS-STARTPTS{crop_filter}[{label}]"
+            f"setpts=PTS-STARTPTS{crop_filter},fps={_TIMELINE_FPS},settb=AVTB[{label}]"
         )
         video_labels.append((label, clip))
 
@@ -485,6 +546,126 @@ def crop_vertical(input_path: Path, output_path: Path, *, x: int, y: int, width:
             "-i", str(input_path),
             "-vf", f"crop={width}:{height}:{x}:{y}",
             "-c:a", "copy",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+def make_placeholder_image(output_path: Path, *, label: str, width: int, height: int) -> None:
+    """Ảnh test có chữ chèn sẵn — dùng cho adapter giả ở chế độ phát triển
+    (app/adapters/falai/fake.py). Để ở đây vì chi tiết escape của filter
+    `drawtext` thuộc về adapter ffmpeg, không nên rò ra ngoài."""
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"testsrc=size={width}x{height}:duration=1",
+            "-vf", _drawtext_filter(label),
+            "-frames:v", "1",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+def make_placeholder_video(
+    output_path: Path, *, label: str, duration_seconds: float, width: int, height: int
+) -> None:
+    """Video test có chữ + tone audio — dùng cho adapter giả ở chế độ phát triển.
+    Có cả video và audio stream để pipeline phía sau (ghép, render timeline) xử lý
+    được y như file thật."""
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"testsrc=size={width}x{height}:duration={duration_seconds}",
+            "-f", "lavfi",
+            "-i", f"sine=frequency=440:duration={duration_seconds}",
+            "-vf", _drawtext_filter(label),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-shortest",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _drawtext_filter(label: str) -> str:
+    fontfile = _escape_filter_path(_resolve_default_fontfile())
+    text = _escape_drawtext(label)
+    return f"drawtext=fontfile='{fontfile}':text='{text}':fontsize=28:fontcolor=white:x=20:y=20"
+
+
+_KEN_BURNS_FPS = 30
+_KEN_BURNS_ZOOM_END = 1.15
+
+# Framerate chuẩn hoá khi dựng timeline — xem chú thích ở `render_timeline`.
+_TIMELINE_FPS = 30
+
+
+def make_ken_burns_clip(
+    image_path: Path,
+    output_path: Path,
+    *,
+    duration_seconds: float,
+    motion: str = "zoom_in",
+    width: int = 1280,
+    height: int = 720,
+) -> None:
+    """Sinh clip từ 1 ảnh tĩnh với chuyển động camera chậm (Ken Burns).
+
+    Đường thay thế miễn phí cho sinh video AI ở những cảnh không cần chuyển động
+    thật — sinh ảnh rẻ hơn sinh video ~50-100 lần, xem "Chiến lược giảm chi phí"
+    trong docs/phases/phase-14-ai-video-generation.md.
+
+    Phóng ảnh lên gấp 4 trước khi zoompan: filter `zoompan` lấy mẫu từ ảnh gốc,
+    zoom trực tiếp trên ảnh nhỏ sẽ ra kết quả rỗ. Nhân đôi `d` theo fps vì
+    `zoompan` đếm bằng frame chứ không phải giây.
+    """
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    total_frames = max(1, int(duration_seconds * _KEN_BURNS_FPS))
+    if motion == "zoom_out":
+        zoom_expr = f"{_KEN_BURNS_ZOOM_END}-({_KEN_BURNS_ZOOM_END}-1)*on/{total_frames}"
+    elif motion == "pan_right":
+        zoom_expr = str(_KEN_BURNS_ZOOM_END)
+    else:
+        zoom_expr = f"1+({_KEN_BURNS_ZOOM_END}-1)*on/{total_frames}"
+
+    if motion == "pan_right":
+        x_expr = f"(iw-iw/zoom)*on/{total_frames}"
+        y_expr = "ih/2-(ih/zoom/2)"
+    else:
+        x_expr = "iw/2-(iw/zoom/2)"
+        y_expr = "ih/2-(ih/zoom/2)"
+
+    video_filter = (
+        f"scale={width * 4}:{height * 4},"
+        f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}'"
+        f":d={total_frames}:s={width}x{height}:fps={_KEN_BURNS_FPS},"
+        f"format=yuv420p"
+    )
+
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", str(image_path),
+            "-vf", video_filter,
+            "-t", str(duration_seconds),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
             str(output_path),
         ],
         check=True,

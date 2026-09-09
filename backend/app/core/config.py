@@ -73,6 +73,18 @@ class Settings(BaseSettings):
     master_key: str = Field(default_factory=_default_master_key)
     database_url: str = f"sqlite:///{DEFAULT_DB_PATH}"
 
+    # Phase 14 — sinh ảnh/video AI. Mặc định "fake" để phát triển không tốn phí;
+    # đặt "real" khi muốn gọi API thật (cần key fal.ai trong pool).
+    falai_mode: str = "fake"
+    falai_monthly_budget_usd: float = 30.0
+
+    # Chỉ có tác dụng khi falai_mode="fake" — mô phỏng độ trễ và lỗi của API thật.
+    falai_fake_image_delay_seconds: float = 0.0
+    falai_fake_video_delay_seconds: float = 0.0
+    falai_fake_quota_error_rate: float = 0.0
+    falai_fake_policy_error_rate: float = 0.0
+    falai_fake_force_error: str = ""  # "", "quota", "policy"
+
 
 @lru_cache
 def get_settings() -> Settings:

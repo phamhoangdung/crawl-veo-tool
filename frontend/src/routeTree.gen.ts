@@ -25,10 +25,12 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedVideosIndexRouteImport } from './routes/_authenticated/videos/index'
 import { Route as AuthenticatedTrendingIndexRouteImport } from './routes/_authenticated/trending/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedLibraryIndexRouteImport } from './routes/_authenticated/library/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedCrawlIndexRouteImport } from './routes/_authenticated/crawl/index'
 import { Route as AuthenticatedApiKeysIndexRouteImport } from './routes/_authenticated/api-keys/index'
+import { Route as AuthenticatedAiStudioIndexRouteImport } from './routes/_authenticated/ai-studio/index'
 import { Route as AuthenticatedVideosVideoIdRouteImport } from './routes/_authenticated/videos/$videoId'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
@@ -119,6 +121,12 @@ const AuthenticatedSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedProjectsIndexRoute =
+  AuthenticatedProjectsIndexRouteImport.update({
+    id: '/projects/',
+    path: '/projects/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedLibraryIndexRoute =
   AuthenticatedLibraryIndexRouteImport.update({
     id: '/library/',
@@ -140,6 +148,12 @@ const AuthenticatedApiKeysIndexRoute =
   AuthenticatedApiKeysIndexRouteImport.update({
     id: '/api-keys/',
     path: '/api-keys/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAiStudioIndexRoute =
+  AuthenticatedAiStudioIndexRouteImport.update({
+    id: '/ai-studio/',
+    path: '/ai-studio/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedVideosVideoIdRoute =
@@ -198,10 +212,12 @@ export interface FileRoutesByFullPath {
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
+  '/ai-studio/': typeof AuthenticatedAiStudioIndexRoute
   '/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/crawl/': typeof AuthenticatedCrawlIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/library/': typeof AuthenticatedLibraryIndexRoute
+  '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/trending/': typeof AuthenticatedTrendingIndexRoute
   '/videos/': typeof AuthenticatedVideosIndexRoute
@@ -224,10 +240,12 @@ export interface FileRoutesByTo {
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
+  '/ai-studio': typeof AuthenticatedAiStudioIndexRoute
   '/api-keys': typeof AuthenticatedApiKeysIndexRoute
   '/crawl': typeof AuthenticatedCrawlIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/library': typeof AuthenticatedLibraryIndexRoute
+  '/projects': typeof AuthenticatedProjectsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/trending': typeof AuthenticatedTrendingIndexRoute
   '/videos': typeof AuthenticatedVideosIndexRoute
@@ -253,10 +271,12 @@ export interface FileRoutesById {
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
+  '/_authenticated/ai-studio/': typeof AuthenticatedAiStudioIndexRoute
   '/_authenticated/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/_authenticated/crawl/': typeof AuthenticatedCrawlIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/library/': typeof AuthenticatedLibraryIndexRoute
+  '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/trending/': typeof AuthenticatedTrendingIndexRoute
   '/_authenticated/videos/': typeof AuthenticatedVideosIndexRoute
@@ -282,10 +302,12 @@ export interface FileRouteTypes {
     | '/settings/display'
     | '/settings/notifications'
     | '/videos/$videoId'
+    | '/ai-studio/'
     | '/api-keys/'
     | '/crawl/'
     | '/help-center/'
     | '/library/'
+    | '/projects/'
     | '/settings/'
     | '/trending/'
     | '/videos/'
@@ -308,10 +330,12 @@ export interface FileRouteTypes {
     | '/settings/display'
     | '/settings/notifications'
     | '/videos/$videoId'
+    | '/ai-studio'
     | '/api-keys'
     | '/crawl'
     | '/help-center'
     | '/library'
+    | '/projects'
     | '/settings'
     | '/trending'
     | '/videos'
@@ -336,10 +360,12 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/videos/$videoId'
+    | '/_authenticated/ai-studio/'
     | '/_authenticated/api-keys/'
     | '/_authenticated/crawl/'
     | '/_authenticated/help-center/'
     | '/_authenticated/library/'
+    | '/_authenticated/projects/'
     | '/_authenticated/settings/'
     | '/_authenticated/trending/'
     | '/_authenticated/videos/'
@@ -473,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/projects/': {
+      id: '/_authenticated/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AuthenticatedProjectsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/library/': {
       id: '/_authenticated/library/'
       path: '/library'
@@ -499,6 +532,13 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/api-keys/'
       preLoaderRoute: typeof AuthenticatedApiKeysIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ai-studio/': {
+      id: '/_authenticated/ai-studio/'
+      path: '/ai-studio'
+      fullPath: '/ai-studio/'
+      preLoaderRoute: typeof AuthenticatedAiStudioIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/videos/$videoId': {
@@ -574,10 +614,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedVideosVideoIdRoute: typeof AuthenticatedVideosVideoIdRoute
+  AuthenticatedAiStudioIndexRoute: typeof AuthenticatedAiStudioIndexRoute
   AuthenticatedApiKeysIndexRoute: typeof AuthenticatedApiKeysIndexRoute
   AuthenticatedCrawlIndexRoute: typeof AuthenticatedCrawlIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedLibraryIndexRoute: typeof AuthenticatedLibraryIndexRoute
+  AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedTrendingIndexRoute: typeof AuthenticatedTrendingIndexRoute
   AuthenticatedVideosIndexRoute: typeof AuthenticatedVideosIndexRoute
 }
@@ -587,10 +629,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedVideosVideoIdRoute: AuthenticatedVideosVideoIdRoute,
+  AuthenticatedAiStudioIndexRoute: AuthenticatedAiStudioIndexRoute,
   AuthenticatedApiKeysIndexRoute: AuthenticatedApiKeysIndexRoute,
   AuthenticatedCrawlIndexRoute: AuthenticatedCrawlIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedLibraryIndexRoute: AuthenticatedLibraryIndexRoute,
+  AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedTrendingIndexRoute: AuthenticatedTrendingIndexRoute,
   AuthenticatedVideosIndexRoute: AuthenticatedVideosIndexRoute,
 }

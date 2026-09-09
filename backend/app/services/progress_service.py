@@ -11,7 +11,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Literal
 
-TaskKind = Literal["download", "transcribe", "translate", "dub", "burn"]
+TaskKind = Literal["download", "transcribe", "translate", "dub", "burn", "render_project"]
+
+# Tác vụ có thể thuộc về 1 video (pipeline crawl) hoặc 1 dự án nhiều cảnh
+# (Phase 15). Phân biệt tường minh bằng field riêng thay vì mã hoá vào id —
+# nhét project_id vào ô video_id sẽ khiến mọi query theo video_id lặng lẽ trả
+# rỗng thay vì báo lỗi.
+SubjectType = Literal["video", "project"]
 
 Stage = Literal[
     "pending",
@@ -26,6 +32,9 @@ Stage = Literal[
     "synthesizing",
     "muxing",
     "burning",
+    # Dựng video dự án nhiều cảnh (Phase 15)
+    "generating",
+    "rendering",
     # Kết thúc
     "done",
     "failed",
@@ -42,6 +51,8 @@ _STAGE_LABELS: dict[str, str] = {
     "synthesizing": "Đang tạo giọng đọc",
     "muxing": "Đang ghép âm thanh",
     "burning": "Đang ghép phụ đề",
+    "generating": "Đang sinh các cảnh",
+    "rendering": "Đang ghép video",
     "done": "Hoàn tất",
     "failed": "Thất bại",
 }
@@ -52,14 +63,18 @@ _KIND_LABELS: dict[str, str] = {
     "translate": "Dịch phụ đề",
     "dub": "Lồng tiếng",
     "burn": "Ghép phụ đề",
+    "render_project": "Dựng video dự án",
 }
 
 
 @dataclass
 class TaskProgress:
+    # Với subject_type="project" thì đây là project_id, không phải video_id.
+    # Giữ nguyên tên field để không phải sửa toàn bộ API/frontend đã dùng nó.
     video_id: int
     title: str
     kind: TaskKind = "download"
+    subject_type: SubjectType = "video"
     stage: Stage = "pending"
     # Đếm theo byte (tải) hoặc theo đơn vị việc (số câu đã dịch/đọc).
     current: int = 0
@@ -95,14 +110,23 @@ class TaskProgress:
 
 # Ghi từ trong tác vụ, đọc từ request khác — cần khoá.
 _lock = threading.Lock()
-# Khoá theo (video_id, kind) để 1 video chạy nhiều loại tác vụ không ghi đè nhau.
-_active: dict[tuple[int, str], TaskProgress] = {}
+# Khoá theo (subject_type, subject_id, kind): 1 video chạy nhiều loại tác vụ
+# không ghi đè nhau, và dự án id=7 không đụng video id=7.
+_active: dict[tuple[str, int, str], TaskProgress] = {}
 
 
-def start(video_id: int, title: str, kind: TaskKind = "download") -> TaskProgress:
+def start(
+    video_id: int,
+    title: str,
+    kind: TaskKind = "download",
+    *,
+    subject_type: SubjectType = "video",
+) -> TaskProgress:
     with _lock:
-        progress = TaskProgress(video_id=video_id, title=title, kind=kind)
-        _active[(video_id, kind)] = progress
+        progress = TaskProgress(
+            video_id=video_id, title=title, kind=kind, subject_type=subject_type
+        )
+        _active[(subject_type, video_id, kind)] = progress
         return progress
 
 
@@ -111,9 +135,11 @@ def set_stage(
     stage: Stage,
     total: int | None = None,
     kind: TaskKind = "download",
+    *,
+    subject_type: SubjectType = "video",
 ) -> None:
     with _lock:
-        progress = _active.get((video_id, kind))
+        progress = _active.get((subject_type, video_id, kind))
         if progress is None:
             return
         progress.stage = stage
@@ -124,18 +150,30 @@ def set_stage(
         progress.updated_at = progress.started_at
 
 
-def advance(video_id: int, amount: int, kind: TaskKind = "download") -> None:
+def advance(
+    video_id: int,
+    amount: int,
+    kind: TaskKind = "download",
+    *,
+    subject_type: SubjectType = "video",
+) -> None:
     with _lock:
-        progress = _active.get((video_id, kind))
+        progress = _active.get((subject_type, video_id, kind))
         if progress is None:
             return
         progress.current += amount
         progress.updated_at = time.monotonic()
 
 
-def finish(video_id: int, error: str | None = None, kind: TaskKind = "download") -> None:
+def finish(
+    video_id: int,
+    error: str | None = None,
+    kind: TaskKind = "download",
+    *,
+    subject_type: SubjectType = "video",
+) -> None:
     with _lock:
-        progress = _active.get((video_id, kind))
+        progress = _active.get((subject_type, video_id, kind))
         if progress is None:
             return
         progress.stage = "failed" if error else "done"
@@ -143,13 +181,18 @@ def finish(video_id: int, error: str | None = None, kind: TaskKind = "download")
         progress.updated_at = time.monotonic()
 
 
-def clear(video_id: int, kind: TaskKind | None = None) -> None:
+def clear(
+    video_id: int,
+    kind: TaskKind | None = None,
+    *,
+    subject_type: SubjectType = "video",
+) -> None:
     """Bỏ 1 tác vụ khỏi danh sách; không truyền kind thì bỏ mọi tác vụ của video."""
     with _lock:
         if kind is not None:
-            _active.pop((video_id, kind), None)
+            _active.pop((subject_type, video_id, kind), None)
             return
-        for key in [k for k in _active if k[0] == video_id]:
+        for key in [k for k in _active if k[0] == subject_type and k[1] == video_id]:
             _active.pop(key, None)
 
 
@@ -162,9 +205,11 @@ def clear_finished() -> int:
         return len(keys)
 
 
-def is_running(video_id: int, kind: TaskKind) -> bool:
+def is_running(
+    video_id: int, kind: TaskKind, *, subject_type: SubjectType = "video"
+) -> bool:
     with _lock:
-        progress = _active.get((video_id, kind))
+        progress = _active.get((subject_type, video_id, kind))
         return progress is not None and progress.is_running
 
 

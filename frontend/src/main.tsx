@@ -16,6 +16,9 @@ import { ThemeProvider } from './context/theme-provider'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
+// CSS của React Flow phải nạp toàn cục — thiếu nó thì canvas mất bố cục
+// (node chồng nhau, không thấy đường nối) mà không báo lỗi gì.
+import '@xyflow/react/dist/style.css'
 import './styles/index.css'
 
 const queryClient = new QueryClient({

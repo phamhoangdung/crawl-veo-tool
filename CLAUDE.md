@@ -47,6 +47,9 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 | 11. Clip ngắn TikTok + cross-post | [docs/phases/phase-11-shorts-crosspost.md](docs/phases/phase-11-shorts-crosspost.md) | **Phần cắt clip xong & verify thật** (ffmpeg thật) — cross-post qua API chưa làm (ngoài phạm vi, xem Ghi chú) |
 | 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | **Cơ chế lõi xong & verify thật** (sidecar spawn/tắt, MASTER_KEY/storage đúng chỗ) — còn thiếu `tauri build` ra installer thật |
 | 13. Trình chỉnh sửa timeline (AI gợi ý + kéo-thả) | [docs/phases/phase-13-timeline-editor.md](docs/phases/phase-13-timeline-editor.md) | **Xong & verify thật** (ffmpeg thật, DB thật, browser thật) — 9/10/11 giờ dùng chung editor này |
+| 14. Tạo video bằng AI generative (node-based đơn giản hoá) | [docs/phases/phase-14-ai-video-generation.md](docs/phases/phase-14-ai-video-generation.md) | Chưa bắt đầu — cần API key fal.ai thật + ảnh nhân vật mẫu |
+| 15. Account Pool — pool-group cho provider quota-theo-project (Google Veo) | [docs/phases/phase-15-account-pool-groups.md](docs/phases/phase-15-account-pool-groups.md) | Chưa bắt đầu — chỉ cần khi Phase 14 dùng Google Veo trực tiếp, hiện có thể hoãn |
+| 16. Dựng video nhiều cảnh (node-canvas) | [docs/phases/phase-16-node-canvas.md](docs/phases/phase-16-node-canvas.md) | **Lát 1+2 xong, Lát 3 gần xong — verify thật trong browser**: dán kịch bản → canvas kéo-thả có đường nối → thấy ước tính chi phí → dựng ra 1 video → thêm vào kho cho Timeline Editor. Còn thiếu node `character` |
 
 ## Quy ước tài liệu (module/nghiên cứu, khác với phase thực thi ở trên)
 Mỗi nhiệm vụ/module lớn có một thư mục riêng trong `docs/`, chứa `research.md`/`plan.md` của nhiệm vụ đó — dùng cho tài liệu tham khảo/kiến trúc, không phải checklist thực thi (đó là việc của `docs/phases/`). Khi cần thêm tài liệu module mới: tạo `docs/<ten-nhiem-vu>/`, thêm file, rồi thêm dòng vào bảng dưới.
@@ -55,3 +58,5 @@ Mỗi nhiệm vụ/module lớn có một thư mục riêng trong `docs/`, chứ
 |---|---|
 | Tổng quan & kiến trúc toàn bộ tool | [docs/overview/plan.md](docs/overview/plan.md) |
 | Mở rộng re-up quy mô lớn (compliance YouTube, video kể chuyện, clip TikTok, AI Account Pool) | [docs/scale-reup-features/plan.md](docs/scale-reup-features/plan.md) |
+| Tạo video bằng AI generative (node-based, kiểu Google Flow) + Account Pool cho video-gen provider | [docs/ai-video-generation/research.md](docs/ai-video-generation/research.md) — gồm case study GOHA Flow Studio (Phần 6: cú pháp `@ref`, thiết kế MCP agent-control, engine xoá watermark, ý tưởng TTS/voice-clone cho Phase 2-4); ảnh chụp UI thật ở `goha-screenshots/`; wireframe/luồng màn hình ở [ui-ux-design.md](docs/ai-video-generation/ui-ux-design.md) |
+| Model local & free tier hợp pháp (TTS local tiếng Việt, voice cloning offline, inpainting; phân tích vì sao KHÔNG đi đường multi-account cookie) | [docs/free-local-models/research.md](docs/free-local-models/research.md) |

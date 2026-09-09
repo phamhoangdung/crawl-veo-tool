@@ -8,8 +8,10 @@ import {
   LibraryBig,
   Palette,
   Settings,
+  Sparkles,
   UserCog,
   TrendingUp,
+  Workflow,
 } from 'lucide-react'
 import { APP_OWNER } from '@/config/app'
 import { type SidebarData } from '../types'
@@ -44,6 +46,16 @@ export const sidebarData: SidebarData = {
           title: 'Video của tôi',
           url: '/videos',
           icon: Clapperboard,
+        },
+        {
+          title: 'AI Studio',
+          url: '/ai-studio',
+          icon: Sparkles,
+        },
+        {
+          title: 'Dự án video',
+          url: '/projects',
+          icon: Workflow,
         },
         {
           title: 'Thư viện',

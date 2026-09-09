@@ -80,10 +80,22 @@ export interface CategoryHistory {
   points: SnapshotPoint[]
 }
 
-export type TaskKind = 'download' | 'transcribe' | 'translate' | 'dub' | 'burn'
+export type TaskKind =
+  | 'download'
+  | 'transcribe'
+  | 'translate'
+  | 'dub'
+  | 'burn'
+  | 'render_project'
+
+/** Tác vụ thuộc về 1 video (pipeline crawl) hay 1 dự án nhiều cảnh (Phase 16). */
+export type TaskSubjectType = 'video' | 'project'
 
 export interface TaskProgress {
+  /** Với subject_type='project' thì đây là project_id — backend giữ nguyên tên
+   *  field để không phải sửa toàn bộ chỗ đang dùng. */
   video_id: number
+  subject_type: TaskSubjectType
   title: string
   kind: TaskKind
   kind_label: string
@@ -715,4 +727,365 @@ export async function createClip(
     payload
   )
   return data
+}
+
+// --- Phase 14: AI Studio (sinh ảnh/video bằng AI) ---
+
+export type GeneratedAssetType = 'image' | 'video'
+
+export interface CharacterReferenceRead {
+  id: number
+  name: string
+  description: string | null
+  image_count: number
+  created_at: string
+}
+
+export interface GeneratedAssetRead {
+  id: number
+  type: GeneratedAssetType
+  prompt: string
+  provider: string
+  model: string
+  duration_seconds: number | null
+  cost_estimate_usd: number
+  source_character_ref_id: number | null
+  source_keyframe_asset_id: number | null
+  output_prefix: string | null
+  sequence_no: number | null
+  created_at: string
+}
+
+export interface GenerationResponse {
+  asset: GeneratedAssetRead
+  /** true = trả lại kết quả đã sinh trước đó, không gọi API và không tốn phí. */
+  from_cache: boolean
+}
+
+export interface CostEstimate {
+  estimated_cost_usd: number
+  model: string
+  warning: string | null
+}
+
+export interface BudgetStatus {
+  spent_this_month_usd: number
+  monthly_budget_usd: number
+  remaining_usd: number
+}
+
+export interface GenerationMode {
+  mode: 'fake' | 'real'
+  is_fake: boolean
+}
+
+export async function getGenerationMode() {
+  const { data } = await api.get<GenerationMode>('/api/ai-studio/mode')
+  return data
+}
+
+export async function getGenerationBudget() {
+  const { data } = await api.get<BudgetStatus>('/api/ai-studio/budget')
+  return data
+}
+
+export async function getCharacterReferences() {
+  const { data } = await api.get<CharacterReferenceRead[]>(
+    '/api/ai-studio/character-references'
+  )
+  return data
+}
+
+export async function createCharacterReference(
+  name: string,
+  images: File[],
+  description?: string
+) {
+  const form = new FormData()
+  form.append('name', name)
+  if (description) form.append('description', description)
+  images.forEach((image) => form.append('images', image))
+  const { data } = await api.post<CharacterReferenceRead>(
+    '/api/ai-studio/character-references',
+    form
+  )
+  return data
+}
+
+export async function deleteCharacterReference(referenceId: number) {
+  await api.delete(`/api/ai-studio/character-references/${referenceId}`)
+}
+
+export async function getGeneratedAssets(assetType?: GeneratedAssetType) {
+  const { data } = await api.get<GeneratedAssetRead[]>('/api/ai-studio/assets', {
+    params: assetType ? { asset_type: assetType } : undefined,
+  })
+  return data
+}
+
+/** URL xem trước ảnh keyframe / phát video clip — dùng trong <img>/<video>. */
+export function generatedAssetFileUrl(assetId: number) {
+  return `${API_BASE_URL}/api/ai-studio/assets/${assetId}/file`
+}
+
+export async function getGenerationCostEstimate(params: {
+  asset_type: GeneratedAssetType
+  model?: string
+  duration_seconds?: number
+  count?: number
+}) {
+  const { data } = await api.get<CostEstimate>('/api/ai-studio/cost-estimate', {
+    params,
+  })
+  return data
+}
+
+export async function generateKeyframe(payload: {
+  prompt: string
+  model?: string
+  character_ref_id?: number | null
+  output_prefix?: string | null
+  confirm_expensive?: boolean
+}) {
+  const { data } = await api.post<GenerationResponse>(
+    '/api/ai-studio/generate/keyframe',
+    payload
+  )
+  return data
+}
+
+export async function generateVideoClip(payload: {
+  prompt: string
+  keyframe_start_asset_id: number
+  keyframe_end_asset_id?: number | null
+  model?: string
+  duration_seconds?: number
+  output_prefix?: string | null
+  confirm_expensive?: boolean
+}) {
+  const { data } = await api.post<GenerationResponse>(
+    '/api/ai-studio/generate/video-clip',
+    payload
+  )
+  return data
+}
+
+/** Đưa clip/ảnh đã sinh vào kho file dùng chung để ghép trong Timeline Editor. */
+export async function exportGeneratedAssetToLibrary(assetId: number) {
+  const { data } = await api.post<{ asset_id: string; name: string; kind: string }>(
+    `/api/ai-studio/assets/${assetId}/export-to-library`
+  )
+  return data
+}
+
+export async function generateKenBurnsClip(payload: {
+  keyframe_asset_id: number
+  duration_seconds?: number
+  motion?: string
+  output_prefix?: string | null
+}) {
+  const { data } = await api.post<GenerationResponse>(
+    '/api/ai-studio/generate/ken-burns',
+    payload
+  )
+  return data
+}
+
+// --- Phase 14: MCP access token (cho agent ngoài như Claude Code) ---
+
+export interface McpTokenRead {
+  id: number
+  name: string
+  scopes: string[]
+  created_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+}
+
+export interface McpTokenCreated {
+  token: McpTokenRead
+  /** Chỉ có ở response lúc tạo — sau đó không lấy lại được. */
+  plain_token: string
+  mcp_config: Record<string, unknown>
+  warning: string
+}
+
+export async function getMcpScopes() {
+  const { data } = await api.get<{ scopes: string[] }>(
+    '/api/mcp-tokens/scopes'
+  )
+  return data.scopes
+}
+
+export async function getMcpTokens() {
+  const { data } = await api.get<McpTokenRead[]>('/api/mcp-tokens')
+  return data
+}
+
+export async function createMcpToken(name: string, scopes: string[]) {
+  const { data } = await api.post<McpTokenCreated>('/api/mcp-tokens', {
+    name,
+    scopes,
+  })
+  return data
+}
+
+export async function revokeMcpToken(tokenId: number) {
+  await api.delete(`/api/mcp-tokens/${tokenId}`)
+}
+
+// --- Phase 16: dự án nhiều cảnh (node-canvas) ---
+
+export type SceneStatus = 'draft' | 'keyframe_ready' | 'clip_ready' | 'failed'
+
+export interface SceneRead {
+  id: number
+  project_id: number
+  order_index: number
+  prompt: string
+  keyframe_asset_id: number | null
+  clip_asset_id: number | null
+  duration_seconds: number
+  /** Hiệu ứng của cạnh đi VÀO cảnh này — cảnh đầu tiên luôn bỏ qua. */
+  transition_in: string
+  transition_duration: number
+  /** Nối frame: lấy khung cuối clip cảnh trước làm keyframe mở đầu cảnh này. */
+  chain_from_previous: boolean
+  use_ken_burns: boolean
+  ken_burns_motion: string
+  canvas_x: number
+  canvas_y: number
+  status: SceneStatus
+  error: string | null
+}
+
+export interface ProjectRead {
+  id: number
+  title: string
+  output_prefix: string
+  rendered_path: string | null
+  canvas_viewport: Record<string, number> | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectDetail extends ProjectRead {
+  scenes: SceneRead[]
+  is_rendering: boolean
+}
+
+export async function getProjects() {
+  const { data } = await api.get<ProjectRead[]>('/api/projects')
+  return data
+}
+
+export async function getProject(projectId: number) {
+  const { data } = await api.get<ProjectDetail>(`/api/projects/${projectId}`)
+  return data
+}
+
+export async function createProject(title: string, scenePrompts?: string[]) {
+  const { data } = await api.post<ProjectDetail>('/api/projects', {
+    title,
+    scene_prompts: scenePrompts ?? null,
+  })
+  return data
+}
+
+export async function deleteProject(projectId: number) {
+  await api.delete(`/api/projects/${projectId}`)
+}
+
+export async function addScene(
+  projectId: number,
+  payload: { prompt?: string; after_scene_id?: number | null } = {}
+) {
+  const { data } = await api.post<SceneRead>(
+    `/api/projects/${projectId}/scenes`,
+    { prompt: payload.prompt ?? '', after_scene_id: payload.after_scene_id ?? null }
+  )
+  return data
+}
+
+export async function updateScene(
+  sceneId: number,
+  patch: {
+    prompt?: string
+    duration_seconds?: number
+    transition_in?: string
+    transition_duration?: number
+    chain_from_previous?: boolean
+    use_ken_burns?: boolean
+    ken_burns_motion?: string
+  }
+) {
+  const { data } = await api.patch<SceneRead>(`/api/projects/scenes/${sceneId}`, patch)
+  return data
+}
+
+export async function deleteScene(sceneId: number) {
+  await api.delete(`/api/projects/scenes/${sceneId}`)
+}
+
+export async function reorderScenes(projectId: number, sceneIds: number[]) {
+  const { data } = await api.post<SceneRead[]>(`/api/projects/${projectId}/reorder`, {
+    scene_ids: sceneIds,
+  })
+  return data
+}
+
+export async function saveProjectCanvas(
+  projectId: number,
+  positions: { scene_id: number; x: number; y: number }[],
+  viewport?: Record<string, number> | null
+) {
+  await api.put(`/api/projects/${projectId}/canvas`, { positions, viewport: viewport ?? null })
+}
+
+export async function generateProjectScene(sceneId: number, confirmExpensive = false) {
+  const { data } = await api.post<SceneRead>(
+    `/api/projects/scenes/${sceneId}/generate`,
+    null,
+    { params: { confirm_expensive: confirmExpensive } }
+  )
+  return data
+}
+
+export interface ProjectCostEstimate {
+  total_scenes: number
+  /** Chỉ cảnh chưa có clip mới tốn tiền — cảnh đã sinh thì tái dùng. */
+  pending_scenes: number
+  /** Cảnh dùng ảnh tĩnh + chuyển động camera (ffmpeg) — miễn phí. */
+  free_scenes: number
+  image_cost_usd: number
+  video_cost_usd: number
+  total_cost_usd: number
+  warning: string | null
+}
+
+export async function getProjectCostEstimate(projectId: number) {
+  const { data } = await api.get<ProjectCostEstimate>(
+    `/api/projects/${projectId}/cost-estimate`
+  )
+  return data
+}
+
+export async function startProjectRender(projectId: number) {
+  const { data } = await api.post<{ project_id: number; message: string }>(
+    `/api/projects/${projectId}/render`
+  )
+  return data
+}
+
+/** Đưa video đã dựng vào kho dùng chung để mở trong Timeline Editor. */
+export async function exportProjectToLibrary(projectId: number) {
+  const { data } = await api.post<{ asset_id: string; name: string; kind: string }>(
+    `/api/projects/${projectId}/export-to-library`
+  )
+  return data
+}
+
+/** URL video đã dựng — dùng trực tiếp trong <video>. */
+export function projectOutputUrl(projectId: number) {
+  return `${API_BASE_URL}/api/projects/${projectId}/output`
 }

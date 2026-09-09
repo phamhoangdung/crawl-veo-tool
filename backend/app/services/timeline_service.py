@@ -22,7 +22,9 @@ class VideoNotFoundError(ValueError):
     pass
 
 
-def _validate_operations(operations: dict) -> None:
+def validate_operations(operations: dict) -> None:
+    """Kiểm tra hình dạng timeline. Hàm thuần, không chạm DB — nên dùng được cho
+    cả timeline của `Video` (Phase 13) và của dự án nhiều cảnh (Phase 15)."""
     tracks = operations.get("tracks")
     if not isinstance(tracks, list) or not tracks:
         raise TimelineValidationError("Timeline cần trường 'tracks' dạng list, không rỗng")
@@ -102,7 +104,7 @@ def save_timeline(db: Session, video_id: int, operations: dict) -> dict:
     video = db.get(Video, video_id)
     if video is None:
         raise VideoNotFoundError(f"Video {video_id} không tồn tại")
-    _validate_operations(operations)
+    validate_operations(operations)
     video.timeline_json = operations
     db.commit()
     return operations
