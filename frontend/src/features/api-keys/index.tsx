@@ -21,10 +21,12 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { McpTokenSection } from './mcp-token-section'
 
 const PROVIDERS = [
   { id: 'openai', label: 'OpenAI (dịch)' },
   { id: 'elevenlabs', label: 'ElevenLabs (giọng đọc)' },
+  { id: 'falai', label: 'fal.ai (sinh ảnh/video — AI Studio)' },
 ]
 
 const STATUS_LABEL: Record<ApiKeyRead['status'], string> = {
@@ -232,6 +234,7 @@ export function ApiKeys() {
           {PROVIDERS.map((p) => (
             <ProviderKeyPool key={p.id} providerId={p.id} label={p.label} />
           ))}
+          <McpTokenSection />
         </div>
       </Main>
     </>
