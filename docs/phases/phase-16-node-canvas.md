@@ -1,6 +1,6 @@
 # Phase 16: Dựng video nhiều cảnh (node-canvas)
 
-Trạng thái: **Lát 1 + 2 xong, Lát 3 gần xong — verify thật trong browser** — dùng được hoàn toàn qua giao diện tại `/projects`: dán kịch bản → canvas node kéo-thả có đường nối → thấy ước tính chi phí → bấm dựng ra 1 video → thêm vào kho để mở ở Timeline Editor. Còn thiếu: node `character` kéo-thả.
+Trạng thái: **Cả 3 lát đã xong — verify thật trong browser** — dùng được hoàn toàn qua giao diện tại `/projects`: dán kịch bản → canvas node kéo-thả có đường nối → thấy ước tính chi phí → bấm dựng ra 1 video → thêm vào kho để mở ở Timeline Editor → kéo-thả node nhân vật vào cảnh để tự chèn `@tên` vào prompt.
 
 ## Mục tiêu
 
@@ -50,7 +50,7 @@ Cả 3 chạy được mà không cần canvas. Canvas cộng thêm giá trị t
 ### Lát 3 — Hoàn thiện (một phần)
 - [x] **Ước tính chi phí cả dự án**: `project_service.estimate_project_cost()` + `GET /{id}/cost-estimate`, hiện ngay trên node output. Chỉ tính cảnh **chưa có clip** — cảnh đã sinh thì tái dùng, gộp vào sẽ doạ người dùng bằng con số không có thật. Cảnh nối frame cũng không tính tiền ảnh (khung cuối lấy bằng ffmpeg, miễn phí).
 - [x] **Export sang Timeline Editor**: `project_render_service.export_to_asset_library()` + `POST /{id}/export-to-library` + nút "Thêm vào kho" trên node output. Copy chứ không move để nút "Xem / tải video" vẫn chạy.
-- [ ] Node `character` (trỏ `CharacterReference`, cạnh vào cảnh = tự chèn `@slug`) — **chưa làm**.
+- [x] Node `character` (trỏ `CharacterReference`, cạnh vào cảnh = tự chèn `@slug`) — `features/flow/components/character-node.tsx` + wiring trong `project-canvas.tsx`.
 
 ## Tiêu chí hoàn thành
 
@@ -76,7 +76,7 @@ Cả 3 chạy được mà không cần canvas. Canvas cộng thêm giá trị t
 - [x] Dự án đã dựng xong hiện "Mọi cảnh đã có clip — dựng lại không tốn phí" thay vì con số gây hiểu nhầm.
 - [x] Nút "Thêm vào kho" → toast xác nhận, kho video tăng 4 → 5, video dự án vẫn tải được (copy chứ không move).
 - [x] 319 test backend pass, ruff sạch, eslint sạch, typecheck 0 lỗi mới.
-- [ ] Node `character` kéo vào cảnh → tự chèn `@slug` vào prompt — **chưa làm**.
+- [x] Node `character` kéo vào cảnh → tự chèn `@slug` vào prompt — verify thật trong browser (xem Phiên 2026-09-09, Lát 3 tiếp — node character).
 
 ## Ghi chú phát sinh
 
@@ -112,3 +112,15 @@ Cả 3 chạy được mà không cần canvas. Canvas cộng thêm giá trị t
 **Quyết định thiết kế về ước tính chi phí:** chỉ tính cảnh chưa có clip. Ban đầu hiển thị "Miễn phí — 0 cảnh dùng ảnh tĩnh" cho dự án đã dựng xong — câu vô lý (0 cảnh miễn phí thì sao lại miễn phí?). Sửa thành thông báo riêng khi `pending_scenes == 0`. Bài học: con số đúng vẫn có thể ghép thành câu sai.
 
 **Lệch khỏi kế hoạch:** kế hoạch định để prompt cảnh trong local state đồng bộ từ server bằng `useEffect`. Bỏ cách đó (eslint `react-hooks/set-state-in-effect` bắt đúng): state chỉ giữ prompt **đang sửa**, dữ liệu gốc đọc thẳng từ query — tránh hai nguồn sự thật lệch nhau. Tương tự, `SceneSettingsDialog` tách thành component con có `key={scene.id}` để state khởi tạo từ props thay vì đồng bộ qua effect.
+
+### Phiên 2026-09-09 (tiếp) — Lát 3 tiếp: node `character`
+
+**Thiết kế cạnh nhân vật → cảnh:** không lưu thành cạnh riêng (không bảng, không field mới) — cạnh chỉ là **suy ra** từ `@tên` có trong `Scene.prompt` (`graph.ts: parseMentions` + `characterEdgesFromMentions`), giống hệt cách cạnh cảnh→cảnh suy ra từ `order_index` ở Lát 1. Kéo cạnh từ node nhân vật vào handle riêng (`id="character"`, Position.Top trên `SceneNode` — tách khỏi handle Left vốn dùng cho nối frame cảnh trước) chỉ là **thao tác chèn `@tên` vào prompt rồi lưu như bình thường**; tháo cạnh (chọn cạnh + Backspace, qua `onEdgesChange` xử lý `type: 'remove'`) là thao tác ngược — gỡ `@tên` khỏi prompt. Cách này giữ đúng nguyên tắc đã chốt ở Lát 1: canvas chỉ vẽ lại, không phải nguồn sự thật.
+
+**Vị trí node nhân vật trên canvas lưu ở localStorage, không phải backend.** Nguồn sự thật thật sự (nhân vật nào ở cảnh nào) đã nằm trong text prompt (lưu server-side qua `Scene.prompt` như trên) — vị trí hiển thị trên canvas chỉ là tiện ích riêng trình duyệt, không cần thêm cột DB nào. Đã verify: thêm node → kéo → connect → **reload trình duyệt** → node, vị trí, và cạnh đều khôi phục đúng.
+
+**Verify thật trong browser (Playwright + Chromium, backend fake-mode):** tạo bộ ảnh `@hero` ở AI Studio → tạo dự án 2 cảnh → "Thêm nhân vật" → kéo cạnh từ node `@hero` vào handle character của cảnh 2 → prompt cảnh 2 tự thêm `@hero`, lưu ngay (không cần bấm gì thêm) → reload vẫn còn → bấm "Bỏ khỏi canvas" chỉ gỡ node khỏi canvas, **không đụng tới `@hero` trong prompt** (đúng thiết kế: xoá hiển thị ≠ xoá dữ liệu).
+
+**Không verify được bằng automation:** thao tác "chọn cạnh trên canvas rồi bấm Backspace để gỡ mention" — click tổng hợp qua Playwright/CDP (mouse lẫn dispatchEvent thủ công, đã thử nhiều cách) không kích hoạt state `selected` của React Flow cho **bất kỳ** node/cạnh nào trong môi trường này (kể cả node/cạnh có sẵn từ Lát 2), trong khi kéo-thả (drag) và tạo-cạnh (connect) qua đúng cùng cơ chế pointer event lại chạy đúng. Đây nhiều khả năng là hạn chế của việc giả lập input qua CDP trên máy này, không phải lỗi code — cơ chế `onEdgesChange` xử lý `type:'remove'` là cách chính thống React Flow khuyến nghị cho controlled edges. Cần người dùng tự tay thử claim lại nếu nghi ngờ.
+
+**Bug thật phát hiện ngoài lề (không phải do code phase này):** `project_service.delete_project` throw `FOREIGN KEY constraint failed` khi xoá — do `Scene.project_id` chỉ là cột FK thô, không có `relationship()` nên SQLAlchemy không biết thứ tự phụ thuộc, có lúc phát lệnh `DELETE FROM generation_projects` trước `DELETE FROM scenes`. Sửa bằng thêm `db.flush()` giữa 2 bước xoá — verify đúng bằng script Python gọi thẳng hàm (bypass HTTP). **Lưu ý cho phiên sau:** máy dev Windows này có xu hướng để lại tiến trình `uvicorn --reload` cũ chạy ngầm không kill được qua `Stop-Process`/`taskkill` (PID báo "not found" nhưng port vẫn nghe) — nếu sửa backend mà gọi API vẫn thấy hành vi cũ, đừng cố kill tiến trình, hãy nhờ người dùng tự tắt hẳn terminal `npm run dev` cũ rồi chạy lại.

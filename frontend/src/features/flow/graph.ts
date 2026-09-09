@@ -8,6 +8,10 @@
 
 export const SCENE_NODE_WIDTH = 260
 export const SCENE_NODE_GAP = 60
+export const CHARACTER_NODE_WIDTH = 180
+/** Tiền tố id node nhân vật trên canvas — phân biệt với id cảnh (cùng là số,
+ *  khác bảng) mà không phải nhét 2 ý nghĩa vào 1 field như id âm. */
+export const CHARACTER_NODE_PREFIX = 'char-'
 
 export interface GraphNode {
   id: string
@@ -101,4 +105,35 @@ export function edgesFromOrder(sceneIds: number[]): GraphEdge[] {
     source: String(id),
     target: String(sceneIds[index + 1]),
   }))
+}
+
+const MENTION_PATTERN = /@([a-z0-9_]+)/g
+
+/** Rút các @tên được nhắc trong prompt, khử trùng, không phân biệt hoa
+ *  thường — cùng quy ước với `features/ai-studio/components/keyframe-step.tsx`. */
+export function parseMentions(prompt: string): string[] {
+  const matches = prompt.toLowerCase().match(MENTION_PATTERN) ?? []
+  return Array.from(new Set(matches.map((m) => m.slice(1))))
+}
+
+/** Cạnh nhân vật → cảnh, suy ra từ @mention trong prompt — không lưu thành
+ *  trạng thái riêng để tránh 2 nguồn sự thật (canvas vs text prompt). Nối rồi
+ *  tháo cạnh này chỉ là cách trực quan để chèn/xoá @tên trong prompt.
+ *  `characters` chỉ nên là các nhân vật đang có mặt trên canvas, không phải
+ *  toàn bộ kho tham chiếu — mention chưa kéo ra canvas thì không vẽ cạnh. */
+export function characterEdgesFromMentions(
+  scenes: { id: number; prompt: string }[],
+  characters: { id: number; name: string }[]
+): GraphEdge[] {
+  const characterIdByName = new Map(characters.map((c) => [c.name, c.id]))
+  const edges: GraphEdge[] = []
+  for (const scene of scenes) {
+    for (const name of parseMentions(scene.prompt)) {
+      const characterId = characterIdByName.get(name)
+      if (characterId !== undefined) {
+        edges.push({ source: `${CHARACTER_NODE_PREFIX}${characterId}`, target: String(scene.id) })
+      }
+    }
+  }
+  return edges
 }

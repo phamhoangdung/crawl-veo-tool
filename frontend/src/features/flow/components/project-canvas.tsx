@@ -3,19 +3,22 @@ import {
   Background,
   Controls,
   ReactFlow,
+  type Connection,
   type Edge,
+  type EdgeChange,
   type Node,
   type NodeChange,
 } from '@xyflow/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Plus, Redo2, Save, Undo2 } from 'lucide-react'
+import { Plus, Redo2, Save, Undo2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   addScene,
   deleteScene,
   exportProjectToLibrary,
   generateProjectScene,
+  getCharacterReferences,
   getProject,
   getProjectCostEstimate,
   projectOutputUrl,
@@ -26,23 +29,58 @@ import {
 } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  CHARACTER_NODE_PREFIX,
   SCENE_NODE_WIDTH,
   autoLayoutLinear,
+  characterEdgesFromMentions,
   edgesFromOrder,
+  parseMentions,
   validateGraph,
 } from '../graph'
 import { useFlowStore, type NodePositions } from '../store'
+import { CharacterNode, type CharacterNodeData } from './character-node'
 import { OutputNode, type OutputNodeData } from './output-node'
 import { SceneNode, type SceneNodeData } from './scene-node'
 import { SceneSettingsDialog, type ScenePatch } from './scene-settings-dialog'
 
 const OUTPUT_NODE_ID = 'output'
-const nodeTypes = { scene: SceneNode, output: OutputNode }
+const nodeTypes = { scene: SceneNode, output: OutputNode, character: CharacterNode }
 
 function apiDetail(error: unknown): string | null {
   return axios.isAxiosError(error)
     ? ((error.response?.data as { detail?: string })?.detail ?? null)
     : null
+}
+
+/** Vị trí node nhân vật trên canvas chỉ là tiện ích hiển thị — nguồn sự thật
+ *  của việc "nhân vật nào ở cảnh nào" là @mention trong text prompt (đã lưu ở
+ *  backend qua Scene.prompt). Vì vậy lưu cục bộ theo trình duyệt là đủ, không
+ *  cần thêm bảng/field backend cho riêng việc này. */
+function characterCanvasKey(projectId: number): string {
+  return `flow-character-canvas:${projectId}`
+}
+
+function loadCharacterCanvas(projectId: number): NodePositions {
+  try {
+    const raw = localStorage.getItem(characterCanvasKey(projectId))
+    return raw ? (JSON.parse(raw) as NodePositions) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveCharacterCanvas(projectId: number, positions: NodePositions): void {
+  try {
+    localStorage.setItem(characterCanvasKey(projectId), JSON.stringify(positions))
+  } catch {
+    // Chỉ là vị trí hiển thị — mất cũng không ảnh hưởng dữ liệu thật.
+  }
 }
 
 export function ProjectCanvas({ projectId }: { projectId: number }) {
@@ -69,6 +107,46 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     queryKey: ['project-cost', projectId],
     queryFn: () => getProjectCostEstimate(projectId),
   })
+
+  const characters = useQuery({
+    queryKey: ['ai-studio', 'character-references'],
+    queryFn: getCharacterReferences,
+  })
+
+  // Node nhân vật đặt trên canvas — chỉ lưu cục bộ (xem ghi chú ở helper phía
+  // trên), khởi tạo 1 lần từ localStorage vì component remount mỗi khi đổi dự án.
+  const [characterPositions, setCharacterPositions] = useState<NodePositions>(() =>
+    loadCharacterCanvas(projectId)
+  )
+  const [placedCharacterIds, setPlacedCharacterIds] = useState<number[]>(() =>
+    Object.keys(loadCharacterCanvas(projectId)).map(Number)
+  )
+
+  useEffect(() => {
+    saveCharacterCanvas(projectId, characterPositions)
+  }, [projectId, characterPositions])
+
+  const addCharacterToCanvas = useCallback(
+    (characterId: number) => {
+      setPlacedCharacterIds((current) =>
+        current.includes(characterId) ? current : [...current, characterId]
+      )
+      setCharacterPositions((current) =>
+        current[characterId]
+          ? current
+          : { ...current, [characterId]: { x: -320, y: placedCharacterIds.length * 140 } }
+      )
+    },
+    [placedCharacterIds.length]
+  )
+
+  const removeCharacterFromCanvas = useCallback((characterId: number) => {
+    setPlacedCharacterIds((current) => current.filter((id) => id !== characterId))
+    setCharacterPositions((current) => {
+      const { [characterId]: _removed, ...rest } = current
+      return rest
+    })
+  }, [])
 
   const scenes = useMemo(() => project.data?.scenes ?? [], [project.data])
   const invalidate = () => {
@@ -229,6 +307,22 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
       onExportToLibrary: () => exportMutate(),
     }
 
+    const characterNodes: Node[] = placedCharacterIds.flatMap((id, index) => {
+      const character = characters.data?.find((c) => c.id === id)
+      if (!character) return []
+      return [
+        {
+          id: `${CHARACTER_NODE_PREFIX}${id}`,
+          type: 'character',
+          position: characterPositions[id] ?? { x: -320, y: index * 140 },
+          data: {
+            character,
+            onRemove: removeCharacterFromCanvas,
+          } satisfies CharacterNodeData,
+        },
+      ]
+    })
+
     const lastPosition =
       scenes.length > 0
         ? (positions[scenes[scenes.length - 1].id] ?? { x: scenes.length * 320, y: 0 })
@@ -236,6 +330,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
 
     return [
       ...sceneNodes,
+      ...characterNodes,
       {
         id: OUTPUT_NODE_ID,
         type: 'output',
@@ -267,6 +362,10 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     renderMutate,
     exportMutate,
     projectId,
+    placedCharacterIds,
+    characters.data,
+    characterPositions,
+    removeCharacterFromCanvas,
   ])
 
   // Thứ tự cảnh là `order_index` ở backend — canvas chỉ vẽ lại cho dễ nhìn.
@@ -292,6 +391,76 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     return sceneEdges
   }, [scenes])
 
+  // Cạnh nhân vật → cảnh không phải trạng thái riêng — suy ra từ @mention có
+  // trong prompt, chỉ vẽ cho nhân vật đang có mặt trên canvas.
+  const characterEdges: Edge[] = useMemo(() => {
+    const placedCharacters = (characters.data ?? []).filter((c) =>
+      placedCharacterIds.includes(c.id)
+    )
+    return characterEdgesFromMentions(scenes, placedCharacters).map((e) => ({
+      id: `${e.source}->${e.target}`,
+      source: e.source,
+      target: e.target,
+      targetHandle: 'character',
+    }))
+  }, [scenes, characters.data, placedCharacterIds])
+
+  const allEdges = useMemo(() => [...edges, ...characterEdges], [edges, characterEdges])
+
+  // Kéo cạnh từ node nhân vật vào handle "character" của 1 cảnh = chèn @tên
+  // vào prompt cảnh đó — không lưu cạnh riêng, prompt là nguồn sự thật.
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const isCharacterMention =
+        connection.targetHandle === 'character' &&
+        connection.source.startsWith(CHARACTER_NODE_PREFIX)
+      if (!isCharacterMention) return
+      const characterId = Number(connection.source.slice(CHARACTER_NODE_PREFIX.length))
+      const character = characters.data?.find((c) => c.id === characterId)
+      const sceneId = Number(connection.target)
+      const scene = scenes.find((s) => s.id === sceneId)
+      if (!character || !scene) return
+
+      const currentPrompt = prompts[sceneId] ?? scene.prompt
+      if (parseMentions(currentPrompt).includes(character.name)) {
+        toast.info(`Cảnh này đã có @${character.name} rồi.`)
+        return
+      }
+      const nextPrompt = `${currentPrompt} @${character.name}`.trim()
+      setPrompts((current) => ({ ...current, [sceneId]: nextPrompt }))
+      savePromptMutate({ sceneId, prompt: nextPrompt })
+    },
+    [characters.data, scenes, prompts, savePromptMutate]
+  )
+
+  // Xoá cạnh nhân vật trên canvas = gỡ @tên khỏi prompt. Cạnh giữa các cảnh
+  // (thứ tự/chuyển cảnh) không xoá được qua đây — chỉ cạnh bắt đầu bằng
+  // CHARACTER_NODE_PREFIX mới xử lý, còn lại bị bỏ qua nên sẽ tự vẽ lại.
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      for (const change of changes) {
+        if (change.type !== 'remove') continue
+        const edge = allEdges.find((e) => e.id === change.id)
+        if (!edge || !edge.source.startsWith(CHARACTER_NODE_PREFIX)) continue
+
+        const characterId = Number(edge.source.slice(CHARACTER_NODE_PREFIX.length))
+        const character = characters.data?.find((c) => c.id === characterId)
+        const sceneId = Number(edge.target)
+        const scene = scenes.find((s) => s.id === sceneId)
+        if (!character || !scene) continue
+
+        const currentPrompt = prompts[sceneId] ?? scene.prompt
+        const nextPrompt = currentPrompt
+          .replace(new RegExp(`@${character.name}\\b`, 'gi'), '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        setPrompts((current) => ({ ...current, [sceneId]: nextPrompt }))
+        savePromptMutate({ sceneId, prompt: nextPrompt })
+      }
+    },
+    [allEdges, characters.data, scenes, prompts, savePromptMutate]
+  )
+
   const validation = useMemo(
     () =>
       validateGraph(
@@ -303,11 +472,16 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     for (const change of changes) {
-      if (change.type === 'position' && change.position && change.id !== OUTPUT_NODE_ID) {
-        useFlowStore
-          .getState()
-          .moveNode(Number(change.id), change.position.x, change.position.y)
+      if (change.type !== 'position' || !change.position || change.id === OUTPUT_NODE_ID) {
+        continue
       }
+      if (change.id.startsWith(CHARACTER_NODE_PREFIX)) {
+        const characterId = Number(change.id.slice(CHARACTER_NODE_PREFIX.length))
+        const position = change.position
+        setCharacterPositions((current) => ({ ...current, [characterId]: position }))
+        continue
+      }
+      useFlowStore.getState().moveNode(Number(change.id), change.position.x, change.position.y)
     }
   }, [])
 
@@ -321,6 +495,35 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
           <Plus className='size-3.5' />
           Thêm cảnh
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size='sm' variant='secondary' className='gap-1'>
+              <UserPlus className='size-3.5' />
+              Thêm nhân vật
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='start'>
+            {(() => {
+              const available = (characters.data ?? []).filter(
+                (c) => !placedCharacterIds.includes(c.id)
+              )
+              if (available.length === 0) {
+                return (
+                  <DropdownMenuItem disabled>
+                    {characters.data && characters.data.length > 0
+                      ? 'Đã thêm hết bộ ảnh vào canvas'
+                      : 'Chưa có bộ ảnh — tạo ở AI Studio'}
+                  </DropdownMenuItem>
+                )
+              }
+              return available.map((c) => (
+                <DropdownMenuItem key={c.id} onClick={() => addCharacterToCanvas(c.id)}>
+                  @{c.name}
+                </DropdownMenuItem>
+              ))
+            })()}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           size='sm'
           variant='secondary'
@@ -361,9 +564,11 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
 
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={allEdges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
         onNodeDragStart={() => useFlowStore.getState().beginGesture()}
         onNodeDragStop={() => useFlowStore.getState().endGesture()}
         // `fitView` lúc mount đo khi node chưa có kích thước thật nên luôn hụt

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   autoLayoutLinear,
+  characterEdgesFromMentions,
   edgesFromOrder,
+  parseMentions,
   toSceneOrder,
   validateGraph,
   type GraphEdge,
@@ -111,5 +113,46 @@ describe('edgesFromOrder', () => {
 
   it('một cảnh thì không có cạnh nào', () => {
     expect(edgesFromOrder([10])).toEqual([])
+  })
+})
+
+describe('parseMentions', () => {
+  it('rút @tên, khử trùng, không phân biệt hoa thường', () => {
+    expect(parseMentions('@Hero gặp @npc_ba và lại nhắc @hero')).toEqual(['hero', 'npc_ba'])
+  })
+
+  it('không có mention thì mảng rỗng', () => {
+    expect(parseMentions('cảnh rừng, không ai nói gì')).toEqual([])
+  })
+})
+
+describe('characterEdgesFromMentions', () => {
+  it('tạo cạnh nhân vật → cảnh khi prompt nhắc @tên khớp nhân vật đang trên canvas', () => {
+    const edges = characterEdgesFromMentions(
+      [
+        { id: 1, prompt: '@hero bước vào quán' },
+        { id: 2, prompt: 'cảnh trống, không ai' },
+        { id: 3, prompt: '@hero và @villain đối đầu' },
+      ],
+      [
+        { id: 10, name: 'hero' },
+        { id: 20, name: 'villain' },
+      ]
+    )
+
+    expect(edges).toEqual([
+      { source: 'char-10', target: '1' },
+      { source: 'char-10', target: '3' },
+      { source: 'char-20', target: '3' },
+    ])
+  })
+
+  it('bỏ qua mention không khớp nhân vật nào đang có trên canvas', () => {
+    const edges = characterEdgesFromMentions(
+      [{ id: 1, prompt: '@unknown xuất hiện' }],
+      [{ id: 10, name: 'hero' }]
+    )
+
+    expect(edges).toEqual([])
   })
 })

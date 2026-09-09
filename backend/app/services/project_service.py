@@ -100,6 +100,10 @@ def delete_project(db: Session, user_id: int, project_id: int) -> bool:
         return False
     for scene in list_scenes(db, project_id):
         db.delete(scene)
+    # Không có `relationship()` giữa Scene và GenerationProject (chỉ có FK cột
+    # trên Scene) nên SQLAlchemy không biết thứ tự phụ thuộc — flush trước để
+    # chắc chắn DELETE scenes chạy trước DELETE project, tránh vi phạm FK.
+    db.flush()
     db.delete(project)
     db.commit()
     return True
