@@ -36,6 +36,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -80,13 +82,35 @@ type StepContext = {
   hasTranslation: boolean
 }
 
+/** Tuỳ chọn của một bước, hiện ngay trên nút chạy. Trước đây chỉ đổi được bằng
+ * cách sửa query param — tức là người dùng thật không đổi được. */
+type StepOption =
+  | {
+      key: string
+      type: 'switch'
+      label: string
+      hint?: string
+      default: boolean
+    }
+  | {
+      key: string
+      type: 'select'
+      label: string
+      hint?: string
+      default: string
+      choices: { value: string; label: string }[]
+    }
+
+type StepOptionValues = Record<string, boolean | string>
+
 type StepDef = {
   kind: TaskKind
   label: string
   icon: typeof Captions
   description: string
-  run: (id: number) => Promise<unknown>
+  run: (id: number, options: StepOptionValues) => Promise<unknown>
   requires: (ctx: StepContext) => string | null
+  options?: StepOption[]
 }
 
 const STEPS: StepDef[] = [
@@ -120,16 +144,39 @@ const STEPS: StepDef[] = [
     label: 'Lồng tiếng',
     icon: Mic,
     description: 'Tạo giọng đọc tiếng Việt, giữ lại nhạc nền gốc.',
-    run: (id) => dubVideo(id),
+    run: (id, options) => dubVideo(id, options.keepBackground as boolean),
     requires: ({ hasTranslation }) => (hasTranslation ? null : 'Cần dịch phụ đề trước'),
+    options: [
+      {
+        key: 'keepBackground',
+        type: 'switch',
+        label: 'Giữ nhạc nền gốc',
+        hint: 'Tách nhạc nền bằng Demucs rồi trộn lại với giọng đọc. Tắt đi thì nhanh hơn hẳn nhưng video sẽ mất sạch âm thanh gốc (nhạc, tiếng động).',
+        default: true,
+      },
+    ],
   },
   {
     kind: 'burn',
     label: 'Ghép phụ đề vào video',
     icon: Captions,
     description: 'Chèn cứng phụ đề song ngữ vào khung hình.',
-    run: burnSubtitles,
+    run: (id, options) =>
+      burnSubtitles(id, options.position as 'bottom' | 'top'),
     requires: ({ hasTranslation }) => (hasTranslation ? null : 'Cần dịch phụ đề trước'),
+    options: [
+      {
+        key: 'position',
+        type: 'select',
+        label: 'Vị trí phụ đề',
+        hint: 'Chọn "Trên" khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc định thì hai lớp chữ chồng lên nhau, không đọc được lớp nào.',
+        default: 'bottom',
+        choices: [
+          { value: 'bottom', label: 'Dưới (mặc định)' },
+          { value: 'top', label: 'Trên' },
+        ],
+      },
+    ],
   },
 ]
 
@@ -149,8 +196,14 @@ function StepCard({
   const task = tasks.find((t) => t.video_id === videoId && t.kind === step.kind)
   const isRunning = task?.is_running ?? false
 
+  // Khởi tạo từ `default` của từng tuỳ chọn ngay trong `useState` chứ không đồng
+  // bộ bằng effect — STEPS là hằng số, không có gì để đồng bộ lại.
+  const [optionValues, setOptionValues] = useState<StepOptionValues>(() =>
+    Object.fromEntries((step.options ?? []).map((o) => [o.key, o.default]))
+  )
+
   const run = useMutation({
-    mutationFn: () => step.run(videoId),
+    mutationFn: () => step.run(videoId, optionValues),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
       queryClient.invalidateQueries({ queryKey: ['files'] })
@@ -191,6 +244,68 @@ function StepCard({
 
       {blockedReason && (
         <p className='ps-7 text-xs text-muted-foreground'>{blockedReason}</p>
+      )}
+
+      {step.options && step.options.length > 0 && (
+        <div className='space-y-2 ps-7'>
+          {step.options.map((option) => (
+            <div key={option.key} className='space-y-1'>
+              <div className='flex items-center gap-2'>
+                {option.type === 'switch' ? (
+                  <>
+                    <Switch
+                      id={`${step.kind}-${option.key}`}
+                      checked={optionValues[option.key] as boolean}
+                      disabled={isRunning || run.isPending}
+                      onCheckedChange={(checked) =>
+                        setOptionValues((prev) => ({
+                          ...prev,
+                          [option.key]: checked,
+                        }))
+                      }
+                    />
+                    <Label
+                      htmlFor={`${step.kind}-${option.key}`}
+                      className='text-xs font-normal'
+                    >
+                      {option.label}
+                    </Label>
+                  </>
+                ) : (
+                  <>
+                    <Label
+                      htmlFor={`${step.kind}-${option.key}`}
+                      className='text-xs font-normal'
+                    >
+                      {option.label}
+                    </Label>
+                    <select
+                      id={`${step.kind}-${option.key}`}
+                      className='h-7 rounded-md border bg-transparent px-2 text-xs'
+                      value={optionValues[option.key] as string}
+                      disabled={isRunning || run.isPending}
+                      onChange={(e) =>
+                        setOptionValues((prev) => ({
+                          ...prev,
+                          [option.key]: e.target.value,
+                        }))
+                      }
+                    >
+                      {option.choices.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+              {option.hint && (
+                <p className='text-[11px] text-muted-foreground'>{option.hint}</p>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {task && (
@@ -481,7 +596,7 @@ export function VideoDetail() {
                 </div>
                 {/* Chỉ mount khi mở tab: editor tải waveform + video, không nên
                     chạy nền khi người dùng đang ở tab khác. */}
-                <TimelineEditor videoId={videoId} />
+                <TimelineEditor subject={{ type: 'video', id: videoId }} />
               </TabsContent>
             </Tabs>
 
