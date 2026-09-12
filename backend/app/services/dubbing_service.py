@@ -6,10 +6,11 @@ from pathlib import Path
 from pydub import AudioSegment
 from sqlalchemy.orm import Session
 
-from app.adapters import demucs, ffmpeg
+from app.adapters import ffmpeg
 from app.adapters.provider_errors import AllProvidersExhaustedError
 from app.models.video import Video, VideoStatus
 from app.services import (
+    audio_chunk_service,
     progress_service,
     transcribe_service,
     translate_service,
@@ -173,8 +174,25 @@ async def run_dub_and_mux(db: Session, user_id: int, video: Video, keep_backgrou
             progress_service.set_stage(video.id, "separating", kind="dub")
             original_audio_path = video_dir / "original_audio.wav"
             ffmpeg.extract_audio(Path(video.local_path), original_audio_path)
-            _vocals_path, background_path = demucs.separate_vocals(
-                original_audio_path, video_dir / "demucs_out"
+
+            def report_chunk(done: int, total: int) -> None:
+                """Video dài cắt thành nhiều khúc — báo tiến độ theo khúc, nếu không
+                thanh tiến độ sẽ đứng im hàng chục phút và trông như treo.
+
+                Chỉ đặt `total` ở khúc đầu: `set_stage` reset `current` về 0 mỗi
+                lần gọi, gọi lại mỗi khúc thì thanh tiến độ mãi mãi đứng ở 1/total.
+                """
+                if done == 1:
+                    progress_service.set_stage(
+                        video.id, "separating", total=total, kind="dub"
+                    )
+                progress_service.advance(video.id, 1, "dub")
+
+            _vocals_path, background_path = audio_chunk_service.separate_vocals(
+                original_audio_path,
+                video_dir / "demucs_out",
+                duration=video.duration_seconds,
+                on_chunk_done=report_chunk,
             )
 
             voice_path = video_dir / "voice_timeline.mp3"

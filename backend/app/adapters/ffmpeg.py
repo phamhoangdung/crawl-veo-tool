@@ -1,5 +1,6 @@
 import logging
 import platform
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -185,20 +186,45 @@ def extract_last_frame(
     )
 
 
-def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, *, font_size: int) -> None:
+# Alignment trong `force_style` đi theo đánh số SSA v4 (2 = giữa-dưới, +4 = đẩy
+# lên trên ⇒ 6 = giữa-trên), KHÔNG phải sơ đồ bàn phím số của ASS v4+ mà ai cũng
+# tưởng. Đã đo bằng ffmpeg thật: Alignment=8 đặt chữ ra GIỮA khung hình, không
+# phải trên — và nó không báo lỗi gì, chỉ lặng lẽ sai chỗ.
+_SUBTITLE_ALIGNMENT = {"bottom": 2, "top": 6}
+
+
+def burn_subtitles(
+    video_path: Path,
+    srt_path: Path,
+    output_path: Path,
+    *,
+    font_size: int,
+    position: str = "bottom",
+) -> None:
     """Burn phụ đề vào video. `font_size` nên chọn theo tỉ lệ khung hình (video dọc 9:16
     cần chữ to hơn tương đối vì khung hẹp) — xem `subtitle_service.pick_font_size_for`.
+
+    `position` = "bottom" (mặc định, chuẩn phụ đề thông thường) hoặc "top" — đặt
+    lên trên khi video gốc đã có phụ đề cháy sẵn ở dưới, nếu không hai lớp chữ sẽ
+    chồng lên nhau.
 
     Đường dẫn srt phải escape dấu `:` và `\\` cho cú pháp filter của ffmpeg trên Windows.
     """
     ensure_ffmpeg_available()
+    alignment = _SUBTITLE_ALIGNMENT.get(position)
+    if alignment is None:
+        raise ValueError(
+            f"Vị trí phụ đề không hợp lệ: {position!r} (chỉ nhận {sorted(_SUBTITLE_ALIGNMENT)})"
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     escaped_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
     subprocess.run(
         [
             "ffmpeg", "-y",
             "-i", str(video_path),
-            "-vf", f"subtitles='{escaped_srt}':force_style='FontSize={font_size},Outline=1'",
+            "-vf",
+            f"subtitles='{escaped_srt}':force_style='FontSize={font_size},"
+            f"Outline=1,Alignment={alignment}'",
             "-c:a", "copy",
             str(output_path),
         ],
@@ -697,3 +723,90 @@ def replace_audio_track(video_path: Path, new_audio_path: Path, output_path: Pat
         check=True,
         capture_output=True,
     )
+
+
+_SILENCE_START_RE = re.compile(r"silence_start:\s*(-?[\d.]+)")
+_SILENCE_END_RE = re.compile(r"silence_end:\s*(-?[\d.]+)")
+
+
+def detect_silences(
+    audio_path: Path, *, noise_db: int = -30, min_silence_seconds: float = 0.4
+) -> list[tuple[float, float]]:
+    """Các khoảng lặng trong audio, dạng [(start, end), ...].
+
+    Dùng filter `silencedetect` — nó ghi kết quả ra **stderr** dưới dạng log chứ
+    không phải stdout, nên phải đọc stderr chứ không parse output file. Ghi đầu
+    ra vào `-f null` vì ta chỉ cần log, không cần file nào.
+
+    Cặp start/end có thể lệch nhau nếu file kết thúc giữa một khoảng lặng
+    (`silence_start` không có `silence_end` tương ứng) — trường hợp đó bỏ qua
+    khoảng cuối thay vì đoán độ dài.
+    """
+    ensure_ffmpeg_available()
+    result = subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-nostats",
+            "-i", str(audio_path),
+            "-af", f"silencedetect=noise={noise_db}dB:d={min_silence_seconds}",
+            "-f", "null", "-",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    starts = [float(m) for m in _SILENCE_START_RE.findall(result.stderr)]
+    ends = [float(m) for m in _SILENCE_END_RE.findall(result.stderr)]
+    return list(zip(starts, ends))
+
+
+def slice_audio(input_path: Path, output_path: Path, start: float, end: float) -> None:
+    """Cắt một đoạn audio [start, end) ra file riêng, giữ nguyên định dạng wav.
+
+    `-ss`/`-to` đặt SAU `-i` có chủ đích: đặt trước thì ffmpeg seek theo keyframe
+    gần nhất, sai số tới cả giây — với audio ghép lại sau đó thì lệch là hỏng.
+    """
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", str(input_path),
+            "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+            "-acodec", "pcm_s16le",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+def concat_audio(parts: list[Path], output_path: Path) -> None:
+    """Nối các file audio đã cắt lại theo đúng thứ tự (concat demuxer).
+
+    Yêu cầu các part cùng định dạng/sample rate — đúng với trường hợp dùng ở đây
+    vì chúng đều là output cùng một lần cắt từ một file gốc.
+    """
+    ensure_ffmpeg_available()
+    if not parts:
+        raise ValueError("Không có phần nào để nối")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    list_file = output_path.parent / f"{output_path.stem}_concat.txt"
+    # Đường dẫn trong file list phải escape dấu nháy đơn; dùng forward slash cho
+    # Windows vì ffmpeg đọc file list theo cú pháp riêng, không theo shell.
+    list_file.write_text(
+        "\n".join(f"file '{str(p).replace(chr(92), '/')}'" for p in parts),
+        encoding="utf-8",
+    )
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", str(list_file),
+                "-acodec", "pcm_s16le",
+                str(output_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+    finally:
+        list_file.unlink(missing_ok=True)
