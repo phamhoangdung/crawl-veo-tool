@@ -8,13 +8,17 @@ import {
   type CropBox,
   createClip,
   getClipCandidates,
-  getTimeline,
+  getProject,
+  getProjectTimelineSuggestion,
+  getSubjectTimeline,
+  projectOutputUrl,
   getAudioStems,
   getVideoDetail,
   getWaveform,
-  renderTimeline,
-  saveTimeline,
+  renderSubjectTimeline,
+  saveSubjectTimeline,
   type TimelineOperations,
+  type TimelineSubject,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useEditorShortcuts } from '@/hooks/use-editor-shortcuts'
@@ -46,7 +50,8 @@ function formatClipTime(seconds: number): string {
 }
 
 interface TimelineEditorProps {
-  videoId: number
+  /** Video crawl về, hoặc dự án nhiều cảnh dựng bằng AI — cùng một editor. */
+  subject: TimelineSubject
 }
 
 /** Dựng timeline gợi ý ban đầu từ pipeline đã có (video gốc + audio đã lồng
@@ -139,8 +144,23 @@ async function buildSuggestionFromPipeline(
   return { tracks }
 }
 
-export function TimelineEditor({ videoId }: TimelineEditorProps) {
+/** Gợi ý ban đầu tuỳ theo chủ thể: video crawl dựng từ pipeline (bản gốc +
+ * giọng đọc + phụ đề), còn dự án AI lấy thẳng chuỗi cảnh từ canvas — backend
+ * dựng hộ vì nó mới biết cảnh nào đã có clip. */
+async function buildSuggestion(
+  subject: TimelineSubject
+): Promise<TimelineOperations> {
+  if (subject.type === 'video') return buildSuggestionFromPipeline(subject.id)
+  return { tracks: await getProjectTimelineSuggestion(subject.id) }
+}
+
+export function TimelineEditor({ subject }: TimelineEditorProps) {
   const queryClient = useQueryClient()
+  // Các tính năng dưới đây chỉ có nghĩa với video crawl: gợi ý cắt clip ngắn,
+  // waveform và stem audio đều sinh ra từ pipeline dịch/lồng tiếng, dự án AI
+  // chưa đi qua pipeline đó nên không có gì để đọc.
+  const isVideo = subject.type === 'video'
+  const videoId = subject.id
   const operations = useEditorStore((s) => s.operations)
   const setOperations = useEditorStore((s) => s.setOperations)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -156,6 +176,7 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
   const { data: clipCandidates } = useQuery({
     queryKey: ['clip-candidates', videoId],
     queryFn: () => getClipCandidates(videoId),
+    enabled: isVideo,
   })
 
   function selectCandidate(candidate: ClipCandidate) {
@@ -181,13 +202,16 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
 
   // Chưa lưu timeline nào thì dựng luôn từ pipeline: người dùng đã ở trang
   // video này rồi, bắt bấm thêm một nút mới thấy nội dung là bước thừa.
+  // Khoá cache phải gồm cả loại chủ thể: video id=1 và dự án id=1 là hai thứ
+  // khác nhau, dùng chung khoá ['timeline', 1] thì mở dự án sẽ thấy timeline
+  // của video.
   const { data: savedTracks, isLoading } = useQuery({
-    queryKey: ['timeline', videoId],
+    queryKey: ['timeline', subject.type, subject.id],
     queryFn: async () => {
-      const saved = await getTimeline(videoId)
+      const saved = await getSubjectTimeline(subject)
       // Backend trả null khi chưa lưu timeline nào (không phải mảng rỗng).
       if (saved && saved.length > 0) return saved
-      const suggested = await buildSuggestionFromPipeline(videoId)
+      const suggested = await buildSuggestion(subject)
       return suggested.tracks
     },
   })
@@ -195,12 +219,14 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
   const { data: videoDetail } = useQuery({
     queryKey: ['video', videoId],
     queryFn: () => getVideoDetail(videoId),
+    enabled: isVideo,
   })
 
   const { data: waveformPeaks } = useQuery({
     queryKey: ['waveform', videoId],
     queryFn: () => getWaveform(videoId),
     retry: false,
+    enabled: isVideo,
   })
 
   useEffect(() => {
@@ -251,36 +277,58 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
   }, [seekRequest, consumeSeek])
 
   const applySuggestion = useMutation({
-    mutationFn: () => buildSuggestionFromPipeline(videoId),
+    mutationFn: () => buildSuggestion(subject),
     onSuccess: (ops) => {
       setOperations(ops)
       toast.success('Đã điền gợi ý — kéo-chỉnh rồi bấm Lưu.')
     },
     onError: () =>
-      toast.error('Không tạo được gợi ý (video chưa có đủ dữ liệu?).'),
+      toast.error(
+        isVideo
+          ? 'Không tạo được gợi ý (video chưa có đủ dữ liệu?).'
+          : 'Không tạo được gợi ý — các cảnh cần có clip trước (sinh ở canvas).'
+      ),
   })
 
   const save = useMutation({
-    mutationFn: () => saveTimeline(videoId, operations),
+    mutationFn: () => saveSubjectTimeline(subject, operations),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['timeline', videoId] })
+      queryClient.invalidateQueries({
+        queryKey: ['timeline', subject.type, subject.id],
+      })
       toast.success('Đã lưu timeline.')
     },
     onError: () => toast.error('Lưu timeline thất bại.'),
   })
 
   const render = useMutation({
-    mutationFn: () => renderTimeline(videoId),
+    mutationFn: () => renderSubjectTimeline(subject),
     onSuccess: () => toast.success('Đã render xong video.'),
     onError: () => toast.error('Render thất bại — kiểm tra lại timeline.'),
   })
 
-  const previewSource = operations.tracks.find((t) => t.type === 'video')
-    ?.clips[0]?.source
+  const { data: projectDetail } = useQuery({
+    queryKey: ['project', subject.id],
+    queryFn: () => getProject(subject.id),
+    enabled: !isVideo,
+  })
+
+  const hasVideoTrack = operations.tracks.some(
+    (t) => t.type === 'video' && t.clips.length > 0
+  )
 
   // Ưu tiên bản đã lồng tiếng để nghe được giọng đọc khi kéo-chỉnh; video chưa
   // dub thì phát bản gốc thay vì hỏng hẳn khung preview.
   const previewVariant = videoDetail?.dubbed_path ? 'dubbed' : 'original'
+  // Dự án AI xem trước bằng bản dựng thô từ canvas: từng cảnh là file rời, trình
+  // duyệt không ghép hộ được. Chưa dựng thô thì không có gì để phát.
+  const previewUrl = isVideo
+    ? hasVideoTrack
+      ? `${API_BASE_URL}/api/library/${videoId}/stream?variant=${previewVariant}`
+      : null
+    : (projectDetail?.rendered_path ?? null)
+      ? projectOutputUrl(subject.id)
+      : null
 
   return (
     <div className='space-y-4'>
@@ -316,10 +364,10 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
         </CardHeader>
         <CardContent>
           <div className='relative mx-auto w-full max-w-md overflow-hidden rounded-lg bg-black'>
-            {previewSource ? (
+            {previewUrl ? (
               <video
                 ref={videoRef}
-                src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=${previewVariant}`}
+                src={previewUrl}
                 controls
                 className='max-h-[55vh] w-full object-contain'
                 onTimeUpdate={(e) =>
@@ -336,7 +384,9 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
               <div className='flex h-48 items-center justify-center text-sm text-muted-foreground'>
                 {isLoading
                   ? 'Đang tải...'
-                  : 'Video chưa được tải về máy — chạy bước "Tải video" trước.'}
+                  : isVideo
+                    ? 'Video chưa được tải về máy — chạy bước "Tải video" trước.'
+                    : 'Chưa có bản dựng thô — bấm "Dựng video" ở canvas trước, rồi quay lại đây tinh chỉnh.'}
               </div>
             )}
             <OverlayLayer currentTime={currentTime} />
@@ -375,6 +425,9 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
 
       <ClipInspector />
 
+      {/* Gợi ý cắt clip lấy từ transcript đã dịch của video crawl — dự án AI
+          không có transcript nên ẩn hẳn thay vì hiện một thẻ luôn rỗng. */}
+      {isVideo && (
       <Card>
         <CardHeader>
           <CardTitle className='text-base'>
@@ -436,6 +489,7 @@ export function TimelineEditor({ videoId }: TimelineEditorProps) {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

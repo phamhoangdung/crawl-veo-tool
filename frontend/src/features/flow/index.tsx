@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createProject, deleteProject, getProjects } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -16,10 +16,14 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { TimelineEditor } from '@/features/editor'
 import { ProjectCanvas } from './components/project-canvas'
 
 export function ProjectFlow() {
   const [openProjectId, setOpenProjectId] = useState<number | null>(null)
+  // Canvas lo phần "cảnh nào, sinh bằng gì"; editor lo phần tinh chỉnh sau khi
+  // đã dựng thô (thêm nhạc, phụ đề, cắt bớt). Cùng một dự án, hai góc nhìn.
+  const [view, setView] = useState<'canvas' | 'editor'>('canvas')
 
   return (
     <>
@@ -38,16 +42,45 @@ export function ProjectFlow() {
           <ProjectList onOpen={setOpenProjectId} />
         ) : (
           <>
-            <Button
-              variant='ghost'
-              size='sm'
-              className='mb-2 gap-1'
-              onClick={() => setOpenProjectId(null)}
-            >
-              <ArrowLeft className='size-3.5' />
-              Danh sách dự án
-            </Button>
-            <ProjectCanvas projectId={openProjectId} />
+            <div className='mb-2 flex items-center gap-2'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='gap-1'
+                onClick={() => {
+                  setOpenProjectId(null)
+                  setView('canvas')
+                }}
+              >
+                <ArrowLeft className='size-3.5' />
+                Danh sách dự án
+              </Button>
+              <div className='ms-auto flex gap-1'>
+                <Button
+                  variant={view === 'canvas' ? 'default' : 'outline'}
+                  size='sm'
+                  onClick={() => setView('canvas')}
+                >
+                  Canvas cảnh
+                </Button>
+                <Button
+                  variant={view === 'editor' ? 'default' : 'outline'}
+                  size='sm'
+                  className='gap-1'
+                  onClick={() => setView('editor')}
+                >
+                  <SlidersHorizontal className='size-3.5' />
+                  Tinh chỉnh timeline
+                </Button>
+              </div>
+            </div>
+            {view === 'canvas' ? (
+              <ProjectCanvas projectId={openProjectId} />
+            ) : (
+              <TimelineEditor
+                subject={{ type: 'project', id: openProjectId }}
+              />
+            )}
           </>
         )}
       </Main>

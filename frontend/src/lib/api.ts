@@ -120,6 +120,9 @@ export interface VideoFiles {
   video_id: number
   title: string
   status: VideoStatus
+  /** Ảnh bìa từ nền tảng gốc. Backend (`VideoFilesRead`) vẫn luôn trả trường này,
+   * chỉ là type ở đây thiếu — nên 3 chỗ dùng nó bị tsc báo lỗi. */
+  cover_url: string | null
   video_dir: string | null
   files: FileEntry[]
   total_bytes: number
@@ -439,9 +442,16 @@ export async function dubVideo(videoId: number, keepBackground = true) {
   return data
 }
 
-export async function burnSubtitles(videoId: number) {
+/** `position='top'` khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc định thì
+ * hai lớp chữ chồng lên nhau. */
+export async function burnSubtitles(
+  videoId: number,
+  position: 'bottom' | 'top' = 'bottom'
+) {
   const { data } = await api.post<VideoDetail>(
-    `/api/videos/${videoId}/burn-subtitles`
+    `/api/videos/${videoId}/burn-subtitles`,
+    null,
+    { params: { position } }
   )
   return data
 }
@@ -503,6 +513,104 @@ export async function cleanupOrphanFiles() {
   const { data } = await api.post<{ freed_bytes: number }>(
     '/api/files/cleanup-orphans'
   )
+  return data
+}
+
+/** Xoá thư mục job cũ hơn `maxAgeDays`. Cùng hàm mà vòng lặp dọn dẹp nền gọi —
+ * nút này chỉ để chạy ngay, không đợi hết chu kỳ 24h. */
+export async function cleanupOldJobs(maxAgeDays = 30) {
+  const { data } = await api.post<{
+    removed_job_ids: string[]
+    max_age_days: number
+  }>('/api/files/cleanup-old-jobs', null, {
+    params: { max_age_days: maxAgeDays },
+  })
+  return data
+}
+
+// --- Douyin (Phase 3) ---
+// Mới có phần cấu hình + thăm dò. Tải video chưa làm: hình dạng JSON của Douyin
+// chỉ biết được khi gọi thật bằng cookie hợp lệ, viết bóc tách theo phỏng đoán
+// sẽ tạo ra thứ trông như chạy được mà sai ở chỗ không ai kiểm ra.
+
+export interface DouyinStatus {
+  configured: boolean
+  hint: string
+}
+
+export interface DouyinProbe {
+  aweme_id: string
+  top_level_keys: string[]
+  detail_keys: string[]
+}
+
+export async function getDouyinStatus() {
+  const { data } = await api.get<DouyinStatus>('/api/jobs/douyin/status')
+  return data
+}
+
+export async function probeDouyinUrl(shareUrl: string) {
+  const { data } = await api.post<DouyinProbe>('/api/jobs/douyin/probe', {
+    share_url: shareUrl,
+  })
+  return data
+}
+
+// --- Chạy pipeline hàng loạt (Phase 1/2) ---
+
+export type BatchStep = 'download' | 'transcribe' | 'translate' | 'dub' | 'burn'
+
+export interface BatchItem {
+  video_id: number
+  title: string
+  status: string
+  current_step: string | null
+  error: string | null
+}
+
+export interface BatchStatus {
+  id: string
+  total: number
+  done: number
+  failed: number
+  skipped: number
+  running: number
+  pending: number
+  is_running: boolean
+  cancelled: boolean
+  steps: string[]
+  items: BatchItem[]
+}
+
+export async function startBatch(
+  videoIds: number[],
+  steps?: BatchStep[],
+  concurrency = 1
+) {
+  const { data } = await api.post<BatchStatus>('/api/batch/start', {
+    video_ids: videoIds,
+    steps: steps ?? null,
+    concurrency,
+  })
+  return data
+}
+
+/** `null` khi chưa từng chạy batch nào trong phiên chạy này của backend. */
+export async function getBatchStatus() {
+  const { data } = await api.get<BatchStatus | null>('/api/batch/status')
+  return data
+}
+
+export async function cancelBatch() {
+  const { data } = await api.post<{ cancelled: boolean }>('/api/batch/cancel')
+  return data
+}
+
+/** Video chưa chạy hết pipeline — nguồn đầu vào gợi ý cho batch tiếp theo. */
+export async function getPendingVideoIds(limit = 50) {
+  const { data } = await api.get<number[]>('/api/batch/pending-videos', {
+    params: { limit },
+  })
   return data
 }
 
@@ -684,6 +792,53 @@ export async function renderTimeline(videoId: number) {
     `/api/videos/${videoId}/timeline/render`
   )
   return data
+}
+
+/** Timeline neo được vào video crawl về HOẶC dự án nhiều cảnh dựng bằng AI
+ * (Phase 14/16). Hai bên dùng chung editor nên gói lại thành một kiểu thay vì
+ * truyền cờ boolean `isProject` xuống khắp nơi. */
+export type TimelineSubject =
+  | { type: 'video'; id: number }
+  | { type: 'project'; id: number }
+
+function subjectBase(subject: TimelineSubject): string {
+  return subject.type === 'video'
+    ? `/api/videos/${subject.id}`
+    : `/api/projects/${subject.id}`
+}
+
+export async function getSubjectTimeline(subject: TimelineSubject) {
+  const { data } = await api.get<{ tracks: TimelineTrack[] | null }>(
+    `${subjectBase(subject)}/timeline`
+  )
+  return data.tracks
+}
+
+export async function saveSubjectTimeline(
+  subject: TimelineSubject,
+  operations: TimelineOperations
+) {
+  const { data } = await api.put<{ tracks: TimelineTrack[] }>(
+    `${subjectBase(subject)}/timeline`,
+    operations
+  )
+  return data.tracks
+}
+
+export async function renderSubjectTimeline(subject: TimelineSubject) {
+  const { data } = await api.post<{ rendered_path: string }>(
+    `${subjectBase(subject)}/timeline/render`
+  )
+  return data
+}
+
+/** Gợi ý timeline cho dự án: dựng thẳng từ các cảnh đã sinh clip trên canvas —
+ * tương đương vai trò `buildSuggestionFromPipeline` của video crawl. */
+export async function getProjectTimelineSuggestion(projectId: number) {
+  const { data } = await api.get<{ tracks: TimelineTrack[] }>(
+    `/api/projects/${projectId}/timeline/suggestion`
+  )
+  return data.tracks
 }
 
 export async function getWaveform(videoId: number, variant: string = 'dubbed') {
@@ -868,6 +1023,83 @@ export async function generateVideoClip(payload: {
     payload
   )
   return data
+}
+
+// --- Sinh nội dung chạy nền (Phase 14) ---
+// Provider thật mất 1-5 phút/clip. Bản đồng bộ ở trên vẫn giữ cho MCP/script
+// (agent gọi tuần tự thì chờ luôn là đơn giản hơn), còn UI dùng bản async này để
+// rời trang rồi quay lại vẫn thấy kết quả.
+
+export interface GenerationJob {
+  id: string
+  kind: 'keyframe' | 'clip'
+  label: string
+  status: 'running' | 'done' | 'failed'
+  asset_id: number | null
+  file_path: string | null
+  cost_usd: number
+  from_cache: boolean
+  error: string | null
+  created_at: string
+  finished_at: string | null
+}
+
+export async function generateKeyframeAsync(payload: {
+  prompt: string
+  model?: string
+  character_ref_id?: number | null
+  output_prefix?: string | null
+  confirm_expensive?: boolean
+}) {
+  const { data } = await api.post<GenerationJob>(
+    '/api/ai-studio/generate/keyframe/async',
+    payload
+  )
+  return data
+}
+
+export async function generateVideoClipAsync(payload: {
+  prompt: string
+  keyframe_start_asset_id: number
+  keyframe_end_asset_id?: number | null
+  model?: string
+  duration_seconds?: number
+  output_prefix?: string | null
+  confirm_expensive?: boolean
+}) {
+  const { data } = await api.post<GenerationJob>(
+    '/api/ai-studio/generate/video-clip/async',
+    payload
+  )
+  return data
+}
+
+export async function getGenerationJob(jobId: string) {
+  const { data } = await api.get<GenerationJob>(
+    `/api/ai-studio/generate/jobs/${jobId}`
+  )
+  return data
+}
+
+export async function listGenerationJobs() {
+  const { data } = await api.get<GenerationJob[]>('/api/ai-studio/generate/jobs')
+  return data
+}
+
+/** Chờ một job chạy xong. Ném lỗi khi job thất bại để `useMutation` vào nhánh
+ * `onError` như lời gọi đồng bộ trước đây — phía gọi không phải đổi cách xử lý. */
+export async function waitForGenerationJob(
+  jobId: string,
+  { intervalMs = 1500 }: { intervalMs?: number } = {}
+): Promise<GenerationJob> {
+  for (;;) {
+    const job = await getGenerationJob(jobId)
+    if (job.status === 'done') return job
+    if (job.status === 'failed') {
+      throw new Error(job.error ?? 'Sinh nội dung thất bại')
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
 }
 
 /** Đưa clip/ảnh đã sinh vào kho file dùng chung để ghép trong Timeline Editor. */
