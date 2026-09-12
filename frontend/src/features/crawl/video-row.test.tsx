@@ -31,6 +31,7 @@ function video(overrides: Partial<VideoRead> = {}): VideoRead {
 function task(overrides: Partial<TaskProgress> = {}): TaskProgress {
   return {
     video_id: 1,
+    subject_type: 'video',
     title: 'v',
     kind: 'download',
     kind_label: 'Tải video',

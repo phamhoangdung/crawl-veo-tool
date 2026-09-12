@@ -7,6 +7,7 @@ import {
   downloadVideo,
   loadMoreJobVideos,
   type JobWithVideosRead,
+  type Platform,
   type VideoRead,
 } from '@/lib/api'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
@@ -39,6 +40,7 @@ import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { ThumbPreview } from '@/components/thumb-preview'
 import { TranslatedTitle } from '@/components/translated-title'
+import { DouyinPanel } from './douyin-panel'
 
 function formatDuration(seconds: number | null) {
   if (seconds === null) return '—'
@@ -164,12 +166,14 @@ export function VideoRow({
             {task?.is_running ? task.stage_label || 'Đang tải…' : 'Đang xử lý…'}
           </span>
         )}
+        {/* Trang quản lý file thực tế là /videos (dung lượng + file từng video);
+            route '/files' chưa bao giờ tồn tại nên link này vốn đã hỏng. */}
         {!canDownload && video.status !== 'downloading' && (
           <Link
-            to='/files'
+            to='/videos'
             className='text-xs text-muted-foreground hover:underline'
           >
-            Xử lý ở Quản lý file →
+            Xử lý ở Video của tôi →
           </Link>
         )}
       </TableCell>
@@ -178,6 +182,7 @@ export function VideoRow({
 }
 
 export function Crawl() {
+  const [platform, setPlatform] = useState<Platform>('bilibili')
   const [keyword, setKeyword] = useState('')
   const [translateKeyword, setTranslateKeyword] = useState(true)
   const [job, setJob] = useState<JobWithVideosRead | null>(null)
@@ -238,15 +243,42 @@ export function Crawl() {
         <div className='mb-4'>
           <h1 className='text-2xl font-bold tracking-tight'>Crawl</h1>
           <p className='text-muted-foreground'>
-            Nhập từ khoá để tìm và tải video từ Bilibili.
+            {platform === 'bilibili'
+              ? 'Nhập từ khoá để tìm và tải video từ Bilibili.'
+              : 'Dán link chia sẻ Douyin để thăm dò (chưa tải được video).'}
           </p>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Tạo job crawl</CardTitle>
+            {/* Hai nền tảng khác hẳn nhau về cách tìm: Bilibili tìm theo từ
+                khoá, Douyin không có tìm kiếm công khai dùng được nên đi theo
+                link chia sẻ từng video. Ép chung một ô input sẽ gây hiểu nhầm. */}
+            <div className='flex gap-1 pt-1'>
+              <Button
+                type='button'
+                size='sm'
+                variant={platform === 'bilibili' ? 'default' : 'outline'}
+                onClick={() => setPlatform('bilibili')}
+              >
+                Bilibili
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant={platform === 'douyin' ? 'default' : 'outline'}
+                onClick={() => setPlatform('douyin')}
+              >
+                Douyin
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
+            {platform === 'douyin' ? (
+              <DouyinPanel />
+            ) : (
+            <>
             <form
               className='space-y-3'
               onSubmit={(e) => {
@@ -283,6 +315,8 @@ export function Crawl() {
               <p className='mt-2 text-sm text-destructive'>
                 Có lỗi khi crawl: {(mutation.error as Error).message}
               </p>
+            )}
+            </>
             )}
           </CardContent>
         </Card>
