@@ -20,7 +20,7 @@ Xuất phụ đề song ngữ, burn-in tuỳ chọn, có trang thư viện quả
 - [x] API: `GET /api/videos/{id}/subtitles.srt` (xuất srt), `POST /api/videos/{id}/burn-subtitles` (burn vào bản đã dub, ưu tiên `dubbed_path` nếu có, fallback `local_path`).
 - [x] Trang Library (`/library`): danh sách video đã xử lý (query theo `local_path IS NOT NULL`), nút tải riêng theo variant (dubbed/burned), chọn nhiều video + tải zip (`GET /api/library/download-zip?video_ids=...&variant=...`).
 - [ ] Cảnh báo hardsub — **không làm**, xem Ghi chú.
-- [ ] Tuỳ chọn vị trí đặt phụ đề (trên/dưới) — chưa làm, phụ thuộc vào việc có làm hardsub detection hay không (nếu không detect hardsub thì tuỳ chọn vị trí bớt cấp thiết, mặc định burn ở dưới như chuẩn phụ đề thông thường).
+- [x] Tuỳ chọn vị trí đặt phụ đề (trên/dưới) — **xong & verify bằng ffmpeg thật**. Làm độc lập với hardsub detection: không tự phát hiện được thì để người dùng tự chọn khi thấy video gốc có chữ sẵn.
 
 ## Tiêu chí hoàn thành (Definition of Done)
 - [x] Xuất được file `.srt` song ngữ đúng timestamp — verify thật qua `GET /api/videos/59/subtitles.srt` (419 dòng, format đúng chuẩn SRT: index/timestamp/text).
@@ -48,3 +48,24 @@ Sửa trong `hooks/use-task-progress.ts`: mỗi lần SSE đẩy dữ liệu, so
 **Endpoint mới** `GET /api/library/{id}/stream?variant=` — phát video inline trong thẻ `<video>`. Khác `/download`: **không đặt `filename`** nên trình duyệt phát thay vì tải xuống. `FileResponse` tự xử lý HTTP Range (verify: trả 206 với header `Range`) nên tua được.
 
 **Lưu ý React**: bản nháp phụ đề reset bằng `key` trên component con, **không** dùng `useEffect` để đồng bộ state từ props — lint rule `set-state-in-effect` chặn đúng, và cách dùng `key` cũng sạch hơn.
+
+
+### Phiên 2026-09-12 — vị trí phụ đề trên/dưới
+
+Làm mục này **không cần** hardsub detection: tool không tự nhận ra video có chữ sẵn,
+nhưng người dùng nhìn là thấy — cho họ một cái dropdown còn hơn bắt chịu chữ chồng chữ.
+
+`ffmpeg.burn_subtitles(..., position="bottom"|"top")`; API
+`POST /api/videos/{id}/burn-subtitles?position=...` (giá trị lạ → 422); UI là ô chọn
+ngay trên nút "Ghép phụ đề vào video".
+
+**Bẫy lớn, chỉ lộ ra khi đo:** `force_style='Alignment=N'` đi theo đánh số **SSA v4**
+chứ không phải sơ đồ bàn phím số của ASS v4+ mà tài liệu hay nhắc. Tôi viết
+`Alignment=8` ("giữa-trên" theo numpad) — ffmpeg **không báo lỗi gì** mà đặt chữ ra
+GIỮA khung hình. Đo cả dải trên/giữa/dưới với các giá trị 2/5/6/8/10 mới ra: top-center
+là **6**. Nếu chỉ xem output chạy được rồi tick xong thì lỗi này lọt thẳng vào bản dùng thật.
+
+**Cách verify (giữ lại trong test, `TestBurnSubtitlePosition`):** nền đen phẳng cho
+YAVG=16, chữ trắng kéo độ sáng trung bình của dải chứa nó lên ~31 — so YAVG dải trên
+với dải dưới là biết chữ thật sự nằm đâu, không phải đoán. (Bản ffmpeg trên máy này
+không xuất `YSTDEV`, chỉ có `YAVG`.)

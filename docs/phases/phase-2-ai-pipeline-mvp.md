@@ -25,7 +25,7 @@ Từ 1 video đã tải (Phase 1), chạy hết pipeline: transcribe → dịch 
 - [x] `app/api/pipeline.py`: `POST /api/videos/{id}/download`, `/transcribe`, `/translate`, `PUT /transcript` (sửa tay), `POST /dub`, `GET /api/videos/{id}` (xem chi tiết + transcript).
 - [x] `app/api/api_keys.py` + `app/services/api_key_service.py`: `GET/PUT /api/api-keys` — module quản lý key phát sinh ngay từ Phase 2 vì logic fallback cần biết key nào đã cấu hình (ban đầu dự kiến làm ở Phase 3, đẩy lên sớm hơn).
 - [x] Frontend: trang `/api-keys` (nhập/lưu key theo provider, hiển thị masked key đã lưu) + nút hành động theo từng bước ngay trong bảng kết quả ở trang `/crawl` (Tải video → Tách lời thoại → Dịch → Lồng tiếng), tự cập nhật trạng thái sau mỗi bước.
-- [ ] Trang xem/sửa transcript trực tiếp trên UI (hiện chỉ có API `PUT /transcript` hoạt động, chưa có form sửa trên giao diện) — để làm khi cần, backend đã sẵn sàng.
+- [x] Trang xem/sửa transcript trực tiếp trên UI — **thực ra đã có từ Phase 5** (`features/videos/subtitle-editor.tsx`, dialog sửa từng câu + nghe thử, gọi `updateTranscript` → `PUT /transcript`), chỉ là checklist này chưa được tick. Kiểm lại 2026-09-12.
 - [ ] Batch queue qua `ProcessPoolExecutor` — chưa làm, mỗi action hiện chạy đồng bộ trong request; đủ dùng khi xử lý từng video một, cần làm khi muốn chạy nhiều video song song (dời sang cùng lúc với Phase 6 hoặc khi thực sự cần).
 
 ## Tiêu chí hoàn thành (Definition of Done)

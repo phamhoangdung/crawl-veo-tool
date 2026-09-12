@@ -101,11 +101,11 @@ Sinh ảnh còn có đường miễn phí thật: **Gemini API free tier** có q
 - [x] Ảnh tĩnh + Ken Burns sinh được clip thật (ffmpeg, không fake) — ffprobe: h264, 3s = 90 frame @30fps, 1280x720, `cost_estimate=0`. Cả `zoom_in` và `pan_right`.
 - [x] Clip xuất hiện trong kho dùng chung (`asset_service` — nguồn của `AssetPicker`): verify qua HTTP (kho video 0 → 1, file phát được với `video/mp4`) và browser thật (bấm "Thêm vào kho để ghép" → toast → kho 1 → 2).
 - [x] Renderer ghép được clip AI Studio: 2 clip → file 5s (3+2) h264 hợp lệ, gọi trực tiếp `ffmpeg.render_timeline()`.
-- [ ] **Ghép + render qua UI Timeline Editor** — KHÔNG đạt được: timeline neo vào bảng `Video`, clip AI Studio là `GeneratedAsset` nên không có chỗ neo. Cần chốt hướng (xem Ghi chú "PHÁT HIỆN KHOẢNG TRỐNG KIẾN TRÚC").
+- [x] **Ghép + render qua UI Timeline Editor** — đã thông (phiên 2026-09-12): timeline được tổng quát hoá cho cả `Video` lẫn `GenerationProject`, mở từ trang Dự án bằng nút "Tinh chỉnh timeline". Xem Ghi chú "Phiên 2026-09-12".
 - [x] Cache: sinh 2 lần cùng prompt+ref+model → lần 2 trả asset cũ, KHÔNG gọi adapter (test đếm số lần gọi adapter), UI hiện toast "dùng lại". Cache tự bỏ qua khi file đã bị xoá khỏi ổ đĩa.
 - [x] Chặn đúng khi vượt ngưỡng $1/lần (409 → Dialog xác nhận, `confirm_expensive` bỏ qua được) và khi vượt hạn mức tháng $30 (402, chặn cứng kể cả đã confirm). Chi tiêu tháng trước không tính vào tháng này.
 - [x] Fake adapter mô phỏng 429 (mang `response.status_code=429` thật) và policy-blocked → verify qua `FALAI_FAKE_FORCE_ERROR`. **Chưa verify**: rotation key thật (chưa có adapter thật), nút "Nhờ AI sửa prompt" (chưa làm UI đó).
-- [ ] UI progress đúng khi job chạy lâu (fake delay 30-60s), rời trang rồi quay lại vẫn thấy job đang chạy. **Chưa verify** — chạy với delay=0; hiện chỉ có text "có thể rời trang", chưa có job store thật để quay lại xem tiến độ.
+- [x] UI progress đúng khi job chạy lâu, rời trang rồi quay lại vẫn thấy job đang chạy — **xong & verify với uvicorn thật + delay giả 4s** (xem Ghi chú phiên 2026-09-12).
 - [x] MCP: **client thật qua stdio** spawn `python -m app.mcp_server`, backend live, chạy đủ luồng list refs → cost → keyframe → keyframe lần 2 (cache=True) → Ken Burns → video clip → budget; 3 file tồn tại thật trên đĩa. Token thu hồi → 401; thiếu scope → 403; token rác → 401. **Chưa verify**: hạn mức tháng chặn qua đường MCP (logic dùng chung `_guard_cost` nên có hiệu lực, nhưng chưa chạy thử qua MCP).
 
 ### Verify UI trong browser thật (Playwright + Chromium, backend live)
@@ -181,6 +181,97 @@ Chi tiết: `export_to_asset_library()` **copy** chứ không move — bản g�
 2. **Cho phép `Video` kiểu "local"** (nhanh hơn): tạo row `Video` không `platform`/`source_url` để chứa timeline. Rẻ nhưng làm bẩn state machine của `Video` — bảng đó đang giả định mọi row đều đi qua pipeline crawl → dịch → lồng tiếng.
 
 Cố ý **không tự chọn** vì đây là quyết định mô hình dữ liệu ảnh hưởng cả Phase 10/13, vượt phạm vi "tích hợp thư viện" ban đầu. Hiện tại clip AI Studio vẫn dùng được ở mọi chỗ khác chọn file từ kho dùng chung (`asset_service`).
-- [ ] Job store cho tác vụ chạy lâu: hiện chỉ có text "có thể rời trang" nhưng chưa có cơ chế quay lại xem tiến độ thật (fake delay=0 nên chưa lộ vấn đề; sẽ lộ khi dùng adapter thật mất 1-5 phút).
+- [x] Job store cho tác vụ chạy lâu — xong (`app/services/generation_job_service.py` + endpoint `/generate/*/async` + bảng "Lần sinh gần đây" ở AI Studio).
 - [ ] Rotation key `falai` — chưa có gì để rotate khi chưa có adapter thật.
 - [ ] Chạy `/code-review` trước khi đánh dấu phase hoàn thành.
+
+### Phiên 2026-09-12 — lấp khoảng trống kiến trúc timeline
+
+**Chốt hướng 1** (bảng riêng cho dự án) — không phải quyết định mới mà là xác nhận
+điều Phase 16 đã làm trên thực tế: bảng `GenerationProject` + `Scene` ra đời ở đó
+chính là "project" mà mục PHÁT HIỆN KHOẢNG TRỐNG đề xuất. Hướng 2 (`Video` kiểu
+"local") coi như bỏ.
+
+**Cách tổng quát hoá — không đụng tới caller cũ:**
+- `timeline_service` nhận thêm khái niệm *chủ thể*: `get_timeline_for` /
+  `save_timeline_for` / `render_timeline_for` nhận `subject_type` ∈ `"video" | "project"`.
+  Ba hàm cũ (`get_timeline`, `save_timeline`, `render_timeline_for_video`) giữ
+  nguyên tên và chữ ký, thành wrapper mỏng — 0 caller Phase 13 phải sửa.
+- `VideoNotFoundError` giờ kế thừa `SubjectNotFoundError`, nên code cũ đang bắt
+  `VideoNotFoundError` vẫn chạy đúng (có test canh riêng điều này).
+- `GenerationProject` thêm 2 cột `timeline_json` + `timeline_rendered_path`, khai
+  báo ở `ensure_schema_columns()` nên DB có sẵn tự nâng cấp, không cần Alembic.
+- Endpoint mới trong `app/api/projects.py`: `GET/PUT /{id}/timeline`,
+  `GET /{id}/timeline/suggestion`, `POST /{id}/timeline/render`.
+  Phân biệt rõ với `/render` cũ: `/render` dựng thô từ canvas (**sinh cảnh còn
+  thiếu**, tốn tiền API), còn `/timeline/render` chỉ ghép đúng những gì timeline
+  mô tả (không gọi API sinh nội dung).
+
+**Frontend:** `TimelineEditor` đổi prop `videoId` → `subject: TimelineSubject`.
+Các tính năng chỉ có ở video crawl (gợi ý cắt clip ngắn, waveform, stem audio,
+chi tiết video) đều `enabled: isVideo` — dự án AI chưa qua pipeline dịch/lồng
+tiếng nên không có dữ liệu đó; thẻ "Cắt clip ngắn" ẩn hẳn thay vì hiện rỗng.
+Vào bằng nút "Tinh chỉnh timeline" ở trang Dự án (cùng chỗ với canvas, đổi qua
+lại bằng 2 nút).
+
+**Bẫy đã tránh:** khoá react-query cũ là `['timeline', videoId]` — giữ nguyên thì
+video id=1 và dự án id=1 dùng chung cache, mở dự án sẽ thấy timeline của video.
+Đã đổi thành `['timeline', subject.type, subject.id]`.
+
+**Verify thật:**
+- 29 test `test_timeline_service.py` (5 test mới cho nhánh dự án, gồm cả test
+  canh việc `VideoNotFoundError` vẫn bắt được sau khi tổng quát hoá).
+- Qua HTTP thật (TestClient, DB tạm): tạo dự án 2 cảnh → `GET timeline` trả
+  `null` → `GET suggestion` khi chưa có clip trả **400** kèm số cảnh thiếu → gắn
+  clip → suggestion trả 2 clip → `PUT` lưu → `GET` đọc lại khớp → `PUT` hình dạng
+  sai trả **422** → `POST timeline/render` ghi đúng `storage/projects/<id>/timeline_rendered.mp4`
+  → dự án không tồn tại trả **404**.
+- tsc: 34 lỗi, **đúng bằng** số lỗi có sẵn trên main (đo bằng cách stash rồi đếm lại) → code mới thêm 0 lỗi.
+- 80 test frontend (editor + flow) pass.
+
+**Dọn dẹp ngoài lề:** `tests/services/test_project_render_service.py` đang làm bẩn
+suite với 8 error (`PermissionError` lúc dọn thư mục tạm). Nguyên nhân:
+`session.close()` chỉ trả connection về pool chứ không đóng file, mà Windows
+không xoá được file còn handle mở. Thêm `engine.dispose()` vào fixture → suite
+backend giờ **319 pass, 0 error**.
+
+
+### Phiên 2026-09-12 (tiếp) — job store cho tác vụ sinh chạy lâu
+
+**Vấn đề thật đang chờ sẵn:** sinh 1 clip bằng provider thật mất 1-5 phút. Gọi
+đồng bộ thì trình duyệt/proxy cắt kết nối trước khi có kết quả, và chỉ cần lỡ tay
+F5 là mất dấu kết quả — trong khi tiền thì đã tiêu. Với `delay=0` của fake adapter
+thì không bao giờ lộ ra.
+
+**Cách làm:** thêm endpoint `/generate/keyframe/async` và `/generate/video-clip/async`
+trả job id ngay, cộng `GET /generate/jobs` + `/generate/jobs/{id}` để hỏi lại.
+**Bản đồng bộ giữ nguyên** cho MCP và script — agent gọi tuần tự thì chờ luôn đơn
+giản hơn, không có gì để "quay lại xem".
+
+**Suýt phá một van an toàn tiền bạc.** Ngưỡng "$1/lần gọi" (409 → UI hỏi xác nhận)
+nằm *bên trong* hàm generate. Đẩy hàm đó vào background task thì 409 không còn về
+tới client nữa — nó thành một job thất bại, và người dùng **không còn cách nào bấm
+xác nhận**. Van an toàn coi như hỏng mà không có dấu hiệu gì.
+Sửa bằng cách tách phần "quyết định" (`_plan_keyframe` / `_plan_video_clip`: dùng
+lại được gì, tốn bao nhiêu) khỏi phần "thực thi", rồi chạy `precheck_*` **ngay
+trong request** trước khi nhận job. Không thể chỉ gọi lại `_guard_cost` vì cửa kiểm
+nằm SAU bước kiểm cache — làm thế sẽ đòi xác nhận cả với kết quả đã có sẵn (miễn phí).
+346 test cũ vẫn pass sau refactor.
+
+**Phát hiện: cửa kiểm chi phí KHÔNG kiểm tra được ở chế độ fake** — `fake-image`/
+`fake-video` được định giá $0 trong `cost_service`, nên không lần gọi nào chạm
+ngưỡng. Mục "mô phỏng hành vi xấu" của fake adapter thiếu đúng cái đắt giá nhất.
+Cách lách khi verify: chạy server ở `FALAI_MODE=real` trên cùng DB — `precheck`
+dùng bảng giá thật và chạy TRƯỚC khi chạm adapter, nên không tốn đồng nào.
+
+**Verify với uvicorn THẬT** (TestClient không dùng được: nó chạy background task
+ngay trong request nên job luôn xong trước khi response về, che mất tính bất đồng bộ):
+- `POST .../async` trả về sau **0.28s** trong khi job mất **4.4s** → đúng là chạy nền.
+- Hỏi `GET /generate/jobs` giữa chừng vẫn thấy `status="running"` (= rời trang rồi
+  quay lại vẫn theo dõi được), rồi `done` + file thật 15KB trên đĩa.
+- Lần 2 cùng prompt → `from_cache=true`.
+- Job id không tồn tại → 404.
+- Clip 15s ($1.50) → **409 ngay ở POST**, và **không để lại job rác** trong lịch sử;
+  thêm `confirm_expensive` → 200; clip 4s ($0.40) → 200 không hỏi gì.
+- 8 test cho job store (cắt bớt lịch sử theo job cũ nhất, cắt ngắn error/label,
+  finish job không tồn tại không được ném lỗi làm chết background task).

@@ -1,6 +1,6 @@
 # Phase 12: Đóng gói Desktop App (Tauri + PyInstaller sidecar)
 
-Trạng thái: **Cơ chế lõi xong & verify thật** (backend packaging + Tauri spawn/tắt sidecar chạy đúng qua test thật) — còn thiếu bước đóng gói installer cuối cùng (`tauri build` đầy đủ ra `.msi`/`.exe`) và test cài trên máy sạch thật sự, xem Ghi chú.
+Trạng thái: **Đã ra installer thật** (`.msi` + `.exe` sinh ra được bằng `tauri build` đầy đủ, 2026-09-12) — còn thiếu **chạy thử file cài trên máy Windows sạch**, xem Ghi chú.
 
 ## Quyết định hướng phân phối (chốt phiên 2026-09-07)
 Ưu tiên đóng gói desktop app trước, **tạm gác** hướng host multi-tenant SaaS/bán license qua web (lý do đầy đủ: chi phí compute Whisper/Demucs cao nếu host cho nhiều người + rủi ro pháp lý tăng khi thương mại hoá việc giúp người lạ scrape/re-up nội dung có bản quyền — xem `docs/scale-reup-features/plan.md` phần đánh giá host/license). Quyết định này không cố định vĩnh viễn, có thể quay lại hướng SaaS sau khi có tư vấn pháp lý riêng.
@@ -39,7 +39,8 @@ Trạng thái: **Cơ chế lõi xong & verify thật** (backend packaging + Taur
 ## Tiêu chí hoàn thành (Definition of Done)
 - [x] App tự khởi động sidecar backend và tắt sạch khi đóng — verify thật (xem trên), không còn tiến trình orphan.
 - [x] DB và MASTER_KEY nằm trong thư mục dữ liệu người dùng, không nằm trong thư mục mã nguồn — verify thật trên `%APPDATA%/VieDubStudio/`.
-- [ ] Chạy được file **installer** (`.msi`/`.exe`) trên máy Windows sạch — **chưa làm** `tauri build` đầy đủ (chỉ mới `cargo build` debug, chưa đóng gói bundle cuối cùng), xem Ghi chú.
+- [x] `tauri build` đầy đủ chạy được, **sinh ra 2 installer thật** (xem Ghi chú phiên 2026-09-12).
+- [ ] Chạy thử installer đó trên máy Windows **sạch** — chưa làm (cần máy khác hoặc VM; máy dev đã có sẵn Python/ffmpeg nên cài ở đây không chứng minh được gì).
 - [ ] Chạy thử 1 video mẫu hết pipeline hoàn toàn từ app đã đóng gói — chưa làm (cần bấm thật qua UI, việc của bạn hoặc phiên sau có thể tự mắt kiểm tra qua cửa sổ app thật).
 
 ## Ghi chú phát sinh trong lúc làm
@@ -49,3 +50,44 @@ Trạng thái: **Cơ chế lõi xong & verify thật** (backend packaging + Taur
 - **Chưa bundle ffmpeg trong installer** — quyết định hoãn để giữ phạm vi phiên này gọn (đã làm đủ: backend packaging + Tauri sidecar mechanism, phần lõi rủi ro kỹ thuật cao nhất). App bản đóng gói hiện tại vẫn cần ffmpeg có sẵn trong PATH máy người dùng, giống hệt bản web — cần làm ở phiên sau nếu muốn installer thực sự "cài xong dùng ngay không cần cài gì thêm".
 - **Chưa chạy `tauri build` đầy đủ** (ra `.msi`/NSIS `.exe` thật) — NSIS chưa có sẵn trên máy nhưng theo tài liệu Tauri sẽ tự tải khi cần lúc `tauri build` chạy lần đầu; chưa tự tay verify bước này (tốn thêm thời gian build, để phiên sau). Toàn bộ phần rủi ro kỹ thuật cao (sidecar có chạy được không, backend đóng gói có hoạt động không, MASTER_KEY/storage có đúng chỗ không) đã verify xong — phần còn lại chủ yếu là "chạy 1 lệnh và chờ".
 - **Dung lượng sidecar 660MB (`--onedir`)** — đúng như dự đoán trong plan gốc, chủ yếu do torch/ctranslate2. Cân nhắc sau: có thể giảm bằng CPU-only torch wheel tối giản hơn nếu cần, không cấp thiết cho bản dùng cá nhân.
+
+
+### Phiên 2026-09-12 — đã ra installer thật
+
+`npm run desktop:build` chạy trót lọt, sinh ra 2 file trong
+`src-tauri/target/release/bundle/`:
+
+| File | Kích thước |
+|---|---|
+| `msi/VieDub Studio_0.1.0_x64_en-US.msi` | 249 MB |
+| `nsis/VieDub Studio_0.1.0_x64-setup.exe` | 180 MB |
+
+**Thứ đã chặn nó suốt từ trước: 34 lỗi TypeScript có sẵn trên main.**
+`frontend/package.json` có script build là `tsc -b && vite build`, nên **bất kỳ** lỗi
+kiểu nào cũng làm cả dây chuyền đóng gói dừng ngay bước đầu — PyInstaller và
+`tauri build` chưa từng được chạy tới. Các phiên trước ghi nhận 34 lỗi này như
+"nhiễu có sẵn, không liên quan", nhưng thực ra chúng là **rào chắn cứng của việc
+phát hành**. Đã sửa hết về 0 (xem bảng dưới), sau đó build chạy thẳng một mạch.
+
+| Nhóm lỗi | Số | Cách sửa |
+|---|---|---|
+| `Array.prototype.at` không tồn tại | 3 | `target`/`lib` từ ES2020 → ES2022 |
+| `clip.start/end` có thể undefined | 18 | Thêm kiểu `TimedClip` + `asTimed()` ở `editor/layout.ts` — khai báo bất biến một lần (backend đã bắt buộc video/audio/overlay có start/end) thay vì rải `!` khắp nơi |
+| `cover_url` thiếu trong `VideoFiles` | 3 | Backend vẫn luôn trả trường này, chỉ type frontend thiếu |
+| Bảng tra cứu thiếu mục | 2 | **Bug UI thật**: track `blur` và job `render_project` hiện ra không icon/màu |
+| Link tới route `/files` | 1 | **Link hỏng thật** — route đó chưa bao giờ tồn tại; trỏ lại `/videos` |
+| Lỗi kiểu trong file test | 6 | Thiếu `subject_type` trong helper; `querySelector` trả `Element` |
+
+**Bẫy khi đo kết quả build:** lần chạy đầu tôi pipe output qua `tail`, và mã thoát
+nhận được là **0** dù build đã hỏng — vì đó là mã thoát của `tail`, không phải của
+npm. Dòng `ELIFECYCLE Command failed with exit code 2` nằm lọt trong output. Lần
+sau đo mã thoát của lệnh build thì **đừng pipe**.
+
+**Cảnh báo còn lại từ tauri:** identifier `com.viedubstudio.app` kết thúc bằng `.app`,
+trùng với đuôi bundle của macOS — không ảnh hưởng bản Windows, nhưng nên đổi trước
+khi đóng gói cho macOS.
+
+**Vẫn chưa làm:** chạy file cài trên máy Windows **sạch**. Cài trên chính máy dev
+không chứng minh được gì vì ở đây đã có sẵn Python, ffmpeg, Rust — đúng những thứ
+installer cần tự xoay xở. Và nhắc lại: **ffmpeg chưa được bundle**, máy người dùng
+vẫn phải có sẵn ffmpeg trong PATH.

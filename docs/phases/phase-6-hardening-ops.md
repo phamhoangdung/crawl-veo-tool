@@ -17,7 +17,7 @@ Trạng thái: **Phần cốt lõi xong & verify thật** (storage cleanup, heal
 - [x] Test cho adapter/service đã có coverage đầy đủ: `bilibili/client.py` (5 test), `cost_service` (2), `dubbing_service` time-stretch logic (3), `subtitle_service` (3), `storage_cleanup_service` (2) — tổng 15 test, tất cả mock/không gọi mạng thật.
 - [x] `app/services/health_check_service.py` + `GET /health/downloader` — gọi thật 3 endpoint Bilibili (popular/ranking/search), verify bằng request thật. **Bắt được 1 lỗi thật ngay khi viết**: dùng nhầm `day=1` (giá trị không hợp lệ cho endpoint ranking) — sửa thành `day=3`, xác nhận lại `healthy: true`. Douyin không có health-check vì adapter chưa verify được (Phase 3).
 - [x] `SETUP.md` — hướng dẫn cài đặt Windows đầy đủ, viết dựa trên các vướng mắc **thật đã gặp** trong suốt quá trình build (không phải đoán trước): lỗi PATH ffmpeg, lỗi WinError 10013, lỗi thiếu cột DB.
-- [ ] Nối `cleanup_old_job_folders` lên 1 endpoint/cron thật — code đã có, chưa có nơi gọi định kỳ (không có scheduler trong dự án, cần quyết định dùng gì — cron ngoài gọi 1 endpoint, hay APScheduler trong app — để phiên sau).
+- [x] Nối `cleanup_old_job_folders` lên lịch chạy thật — **chốt: vòng lặp `asyncio` ngay trong process backend** (không cron ngoài, không APScheduler), xem Ghi chú phiên 2026-09-12.
 
 ## Tiêu chí hoàn thành (Definition of Done)
 - [~] Tool chạy ổn định qua nhiều batch lớn liên tục — chưa test thật với batch lớn (nhiều job/video cùng lúc), vì chưa có nhu cầu thật để tạo tình huống đó. Storage cleanup đã sẵn sàng nhưng chưa được gọi tự động.
@@ -155,3 +155,36 @@ TTS là điểm nghẽn lớn nhất — cả 2 bước đều chờ mạng nên
 - `DEFAULT_CONCURRENCY = 1`: whisper/demucs đã ăn hết CPU, chạy 2 video song song chỉ làm cả hai cùng chậm và tranh RAM. Cho phép chỉnh lên tối đa 4 nếu máy khoẻ.
 
 `run_step()` trong `pipeline.py` **ném lỗi ra ngoài**, khác các hàm `_run_*` chạy nền nuốt lỗi — batch cần biết bước nào hỏng.
+
+
+### Phiên 2026-09-12 — dọn dẹp định kỳ đã có nơi gọi
+
+**Chốt cách làm: vòng lặp `asyncio` trong chính process backend** (`storage_cleanup_service.run_periodic_cleanup`),
+gắn vào `startup`/`shutdown` của app. Lý do loại 2 phương án kia:
+- *Cron ngoài gọi endpoint*: tool này sẽ thành desktop app (Phase 12), máy người
+  dùng cuối không có crontab để cài, cũng không thể bắt họ tự tạo Task Scheduler.
+- *APScheduler*: thêm hẳn một dependency cho đúng một việc mà `asyncio.sleep` làm được.
+
+Chi tiết đáng nhớ:
+- **Dọn ngay lần đầu rồi mới ngủ 24h.** Máy cá nhân bật/tắt liên tục — nếu ngủ trước
+  thì lần dọn đầu tiên có thể không bao giờ tới lượt.
+- **`asyncio.to_thread`**: quét toàn bộ storage là việc chạm đĩa nặng, chạy thẳng
+  trong event loop sẽ làm mọi request khác đứng hình.
+- **Lỗi 1 chu kỳ không giết vòng lặp** (bắt `Exception`, riêng `CancelledError` thì
+  ném tiếp để `shutdown` huỷ được).
+- **`shutdown` huỷ task**: bỏ mặc thì uvicorn đợi một task không bao giờ kết thúc,
+  bản đóng gói sẽ treo lúc thoát. Đã đo: app thoát trong 0.2s.
+- **Sửa một bug lộ ra khi làm**: `_STORAGE_ROOT` hard-code `backend/storage`, trong khi
+  bản đóng gói để storage ở thư mục dữ liệu người dùng (`_storage_dir()`). Tức là dọn
+  dẹp sẽ **im lặng không tìm thấy gì** trên bản cài đặt. Đã đổi sang lấy từ config.
+
+**Thêm endpoint bấm tay**: `POST /api/files/cleanup-old-jobs?max_age_days=N` — cùng
+hàm mà vòng lặp nền gọi, dùng khi ổ đĩa đầy cần dọn gấp. `max_age_days < 1` trả 422
+(chặn xoá nhầm job vừa chạy hôm nay).
+
+**Verify thật** (TestClient có lifespan, storage giả trong thư mục tạm): task nền
+**tự dọn** thư mục job cũ 60 ngày mà không ai gọi endpoint → job mới và thư mục
+`_zips/` còn nguyên → endpoint tay xoá đúng job chỉ định → `max_age_days=0` trả 422
+→ tắt app thì task `cancelled()` và thoát trong 0.2s. Thêm 2 test tự động cho vòng
+lặp (chạy ngay lần đầu; lỗi 1 chu kỳ không làm chết vòng lặp) — dùng `asyncio.Event`
+thay vì đếm `sleep(0)` vì có bước nhảy thread, đếm sẽ khiến test lúc xanh lúc đỏ.
