@@ -1,13 +1,24 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+import logging
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.adapters.falai.errors import PromptBlockedError
 from app.adapters.provider_errors import ProviderQuotaExceededError
 from app.api.mcp_auth import require_scope
-from app.core.db import get_db
+from app.core.db import SessionLocal, get_db
 from app.models.character_reference import CharacterReference
 from app.models.generated_asset import GeneratedAsset, GeneratedAssetType
 from app.schemas.ai_generation import (
@@ -16,6 +27,7 @@ from app.schemas.ai_generation import (
     CostEstimateResponse,
     ExportToLibraryResponse,
     GeneratedAssetRead,
+    GenerationJobRead,
     GenerationModeResponse,
     GenerationResponse,
     KenBurnsRequest,
@@ -27,7 +39,10 @@ from app.services import (
     asset_service,
     character_reference_service,
     cost_service,
+    generation_job_service,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai-studio", tags=["ai-studio"])
 
@@ -280,3 +295,165 @@ def generate_ken_burns(
     except ai_generation_service.GenerationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_generation_response(result)
+
+
+def _precheck(run) -> None:
+    """Chạy cửa kiểm chi phí NGAY trong request và trả đúng mã HTTP như bản đồng bộ.
+
+    Không làm việc này thì ngưỡng "$1/lần gọi" sẽ nổ bên trong background task,
+    nơi người dùng không còn cách nào bấm xác nhận — van an toàn tiền bạc coi như
+    bị vô hiệu hoá, mà lại không có dấu hiệu gì báo là nó đã hỏng.
+    """
+    try:
+        run()
+    except ai_generation_service.CostThresholdExceededError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except cost_service.MonthlyBudgetExceededError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    except ai_generation_service.GenerationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _job_to_read(job: generation_job_service.GenerationJob) -> GenerationJobRead:
+    return GenerationJobRead(
+        id=job.id,
+        kind=job.kind,
+        label=job.label,
+        status=job.status,
+        asset_id=job.asset_id,
+        file_path=job.file_path,
+        cost_usd=job.cost_usd,
+        from_cache=job.from_cache,
+        error=job.error,
+        created_at=job.created_at,
+        finished_at=job.finished_at,
+    )
+
+
+async def _run_generation_job(job_id: str, run) -> None:
+    """Chạy một lần sinh rồi ghi kết quả vào job store.
+
+    Mở session RIÊNG: session của request đã đóng khi request trả về, dùng lại
+    sẽ lỗi "session is closed" đúng lúc kết quả đắt tiền vừa sinh xong.
+    """
+    try:
+        with SessionLocal() as db:
+            result = await run(db)
+    except Exception as exc:  # noqa: BLE001 — mọi lỗi đều phải về tới UI qua job
+        logger.exception("Job sinh nội dung %s thất bại", job_id)
+        generation_job_service.finish_error(job_id, str(exc))
+        return
+
+    generation_job_service.finish_ok(
+        job_id,
+        asset_id=result.asset.id,
+        file_path=result.asset.file_path,
+        cost_usd=result.asset.cost_estimate_usd,
+        from_cache=result.from_cache,
+    )
+
+
+@router.post(
+    "/generate/keyframe/async",
+    response_model=GenerationJobRead,
+    dependencies=[Depends(require_scope("gen:write"))],
+)
+def generate_keyframe_async(
+    payload: KeyframeRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> GenerationJobRead:
+    """Nhận job rồi trả ngay. Bản đồng bộ `/generate/keyframe` vẫn giữ nguyên cho
+    MCP và script — agent gọi tuần tự thì chờ luôn là đơn giản hơn."""
+    _precheck(
+        lambda: ai_generation_service.precheck_keyframe(
+            db,
+            _DEFAULT_USER_ID,
+            payload.prompt,
+            model=payload.model or ai_generation_service.DEFAULT_IMAGE_MODEL,
+            character_ref_id=payload.character_ref_id,
+            confirm_expensive=payload.confirm_expensive,
+        )
+    )
+    job = generation_job_service.create("keyframe", payload.prompt)
+
+    async def run(db: Session):
+        return await ai_generation_service.generate_keyframe(
+            db,
+            _DEFAULT_USER_ID,
+            payload.prompt,
+            model=payload.model or ai_generation_service.DEFAULT_IMAGE_MODEL,
+            character_ref_id=payload.character_ref_id,
+            output_prefix=payload.output_prefix,
+            confirm_expensive=payload.confirm_expensive,
+        )
+
+    background.add_task(_run_generation_job, job.id, run)
+    return _job_to_read(job)
+
+
+@router.post(
+    "/generate/video-clip/async",
+    response_model=GenerationJobRead,
+    dependencies=[Depends(require_scope("gen:write"))],
+)
+def generate_video_clip_async(
+    payload: VideoClipRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> GenerationJobRead:
+    _precheck(
+        lambda: ai_generation_service.precheck_video_clip(
+            db,
+            _DEFAULT_USER_ID,
+            payload.prompt,
+            keyframe_start_asset_id=payload.keyframe_start_asset_id,
+            keyframe_end_asset_id=payload.keyframe_end_asset_id,
+            model=payload.model or ai_generation_service.DEFAULT_VIDEO_MODEL,
+            duration_seconds=payload.duration_seconds,
+            confirm_expensive=payload.confirm_expensive,
+        )
+    )
+    job = generation_job_service.create("clip", payload.prompt)
+
+    async def run(db: Session):
+        return await ai_generation_service.generate_video_clip(
+            db,
+            _DEFAULT_USER_ID,
+            payload.prompt,
+            keyframe_start_asset_id=payload.keyframe_start_asset_id,
+            keyframe_end_asset_id=payload.keyframe_end_asset_id,
+            model=payload.model or ai_generation_service.DEFAULT_VIDEO_MODEL,
+            duration_seconds=payload.duration_seconds,
+            output_prefix=payload.output_prefix,
+            confirm_expensive=payload.confirm_expensive,
+        )
+
+    background.add_task(_run_generation_job, job.id, run)
+    return _job_to_read(job)
+
+
+@router.get(
+    "/generate/jobs",
+    response_model=list[GenerationJobRead],
+    dependencies=[Depends(require_scope("assets:read"))],
+)
+def list_generation_jobs() -> list[GenerationJobRead]:
+    """Lịch sử các lần sinh trong phiên chạy này — rời trang rồi quay lại vẫn thấy."""
+    return [_job_to_read(j) for j in generation_job_service.list_recent()]
+
+
+@router.get(
+    "/generate/jobs/{job_id}",
+    response_model=GenerationJobRead,
+    dependencies=[Depends(require_scope("assets:read"))],
+)
+def get_generation_job(job_id: str) -> GenerationJobRead:
+    job = generation_job_service.get(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy job — có thể backend đã khởi động lại, "
+            "hoặc job đã bị đẩy khỏi lịch sử gần đây.",
+        )
+    return _job_to_read(job)

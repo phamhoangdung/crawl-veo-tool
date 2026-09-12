@@ -82,3 +82,19 @@ class ExportToLibraryResponse(BaseModel):
     asset_id: str
     name: str
     kind: str
+
+
+class GenerationJobRead(BaseModel):
+    """Một lần sinh chạy nền — client hỏi lại bằng id để biết xong chưa."""
+
+    id: str
+    kind: str
+    label: str
+    status: str
+    asset_id: int | None = None
+    file_path: str | None = None
+    cost_usd: float = 0.0
+    from_cache: bool = False
+    error: str | None = None
+    created_at: datetime
+    finished_at: datetime | None = None

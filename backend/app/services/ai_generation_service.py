@@ -18,14 +18,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters import ffmpeg
+from app.adapters.falai import client as real_adapter
 from app.adapters.falai import fake as fake_adapter
+from app.adapters.provider_errors import ProviderQuotaExceededError
 from app.core.config import _storage_dir, get_settings
 from app.models.generated_asset import GeneratedAsset, GeneratedAssetType
-from app.services import asset_service, character_reference_service, cost_service
+from app.services import (
+    api_key_service,
+    asset_service,
+    character_reference_service,
+    cost_service,
+)
 
 logger = logging.getLogger(__name__)
 
 PROVIDER_FAKE = "falai-fake"
+PROVIDER_FALAI = "falai"
 PROVIDER_FALAI = "falai"
 PROVIDER_KEN_BURNS = "ffmpeg"
 
@@ -125,16 +133,68 @@ def _guard_cost(
         raise CostThresholdExceededError(estimated_usd, _PER_CALL_WARNING_USD)
 
 
-async def generate_keyframe(
+
+async def _call_falai_with_pool(db: Session, user_id: int, call) -> None:
+    """Gọi fal.ai bằng key lấy từ pool, gặp 429 thì xoay sang key khác (Phase 8).
+
+    `call(api_key)` phải là coroutine tự ghi file kết quả. Cùng khuôn với
+    `translate_service.translate_text`, chỉ khác: ở đây KHÔNG có provider free nào
+    để fallback — sinh video không có nhà nào cho miễn phí.
+    """
+    tried_key_ids: set[int] = set()
+    last_quota_error: ProviderQuotaExceededError | None = None
+
+    while True:
+        picked = api_key_service.pick_decrypted_key(db, user_id, PROVIDER_FALAI)
+        if picked is None or picked[0] in tried_key_ids:
+            break
+        key_id, api_key = picked
+        tried_key_ids.add(key_id)
+        try:
+            await call(api_key)
+        except ProviderQuotaExceededError as exc:
+            api_key_service.mark_key_result(db, key_id, success=False)
+            last_quota_error = exc
+            logger.warning("Key fal.ai #%d hết quota, thử key khác trong pool", key_id)
+            continue
+        api_key_service.mark_key_result(db, key_id, success=True)
+        return
+
+    if not tried_key_ids:
+        raise GenerationError(
+            "Chưa có API key fal.ai nào trong pool. Thêm key ở trang API keys, "
+            "hoặc đặt FALAI_MODE=fake để chạy thử không tốn phí."
+        )
+    if last_quota_error is not None:
+        raise last_quota_error
+    raise GenerationError("Không gọi được fal.ai bằng key nào trong pool.")
+
+
+@dataclass
+class _Plan:
+    """Phần "quyết định" của một lần sinh: dùng lại được gì, tốn bao nhiêu.
+
+    Tách khỏi phần thực thi để chạy được TRƯỚC khi nhận job chạy nền — nếu không,
+    cửa kiểm ngưỡng chi phí sẽ nổ bên trong background task, nơi người dùng không
+    còn cách nào xác nhận "vẫn muốn chạy". Tức là một cái van an toàn tiền bạc bị
+    vô hiệu hoá mà không ai thấy.
+    """
+
+    references: list
+    effective_model: str
+    request_hash: str
+    cached: GeneratedAsset | None
+    estimated_usd: float
+
+
+def _plan_keyframe(
     db: Session,
     user_id: int,
     prompt: str,
     *,
-    model: str = DEFAULT_IMAGE_MODEL,
-    character_ref_id: int | None = None,
-    output_prefix: str | None = None,
-    confirm_expensive: bool = False,
-) -> GenerationResult:
+    model: str,
+    character_ref_id: int | None,
+) -> _Plan:
     references, missing = character_reference_service.resolve_mentions(db, user_id, prompt)
     if missing:
         raise GenerationError(
@@ -151,13 +211,59 @@ async def generate_keyframe(
     request_hash = _request_hash(
         ["image", prompt, effective_model, *sorted(str(r.id) for r in references)]
     )
+    return _Plan(
+        references=references,
+        effective_model=effective_model,
+        request_hash=request_hash,
+        cached=_find_cached(db, user_id, request_hash),
+        estimated_usd=cost_service.estimate_image_cost(effective_model),
+    )
 
-    cached = _find_cached(db, user_id, request_hash)
-    if cached is not None:
+
+def precheck_keyframe(
+    db: Session,
+    user_id: int,
+    prompt: str,
+    *,
+    model: str = DEFAULT_IMAGE_MODEL,
+    character_ref_id: int | None = None,
+    confirm_expensive: bool = False,
+) -> None:
+    """Chạy đúng các cửa kiểm mà `generate_keyframe` sẽ chạy, nhưng không sinh gì.
+
+    Ném cùng loại lỗi (`CostThresholdExceededError`, `MonthlyBudgetExceededError`,
+    `GenerationError`) để endpoint bất đồng bộ trả đúng mã HTTP như bản đồng bộ.
+    """
+    plan = _plan_keyframe(
+        db, user_id, prompt, model=model, character_ref_id=character_ref_id
+    )
+    if plan.cached is not None:
+        return  # dùng lại kết quả cũ thì không tốn gì, không cần hỏi xác nhận
+    _guard_cost(db, user_id, plan.estimated_usd, confirm_expensive)
+
+
+async def generate_keyframe(
+    db: Session,
+    user_id: int,
+    prompt: str,
+    *,
+    model: str = DEFAULT_IMAGE_MODEL,
+    character_ref_id: int | None = None,
+    output_prefix: str | None = None,
+    confirm_expensive: bool = False,
+) -> GenerationResult:
+    plan = _plan_keyframe(
+        db, user_id, prompt, model=model, character_ref_id=character_ref_id
+    )
+    references = plan.references
+    effective_model = plan.effective_model
+    request_hash = plan.request_hash
+
+    if plan.cached is not None:
         logger.info("Dùng lại ảnh đã sinh (hash=%s), không gọi API", request_hash[:12])
-        return GenerationResult(asset=cached, from_cache=True)
+        return GenerationResult(asset=plan.cached, from_cache=True)
 
-    estimated = cost_service.estimate_image_cost(effective_model)
+    estimated = plan.estimated_usd
     _guard_cost(db, user_id, estimated, confirm_expensive)
 
     sequence_no = _next_sequence_no(db, user_id, output_prefix)
@@ -171,10 +277,18 @@ async def generate_keyframe(
         )
         provider = PROVIDER_FAKE
     else:
-        raise GenerationError(
-            "FALAI_MODE=real chưa được hỗ trợ — adapter thật chưa triển khai. "
-            "Dùng FALAI_MODE=fake để phát triển."
+        await _call_falai_with_pool(
+            db,
+            user_id,
+            lambda api_key: real_adapter.generate_image(
+                api_key,
+                prompt,
+                target,
+                reference_images=reference_paths,
+                model=effective_model,
+            ),
         )
+        provider = PROVIDER_FALAI
 
     return GenerationResult(
         asset=_save_asset(
@@ -195,18 +309,16 @@ async def generate_keyframe(
     )
 
 
-async def generate_video_clip(
+def _plan_video_clip(
     db: Session,
     user_id: int,
     prompt: str,
     *,
     keyframe_start_asset_id: int,
-    keyframe_end_asset_id: int | None = None,
-    model: str = DEFAULT_VIDEO_MODEL,
-    duration_seconds: float = 5.0,
-    output_prefix: str | None = None,
-    confirm_expensive: bool = False,
-) -> GenerationResult:
+    keyframe_end_asset_id: int | None,
+    model: str,
+    duration_seconds: float,
+) -> tuple[_Plan, GeneratedAsset, GeneratedAsset | None]:
     start_asset = _require_image_asset(db, user_id, keyframe_start_asset_id)
     end_asset = (
         _require_image_asset(db, user_id, keyframe_end_asset_id)
@@ -225,13 +337,71 @@ async def generate_video_clip(
             str(keyframe_end_asset_id or ""),
         ]
     )
+    plan = _Plan(
+        references=[],
+        effective_model=effective_model,
+        request_hash=request_hash,
+        cached=_find_cached(db, user_id, request_hash),
+        estimated_usd=cost_service.estimate_video_cost(effective_model, duration_seconds),
+    )
+    return plan, start_asset, end_asset
 
-    cached = _find_cached(db, user_id, request_hash)
-    if cached is not None:
+
+def precheck_video_clip(
+    db: Session,
+    user_id: int,
+    prompt: str,
+    *,
+    keyframe_start_asset_id: int,
+    keyframe_end_asset_id: int | None = None,
+    model: str = DEFAULT_VIDEO_MODEL,
+    duration_seconds: float = 5.0,
+    confirm_expensive: bool = False,
+) -> None:
+    """Xem `precheck_keyframe`. Quan trọng hơn ở đây vì sinh video là khâu đắt nhất."""
+    plan, _start, _end = _plan_video_clip(
+        db,
+        user_id,
+        prompt,
+        keyframe_start_asset_id=keyframe_start_asset_id,
+        keyframe_end_asset_id=keyframe_end_asset_id,
+        model=model,
+        duration_seconds=duration_seconds,
+    )
+    if plan.cached is not None:
+        return
+    _guard_cost(db, user_id, plan.estimated_usd, confirm_expensive)
+
+
+async def generate_video_clip(
+    db: Session,
+    user_id: int,
+    prompt: str,
+    *,
+    keyframe_start_asset_id: int,
+    keyframe_end_asset_id: int | None = None,
+    model: str = DEFAULT_VIDEO_MODEL,
+    duration_seconds: float = 5.0,
+    output_prefix: str | None = None,
+    confirm_expensive: bool = False,
+) -> GenerationResult:
+    plan, start_asset, end_asset = _plan_video_clip(
+        db,
+        user_id,
+        prompt,
+        keyframe_start_asset_id=keyframe_start_asset_id,
+        keyframe_end_asset_id=keyframe_end_asset_id,
+        model=model,
+        duration_seconds=duration_seconds,
+    )
+    effective_model = plan.effective_model
+    request_hash = plan.request_hash
+
+    if plan.cached is not None:
         logger.info("Dùng lại video đã sinh (hash=%s), không gọi API", request_hash[:12])
-        return GenerationResult(asset=cached, from_cache=True)
+        return GenerationResult(asset=plan.cached, from_cache=True)
 
-    estimated = cost_service.estimate_video_cost(effective_model, duration_seconds)
+    estimated = plan.estimated_usd
     _guard_cost(db, user_id, estimated, confirm_expensive)
 
     sequence_no = _next_sequence_no(db, user_id, output_prefix)
@@ -249,10 +419,20 @@ async def generate_video_clip(
         )
         provider = PROVIDER_FAKE
     else:
-        raise GenerationError(
-            "FALAI_MODE=real chưa được hỗ trợ — adapter thật chưa triển khai. "
-            "Dùng FALAI_MODE=fake để phát triển."
+        await _call_falai_with_pool(
+            db,
+            user_id,
+            lambda api_key: real_adapter.generate_video(
+                api_key,
+                prompt,
+                target,
+                keyframe_start=Path(start_asset.file_path),
+                keyframe_end=Path(end_asset.file_path) if end_asset else None,
+                model=effective_model,
+                duration_seconds=duration_seconds,
+            ),
         )
+        provider = PROVIDER_FALAI
 
     return GenerationResult(
         asset=_save_asset(
