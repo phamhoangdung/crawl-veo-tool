@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { ChevronRight, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  cleanupOldJobs,
   cleanupOrphanFiles,
   deleteVideoFiles,
   getStorageSummary,
@@ -31,6 +32,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { BatchPanel } from './batch-panel'
 
 function formatBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
@@ -202,6 +204,19 @@ export function Videos() {
     queryFn: getStorageSummary,
   })
 
+  const cleanupJobs = useMutation({
+    mutationFn: () => cleanupOldJobs(30),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['files'] })
+      toast.success(
+        result.removed_job_ids.length > 0
+          ? `Đã xoá ${result.removed_job_ids.length} thư mục job cũ hơn ${result.max_age_days} ngày.`
+          : `Không có job nào cũ hơn ${result.max_age_days} ngày.`
+      )
+    },
+    onError: () => toast.error('Không dọn được job cũ.'),
+  })
+
   const cleanup = useMutation({
     mutationFn: cleanupOrphanFiles,
     onSuccess: (result) => {
@@ -260,18 +275,30 @@ export function Videos() {
                   <p className='text-xs text-muted-foreground'>File rác không dùng tới</p>
                 </div>
               )}
-              <Button
-                size='sm'
-                variant='outline'
-                className='ms-auto'
-                disabled={cleanup.isPending}
-                onClick={() => cleanup.mutate()}
-              >
-                {cleanup.isPending ? 'Đang dọn...' : 'Dọn file rác'}
-              </Button>
+              <div className='ms-auto flex gap-2'>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={cleanupJobs.isPending}
+                  title='Xoá hẳn thư mục của các job cũ hơn 30 ngày (video gốc, audio, bản dubbed...)'
+                  onClick={() => cleanupJobs.mutate()}
+                >
+                  {cleanupJobs.isPending ? 'Đang dọn...' : 'Dọn job cũ'}
+                </Button>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={cleanup.isPending}
+                  onClick={() => cleanup.mutate()}
+                >
+                  {cleanup.isPending ? 'Đang dọn...' : 'Dọn file rác'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
+
+        <BatchPanel />
 
         {isLoading && (
           <div className='grid gap-4 lg:grid-cols-2'>
