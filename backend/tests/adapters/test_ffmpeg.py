@@ -3,6 +3,7 @@ mock subprocess), vì mock sẽ không phát hiện được lỗi cú pháp fil
 loại lỗi dễ gặp nhất khi dựng chuỗi filter bằng tay."""
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -577,3 +578,89 @@ class TestRenderTimelineSubtitleBox:
         ffmpeg.render_timeline(operations, output)
 
         assert output.exists()
+
+
+class TestBurnSubtitlePosition:
+    """Vị trí phụ đề burn-in — đo trên pixel THẬT, không tin vào tên hằng số.
+
+    Lý do phải đo: `force_style='Alignment=N'` dùng đánh số SSA v4 chứ không phải
+    sơ đồ bàn phím số của ASS v4+. Số 8 (trông như "giữa-trên" theo numpad) thực
+    ra đặt chữ ra GIỮA khung hình và ffmpeg không báo lỗi gì.
+    """
+
+    @staticmethod
+    def _make_black_video(path: Path, *, duration: float = 2.0) -> None:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", f"color=c=black:s=640x480:d={duration}",
+                "-pix_fmt", "yuv420p",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+    @staticmethod
+    def _band_brightness(path: Path, where: str) -> float:
+        """Độ sáng trung bình (YAVG) của dải trên/dưới khung hình tại giây thứ 1.
+
+        Nền đen phẳng cho YAVG=16 (mức đen của dải limited-range); chữ trắng kéo
+        con số của dải chứa nó lên rõ rệt.
+        """
+        crop = "iw:ih/3:0:0" if where == "top" else "iw:ih/3:0:ih*2/3"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-nostats",
+                "-ss", "1", "-i", str(path),
+                "-vframes", "1",
+                "-vf", f"crop={crop},signalstats,metadata=print",
+                "-f", "null", "-",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            errors="replace",
+        )
+        match = re.search(r"lavfi\.signalstats\.YAVG=([\d.]+)", result.stderr)
+        assert match, "không đọc được YAVG từ signalstats"
+        return float(match.group(1))
+
+    @pytest.fixture
+    def srt(self, tmp_path: Path) -> Path:
+        path = tmp_path / "s.srt"
+        path.write_text(
+            "1\n00:00:00,500 --> 00:00:01,500\nDONG PHU DE THU NGHIEM\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_bottom_puts_text_in_lower_band(self, tmp_path: Path, srt: Path) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        output = tmp_path / "bottom.mp4"
+
+        ffmpeg.burn_subtitles(source, srt, output, font_size=28, position="bottom")
+
+        assert self._band_brightness(output, "bottom") > self._band_brightness(
+            output, "top"
+        ) + 2
+
+    def test_top_puts_text_in_upper_band(self, tmp_path: Path, srt: Path) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        output = tmp_path / "top.mp4"
+
+        ffmpeg.burn_subtitles(source, srt, output, font_size=28, position="top")
+
+        assert self._band_brightness(output, "top") > self._band_brightness(
+            output, "bottom"
+        ) + 2
+
+    def test_unknown_position_is_rejected(self, tmp_path: Path, srt: Path) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        with pytest.raises(ValueError, match="middle"):
+            ffmpeg.burn_subtitles(
+                source, srt, tmp_path / "x.mp4", font_size=28, position="middle"
+            )

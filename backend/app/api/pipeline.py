@@ -229,7 +229,7 @@ def get_subtitles(video_id: int, db: Session = Depends(get_db)) -> str:
     return subtitle_service.build_bilingual_srt(video.transcript_json or [])
 
 
-def _burn_subtitles_for(video: Video) -> None:
+def _burn_subtitles_for(video: Video, position: str = "bottom") -> None:
     """Ghép phụ đề cứng vào bản đã lồng tiếng (ưu tiên) hoặc bản gốc nếu chưa dub."""
     source_path = Path(video.dubbed_path or video.local_path)
     video_dir = source_path.parent
@@ -239,15 +239,26 @@ def _burn_subtitles_for(video: Video) -> None:
     font_size = subtitle_service.pick_font_size_for(width, height)
 
     output_path = video_dir / "burned.mp4"
-    ffmpeg.burn_subtitles(source_path, srt_path, output_path, font_size=font_size)
+    ffmpeg.burn_subtitles(
+        source_path, srt_path, output_path, font_size=font_size, position=position
+    )
     video.burned_path = str(output_path)
 
 
 @router.post("/{video_id}/burn-subtitles", response_model=VideoDetailRead)
-def burn_subtitles(video_id: int, db: Session = Depends(get_db)) -> VideoDetailRead:
-    """Ghép phụ đề cứng vào video."""
+def burn_subtitles(
+    video_id: int, position: str = "bottom", db: Session = Depends(get_db)
+) -> VideoDetailRead:
+    """Ghép phụ đề cứng vào video.
+
+    `position="top"` dùng khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc
+    định thì hai lớp chữ chồng lên nhau, không đọc được lớp nào.
+    """
     video = _get_video_or_404(db, video_id)
-    _burn_subtitles_for(video)
+    try:
+        _burn_subtitles_for(video, position)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     db.commit()
     return _to_detail(video)
 
