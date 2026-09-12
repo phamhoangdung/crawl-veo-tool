@@ -32,6 +32,10 @@ def db(monkeypatch) -> Session:
         session.commit()
         yield session
         session.close()
+        # Windows không xoá được file đang có handle mở: `session.close()` mới
+        # trả connection về pool chứ chưa đóng file, nên thiếu dòng này thì
+        # TemporaryDirectory dọn dẹp sẽ ném PermissionError ở mọi test.
+        engine.dispose()
 
 
 @pytest.fixture(autouse=True)
