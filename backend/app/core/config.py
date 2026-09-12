@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     falai_fake_policy_error_rate: float = 0.0
     falai_fake_force_error: str = ""  # "", "quota", "policy"
 
+    # Phase 3 — Douyin. Một số endpoint chỉ trả đủ dữ liệu khi có cookie đăng
+    # nhập. Để trống thì mọi thao tác Douyin bị từ chối kèm hướng dẫn, thay vì
+    # gọi API rồi nhận lỗi khó hiểu.
+    douyin_cookie: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
