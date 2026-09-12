@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 import {
   exportGeneratedAssetToLibrary,
   generateKenBurnsClip,
-  generateVideoClip,
+  generateVideoClipAsync,
+  waitForGenerationJob,
   generatedAssetFileUrl,
   getGeneratedAssets,
   getGenerationCostEstimate,
@@ -109,8 +110,10 @@ export function VideoStep({ settings, selectedKeyframeId }: Props) {
   })
 
   const aiVideo = useMutation({
-    mutationFn: (confirmExpensive: boolean) =>
-      generateVideoClip({
+    // Sinh clip là tác vụ lâu nhất và đắt nhất — chạy nền rồi hỏi lại tiến độ,
+    // để mất kết nối giữa chừng không đồng nghĩa với mất kết quả đã trả tiền.
+    mutationFn: async (confirmExpensive: boolean) => {
+      const job = await generateVideoClipAsync({
         prompt,
         keyframe_start_asset_id: selectedKeyframeId!,
         keyframe_end_asset_id: endKeyframeId,
@@ -118,14 +121,17 @@ export function VideoStep({ settings, selectedKeyframeId }: Props) {
         duration_seconds: duration,
         output_prefix: settings.outputPrefix || null,
         confirm_expensive: confirmExpensive,
-      }),
-    onSuccess: (result) => {
+      })
+      return waitForGenerationJob(job.id)
+    },
+    onSuccess: (job) => {
       invalidate()
+      queryClient.invalidateQueries({ queryKey: ['ai-studio', 'jobs'] })
       setPendingConfirm(null)
       toast.success(
-        result.from_cache
+        job.from_cache
           ? 'Dùng lại clip đã sinh trước đó — không tốn phí.'
-          : `Đã sinh clip ${result.asset.duration_seconds}s.`
+          : 'Đã sinh xong clip.'
       )
     },
     onError: handleError,

@@ -13,6 +13,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { CharacterReferencePanel } from './components/character-reference-panel'
 import { GenerationSettingsPanel } from './components/generation-settings-panel'
 import { KeyframeStep } from './components/keyframe-step'
+import { GenerationJobsPanel } from './components/generation-jobs-panel'
 import { SessionHistory } from './components/session-history'
 import { VideoStep } from './components/video-step'
 import { type StudioSettings } from './types'
@@ -102,6 +103,7 @@ export function AiStudio() {
               onSelectKeyframe={setSelectedKeyframeId}
             />
             <VideoStep settings={settings} selectedKeyframeId={selectedKeyframeId} />
+            <GenerationJobsPanel />
             <SessionHistory />
           </div>
         </div>

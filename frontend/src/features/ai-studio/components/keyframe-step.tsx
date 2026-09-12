@@ -4,7 +4,8 @@ import axios from 'axios'
 import { Check, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  generateKeyframe,
+  generateKeyframeAsync,
+  waitForGenerationJob,
   generatedAssetFileUrl,
   getCharacterReferences,
   getGeneratedAssets,
@@ -63,19 +64,25 @@ export function KeyframeStep({ settings, selectedKeyframeId, onSelectKeyframe }:
 
   const generate = useMutation({
     mutationFn: async () => {
-      const runs = Array.from({ length: settings.variantCount }, (_, index) =>
-        generateKeyframe({
-          prompt: settings.variantCount > 1 ? `${prompt} [v${index + 1}]` : prompt,
-          model: settings.imageModel,
-          output_prefix: settings.outputPrefix || null,
-        })
+      // Gửi job rồi hỏi lại tiến độ, không giữ 1 request mở suốt vài phút:
+      // provider thật mất 1-5 phút/ảnh, trình duyệt hoặc proxy sẽ cắt kết nối
+      // trước khi kịp có kết quả.
+      const jobs = await Promise.all(
+        Array.from({ length: settings.variantCount }, (_, index) =>
+          generateKeyframeAsync({
+            prompt: settings.variantCount > 1 ? `${prompt} [v${index + 1}]` : prompt,
+            model: settings.imageModel,
+            output_prefix: settings.outputPrefix || null,
+          })
+        )
       )
-      return Promise.all(runs)
+      return Promise.all(jobs.map((job) => waitForGenerationJob(job.id)))
     },
     onSuccess: (results) => {
       invalidate()
+      queryClient.invalidateQueries({ queryKey: ['ai-studio', 'jobs'] })
       const cached = results.filter((r) => r.from_cache).length
-      const first = results[0]?.asset.id
+      const first = results[0]?.asset_id
       if (first != null) onSelectKeyframe(first)
       toast.success(
         cached > 0
@@ -85,7 +92,13 @@ export function KeyframeStep({ settings, selectedKeyframeId, onSelectKeyframe }:
     },
     onError: (error) => {
       if (!axios.isAxiosError(error)) {
-        toast.error('Không sinh được ảnh.')
+        // Job thất bại đến đây dưới dạng Error thường (không phải lỗi HTTP) —
+        // thông báo của provider nằm trong `message`, đừng nuốt mất nó.
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : 'Không sinh được ảnh.'
+        )
         return
       }
       const detail = (error.response?.data as { detail?: string })?.detail
