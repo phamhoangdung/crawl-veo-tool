@@ -1,5 +1,24 @@
 import type { CropBox, TimelineClip, TimelineTrack } from '@/lib/api'
 
+/**
+ * Clip có mốc thời gian chắc chắn tồn tại.
+ *
+ * `TimelineClip.start/end` là optional vì clip ảnh (logo hiện suốt video) và
+ * vùng làm mờ được phép bỏ trống. Nhưng clip trên track **video/audio/overlay**
+ * thì luôn có: backend từ chối lưu timeline thiếu chúng (xem
+ * `timeline_service.validate_operations`), và chỉ ba loại track đó mới đi qua
+ * các hàm tính toán hình học ở đây.
+ *
+ * Khai báo bất biến này một lần, thay vì rải `!` ở ~20 chỗ — rải `!` thì mỗi chỗ
+ * là một lời khẳng định riêng lẻ không ai kiểm được, còn ở đây nó có tên, có lý
+ * do, và sửa một chỗ là xong nếu bất biến đổi.
+ */
+export type TimedClip = TimelineClip & { start: number; end: number }
+
+export function asTimed(clip: TimelineClip): TimedClip {
+  return clip as TimedClip
+}
+
 export const DEFAULT_PX_PER_SECOND = 40
 export const MIN_PX_PER_SECOND = 5
 export const MAX_PX_PER_SECOND = 400
@@ -47,7 +66,8 @@ export function computeVideoTrackLayout(clips: TimelineClip[]): LayoutedClip[] {
   const result: LayoutedClip[] = []
   let cumulative = 0
 
-  clips.forEach((clip, index) => {
+  clips.forEach((rawClip, index) => {
+    const clip = asTimed(rawClip)
     const duration = clip.end - clip.start
     const transitionDuration =
       index > 0 && clip.transition_in === 'fade' ? (clip.transition_duration ?? 1) : 0
@@ -100,11 +120,12 @@ export type DragMode = 'move' | 'resize-start' | 'resize-end'
  * độc lập với tương tác chuột thật (khó test tin cậy qua giả lập pointer event).
  */
 export function applyDragToClip(
-  clip: TimelineClip,
+  rawClip: TimelineClip,
   trackType: TimelineTrack['type'],
   mode: DragMode,
   deltaSeconds: number
 ): Partial<TimelineClip> {
+  const clip = asTimed(rawClip)
   if (mode === 'resize-start') {
     const newStart = Math.max(0, Math.min(clip.start + deltaSeconds, clip.end - MIN_CLIP_DURATION))
     return { start: newStart }

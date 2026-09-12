@@ -3,6 +3,7 @@ import {
   Activity,
   AudioLines,
   Captions,
+  Clapperboard,
   Download,
   FolderOpen,
   Languages,
@@ -37,6 +38,9 @@ const KIND_ICONS: Record<TaskKind, typeof Download> = {
   translate: Languages,
   dub: Mic,
   burn: AudioLines,
+  // Dựng video dự án nhiều cảnh (Phase 16) — thiếu mục này thì job đó hiện
+  // trong thanh tác vụ mà không có icon.
+  render_project: Clapperboard,
 }
 
 function formatBytes(bytes: number) {

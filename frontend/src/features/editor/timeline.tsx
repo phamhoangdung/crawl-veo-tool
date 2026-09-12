@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { Image as ImageIcon, Music2, Type, Video as VideoIcon } from 'lucide-react'
+import {
+  Droplet,
+  Image as ImageIcon,
+  Music2,
+  Type,
+  Video as VideoIcon,
+} from 'lucide-react'
 import type { TimelineClip, TimelineTrack } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -29,12 +35,16 @@ const TRACK_ICON: Record<TimelineTrack['type'], typeof VideoIcon> = {
   audio: Music2,
   overlay: Type,
   image: ImageIcon,
+  // Track vùng làm mờ thêm ở phase sau nhưng 2 bảng này chưa được cập nhật —
+  // thiếu mục là clip blur hiện ra không icon, không màu.
+  blur: Droplet,
 }
 const TRACK_COLOR: Record<TimelineTrack['type'], string> = {
   video: 'bg-blue-500/80 border-blue-600',
   audio: 'bg-emerald-500/80 border-emerald-600',
   overlay: 'bg-amber-500/80 border-amber-600',
   image: 'bg-fuchsia-500/80 border-fuchsia-600',
+  blur: 'bg-slate-500/80 border-slate-600',
 }
 
 function formatTime(seconds: number): string {

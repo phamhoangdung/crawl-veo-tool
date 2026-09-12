@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { asTimed } from './layout'
 import { useEditorStore } from './store'
 
 interface OverlayLayerProps {
@@ -47,7 +48,8 @@ export function OverlayLayer({ currentTime }: OverlayLayerProps) {
 
   return (
     <div ref={containerRef} className='pointer-events-none absolute inset-0 overflow-hidden'>
-      {overlayTrack.clips.map((clip, clipIndex) => {
+      {overlayTrack.clips.map((rawClip, clipIndex) => {
+        const clip = asTimed(rawClip)
         if (currentTime < clip.start || currentTime > clip.end) return null
         const x = clip.x ?? 0.5
         const y = clip.y ?? 0.9

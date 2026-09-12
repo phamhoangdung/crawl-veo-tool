@@ -13,6 +13,7 @@ vi.mock('@/lib/api', async (orig) => ({
 function task(overrides: Partial<TaskProgress> = {}): TaskProgress {
   return {
     video_id: 1,
+    subject_type: 'video',
     title: 'video',
     kind: 'download',
     kind_label: 'Tải video',
@@ -48,7 +49,7 @@ describe('useVideoTaskProgress', () => {
   it('lấy đúng tiến độ của video được hỏi', async () => {
     await renderWith([task({ video_id: 9, percent: 10 }), task({ video_id: 1, percent: 77 })])
 
-    await expect.element(document.querySelector('[data-testid=out]')!).toHaveTextContent(
+    await expect.element(document.querySelector<HTMLElement>('[data-testid=out]')!).toHaveTextContent(
       '77|true'
     )
   })
@@ -57,7 +58,7 @@ describe('useVideoTaskProgress', () => {
     await renderWith([task({ video_id: 9 })])
 
     await expect
-      .element(document.querySelector('[data-testid=out]')!)
+      .element(document.querySelector<HTMLElement>('[data-testid=out]')!)
       .toHaveTextContent('null')
   })
 
@@ -65,7 +66,7 @@ describe('useVideoTaskProgress', () => {
     await renderWith([task({ kind: 'transcribe', percent: 5 }), task({ kind: 'download', percent: 88 })])
 
     await expect
-      .element(document.querySelector('[data-testid=out]')!)
+      .element(document.querySelector<HTMLElement>('[data-testid=out]')!)
       .toHaveTextContent('88|true')
   })
 
@@ -74,7 +75,7 @@ describe('useVideoTaskProgress', () => {
 
     // Đây là tín hiệu để dòng trong bảng đổi trạng thái khỏi "downloading".
     await expect
-      .element(document.querySelector('[data-testid=out]')!)
+      .element(document.querySelector<HTMLElement>('[data-testid=out]')!)
       .toHaveTextContent('100|false')
   })
 })

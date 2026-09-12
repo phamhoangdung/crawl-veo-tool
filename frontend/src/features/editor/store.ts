@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import type { TimelineClip, TimelineOperations, TimelineTrack } from '@/lib/api'
-import { DEFAULT_PX_PER_SECOND, MAX_PX_PER_SECOND, MIN_PX_PER_SECOND } from './layout'
+import {
+  asTimed,
+  DEFAULT_PX_PER_SECOND,
+  MAX_PX_PER_SECOND,
+  MIN_PX_PER_SECOND,
+} from './layout'
 
 export interface Selection {
   trackIndex: number
@@ -149,8 +154,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
   splitClip: (trackIndex, clipIndex, atSeconds) =>
     set((state) => {
       const track = state.operations.tracks[trackIndex]
-      const clip = track?.clips[clipIndex]
-      if (!clip) return state
+      const rawClip = track?.clips[clipIndex]
+      if (!rawClip) return state
+      const clip = asTimed(rawClip)
 
       // `atSeconds` là vị trí trên timeline output; quy về offset trong file nguồn.
       const offsetInClip =
@@ -184,8 +190,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
   duplicateClip: (trackIndex, clipIndex) =>
     set((state) => {
       const track = state.operations.tracks[trackIndex]
-      const clip = track?.clips[clipIndex]
-      if (!clip) return state
+      const rawClip = track?.clips[clipIndex]
+      if (!rawClip) return state
+      const clip = asTimed(rawClip)
 
       // Bản sao audio đặt ngay sau bản gốc để không chồng tiếng lên nhau.
       const copy =
