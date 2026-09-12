@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 from app.api.mcp_auth import require_scope
 from app.core.db import get_db
 from app.models.generation_project import GenerationProject, Scene
+from app.schemas.timeline import (
+    TimelineRead,
+    TimelineRenderRead,
+    TimelineSaveRequest,
+)
 from app.schemas.generation_project import (
     CanvasSaveRequest,
     ExportToLibraryResponse,
@@ -26,6 +31,7 @@ from app.services import (
     cost_service,
     project_render_service,
     project_service,
+    timeline_service,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -262,3 +268,67 @@ def get_project_output(project_id: int, db: Session = Depends(get_db)) -> FileRe
     if not path.exists():
         raise HTTPException(status_code=404, detail="File video đã bị xoá khỏi ổ đĩa")
     return FileResponse(path, filename=f"{project.output_prefix}.mp4")
+
+
+@router.get(
+    "/{project_id}/timeline",
+    response_model=TimelineRead,
+    dependencies=[Depends(require_scope("assets:read"))],
+)
+def get_project_timeline(project_id: int, db: Session = Depends(get_db)) -> TimelineRead:
+    """Timeline tinh chỉnh của dự án — `null` khi chưa lưu lần nào (UI sẽ xin gợi ý)."""
+    _require_project(db, project_id)
+    operations = timeline_service.get_timeline_for(db, "project", project_id)
+    return TimelineRead(tracks=operations["tracks"] if operations else None)
+
+
+@router.get(
+    "/{project_id}/timeline/suggestion",
+    response_model=TimelineRead,
+    dependencies=[Depends(require_scope("assets:read"))],
+)
+def suggest_project_timeline(project_id: int, db: Session = Depends(get_db)) -> TimelineRead:
+    """Timeline gợi ý dựng thẳng từ các cảnh đã sinh clip — vai trò tương đương
+    `buildSuggestionFromPipeline` của video crawl, nhưng nguồn là canvas."""
+    project = _require_project(db, project_id)
+    try:
+        operations = project_service.build_operations(db, project)
+    except project_service.ProjectValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return TimelineRead(tracks=operations["tracks"])
+
+
+@router.put(
+    "/{project_id}/timeline",
+    response_model=TimelineRead,
+    dependencies=[Depends(require_scope("assets:write"))],
+)
+def save_project_timeline(
+    project_id: int, payload: TimelineSaveRequest, db: Session = Depends(get_db)
+) -> TimelineRead:
+    _require_project(db, project_id)
+    try:
+        operations = timeline_service.save_timeline_for(
+            db, "project", project_id, payload.model_dump()
+        )
+    except timeline_service.TimelineValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return TimelineRead(tracks=operations["tracks"])
+
+
+@router.post(
+    "/{project_id}/timeline/render",
+    response_model=TimelineRenderRead,
+    dependencies=[Depends(require_scope("gen:write"))],
+)
+def render_project_timeline(
+    project_id: int, db: Session = Depends(get_db)
+) -> TimelineRenderRead:
+    """Render bản cuối sau khi kéo-chỉnh. Khác `/render` (dựng thô từ canvas):
+    endpoint này chỉ ghép đúng những gì timeline đang mô tả, không sinh cảnh mới."""
+    _require_project(db, project_id)
+    try:
+        output_path = timeline_service.render_timeline_for(db, "project", project_id)
+    except timeline_service.TimelineValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return TimelineRenderRead(rendered_path=str(output_path))

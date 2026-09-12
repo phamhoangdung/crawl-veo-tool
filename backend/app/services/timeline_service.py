@@ -4,22 +4,68 @@ Nguyên tắc cốt lõi: AI chỉ gợi ý (điền sẵn `timeline_json`), ren
 người dùng chủ động gọi `render_timeline_for_video` (nút riêng ở UI, không tự động).
 """
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
 from app.adapters import ffmpeg
+from app.core.config import _storage_dir
+from app.models.generation_project import GenerationProject
 from app.models.video import Video
 
 _VALID_TRACK_TYPES = {"video", "audio", "overlay", "image", "blur"}
+
+# Timeline neo được vào 2 loại chủ thể: video crawl về (Phase 13) và dự án nhiều
+# cảnh dựng bằng AI (Phase 14/16). Dùng chung đúng một `timeline_json` + một
+# renderer, chỉ khác chỗ lấy thư mục làm việc.
+SubjectType = Literal["video", "project"]
 
 
 class TimelineValidationError(ValueError):
     pass
 
 
-class VideoNotFoundError(ValueError):
+class SubjectNotFoundError(ValueError):
     pass
+
+
+class VideoNotFoundError(SubjectNotFoundError):
+    pass
+
+
+class ProjectNotFoundError(SubjectNotFoundError):
+    pass
+
+
+@dataclass(frozen=True)
+class _Subject:
+    """Chủ thể giữ timeline — gói lại phần khác nhau giữa `Video` và dự án."""
+
+    row: Video | GenerationProject
+    work_dir: Path
+
+
+def _resolve_subject(db: Session, subject_type: SubjectType, subject_id: int) -> _Subject:
+    if subject_type == "video":
+        video = db.get(Video, subject_id)
+        if video is None:
+            raise VideoNotFoundError(f"Video {subject_id} không tồn tại")
+        work_dir = (
+            Path(video.local_path).parent
+            if video.local_path
+            else Path("storage") / str(subject_id)
+        )
+        return _Subject(row=video, work_dir=work_dir)
+
+    if subject_type == "project":
+        project = db.get(GenerationProject, subject_id)
+        if project is None:
+            raise ProjectNotFoundError(f"Dự án {subject_id} không tồn tại")
+        return _Subject(row=project, work_dir=_storage_dir() / "projects" / str(subject_id))
+
+    raise ValueError(f"Loại chủ thể không hợp lệ: {subject_type!r}")
 
 
 def validate_operations(operations: dict) -> None:
@@ -91,42 +137,53 @@ def validate_operations(operations: dict) -> None:
         raise TimelineValidationError("Timeline cần ít nhất 1 track video có clip")
 
 
-def get_timeline(db: Session, video_id: int) -> dict | None:
-    video = db.get(Video, video_id)
-    if video is None:
-        raise VideoNotFoundError(f"Video {video_id} không tồn tại")
-    return video.timeline_json
+def get_timeline_for(
+    db: Session, subject_type: SubjectType, subject_id: int
+) -> dict | None:
+    return _resolve_subject(db, subject_type, subject_id).row.timeline_json
 
 
-def save_timeline(db: Session, video_id: int, operations: dict) -> dict:
+def save_timeline_for(
+    db: Session, subject_type: SubjectType, subject_id: int, operations: dict
+) -> dict:
     """Lưu draft — validate hình dạng cơ bản nhưng KHÔNG render. Cho phép gọi
     nhiều lần để sửa dần (mỗi lần gọi ghi đè toàn bộ draft cũ)."""
-    video = db.get(Video, video_id)
-    if video is None:
-        raise VideoNotFoundError(f"Video {video_id} không tồn tại")
+    subject = _resolve_subject(db, subject_type, subject_id)
     validate_operations(operations)
-    video.timeline_json = operations
+    subject.row.timeline_json = operations
     db.commit()
     return operations
 
 
-def render_timeline_for_video(db: Session, video_id: int) -> Path:
+def render_timeline_for(
+    db: Session, subject_type: SubjectType, subject_id: int
+) -> Path:
     """Render draft đã lưu thành file hoàn chỉnh — chỉ gọi khi người dùng chủ động
     bấm nút render (không tự động sau save_timeline)."""
-    video = db.get(Video, video_id)
-    if video is None:
-        raise VideoNotFoundError(f"Video {video_id} không tồn tại")
-    if not video.timeline_json:
-        raise TimelineValidationError("Chưa có timeline nào được lưu cho video này")
+    subject = _resolve_subject(db, subject_type, subject_id)
+    if not subject.row.timeline_json:
+        raise TimelineValidationError("Chưa có timeline nào được lưu cho mục này")
 
-    video_dir = Path(video.local_path).parent if video.local_path else Path("storage") / str(video_id)
-    output_path = video_dir / "timeline_rendered.mp4"
+    subject.work_dir.mkdir(parents=True, exist_ok=True)
+    output_path = subject.work_dir / "timeline_rendered.mp4"
 
-    ffmpeg.render_timeline(video.timeline_json, output_path)
+    ffmpeg.render_timeline(subject.row.timeline_json, output_path)
 
-    video.timeline_rendered_path = str(output_path)
+    subject.row.timeline_rendered_path = str(output_path)
     db.commit()
     return output_path
+
+
+def get_timeline(db: Session, video_id: int) -> dict | None:
+    return get_timeline_for(db, "video", video_id)
+
+
+def save_timeline(db: Session, video_id: int, operations: dict) -> dict:
+    return save_timeline_for(db, "video", video_id, operations)
+
+
+def render_timeline_for_video(db: Session, video_id: int) -> Path:
+    return render_timeline_for(db, "video", video_id)
 
 
 def get_audio_stems(db: Session, video_id: int) -> dict[str, str | None]:

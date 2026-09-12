@@ -79,6 +79,10 @@ def ensure_schema_columns() -> None:
             "timeline_json": "JSON",
             "timeline_rendered_path": "VARCHAR",
         },
+        "generation_projects": {
+            "timeline_json": "JSON",
+            "timeline_rendered_path": "VARCHAR",
+        },
     }
 
     with engine.begin() as conn:

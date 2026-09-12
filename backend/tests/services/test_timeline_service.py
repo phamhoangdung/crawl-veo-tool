@@ -261,3 +261,62 @@ class TestBlurTrackValidation:
         }
         with pytest.raises(timeline_service.TimelineValidationError, match="cả 'start' và 'end'"):
             timeline_service.save_timeline(db, 1, operations)
+
+
+class TestProjectTimeline:
+    """Timeline neo vào dự án AI (Phase 14 gap): dùng chung service với video."""
+
+    @pytest.fixture
+    def project_db(self, tmp_path: Path, monkeypatch) -> Session:
+        from app.models.generation_project import GenerationProject
+
+        monkeypatch.setattr(timeline_service, "_storage_dir", lambda: tmp_path)
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        session.add(User(id=1))
+        session.commit()
+        session.add(
+            GenerationProject(id=7, user_id=1, title="Dự án thử", output_prefix="EP001")
+        )
+        session.commit()
+        yield session
+        session.close()
+        engine.dispose()
+
+    def test_saves_and_reads_back(self, project_db: Session) -> None:
+        timeline_service.save_timeline_for(project_db, "project", 7, _VALID_OPERATIONS)
+        assert (
+            timeline_service.get_timeline_for(project_db, "project", 7)
+            == _VALID_OPERATIONS
+        )
+
+    def test_unknown_project_raises_project_not_found(self, project_db: Session) -> None:
+        with pytest.raises(timeline_service.ProjectNotFoundError):
+            timeline_service.get_timeline_for(project_db, "project", 999)
+
+    def test_video_not_found_still_catchable_as_subject_error(self, db: Session) -> None:
+        """Caller cũ bắt `VideoNotFoundError` không được gãy sau khi tổng quát hoá."""
+        with pytest.raises(timeline_service.VideoNotFoundError):
+            timeline_service.get_timeline(db, 999)
+        with pytest.raises(timeline_service.SubjectNotFoundError):
+            timeline_service.get_timeline(db, 999)
+
+    def test_render_writes_into_project_folder(
+        self, project_db: Session, tmp_path: Path
+    ) -> None:
+        from app.models.generation_project import GenerationProject
+
+        timeline_service.save_timeline_for(project_db, "project", 7, _VALID_OPERATIONS)
+        with patch("app.services.timeline_service.ffmpeg.render_timeline") as render:
+            output = timeline_service.render_timeline_for(project_db, "project", 7)
+
+        render.assert_called_once()
+        assert output == tmp_path / "projects" / "7" / "timeline_rendered.mp4"
+        assert output.parent.exists(), "phải tạo sẵn thư mục trước khi ffmpeg ghi vào"
+        project = project_db.get(GenerationProject, 7)
+        assert project.timeline_rendered_path == str(output)
+
+    def test_render_without_saved_timeline_is_rejected(self, project_db: Session) -> None:
+        with pytest.raises(timeline_service.TimelineValidationError):
+            timeline_service.render_timeline_for(project_db, "project", 7)

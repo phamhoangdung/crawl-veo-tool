@@ -32,6 +32,11 @@ class GenerationProject(Base):
     output_prefix: Mapped[str] = mapped_column()
     rendered_path: Mapped[str | None] = mapped_column(default=None)
     canvas_viewport: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # Timeline tinh chỉnh sau khi dựng thô (Phase 13 mở cho dự án AI). Tách khỏi
+    # `rendered_path` có chủ đích: bản dựng thô từ canvas là đầu vào của editor,
+    # còn `timeline_rendered_path` là bản cuối sau khi kéo-chỉnh.
+    timeline_json: Mapped[dict | None] = mapped_column(JSON, default=None)
+    timeline_rendered_path: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
