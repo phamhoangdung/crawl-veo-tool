@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.services import file_manager_service
+from app.services import file_manager_service, storage_cleanup_service
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -81,6 +81,28 @@ def cleanup_orphans(db: Session = Depends(get_db)) -> dict[str, int]:
     """Xoá file không còn video nào trỏ tới — dọn sau khi xoá bản ghi hoặc job lỗi."""
     freed = file_manager_service.delete_orphan_files(db, _DEFAULT_USER_ID)
     return {"freed_bytes": freed}
+
+
+class CleanupOldJobsRead(BaseModel):
+    removed_job_ids: list[str]
+    max_age_days: int
+
+
+@router.post("/cleanup-old-jobs", response_model=CleanupOldJobsRead)
+def cleanup_old_jobs(
+    max_age_days: int = storage_cleanup_service.DEFAULT_MAX_AGE_DAYS,
+) -> CleanupOldJobsRead:
+    """Chạy ngay việc dọn thư mục job cũ, không đợi chu kỳ nền 24h.
+
+    Cùng hàm mà vòng lặp nền gọi — endpoint này chỉ để bấm tay khi ổ đĩa đầy
+    hoặc khi muốn dọn gấp với ngưỡng tuổi khác.
+    """
+    if max_age_days < 1:
+        raise HTTPException(
+            status_code=422, detail="max_age_days phải >= 1 (tránh xoá nhầm job hôm nay)"
+        )
+    removed = storage_cleanup_service.cleanup_old_job_folders(max_age_days)
+    return CleanupOldJobsRead(removed_job_ids=removed, max_age_days=max_age_days)
 
 
 class DashboardStatsRead(BaseModel):

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import FastAPI
@@ -29,6 +30,7 @@ from app.api import (
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
 from app.models.category import Category
 from app.models.user import User
+from app.services import storage_cleanup_service
 
 logging.basicConfig(level=logging.INFO)
 
@@ -69,6 +71,35 @@ def on_startup() -> None:
     ensure_schema_columns()
     _ensure_default_user()
     _ensure_seed_categories()
+
+
+# Giữ tham chiếu tới task nền: mất tham chiếu thì Python có thể thu gom task
+# giữa chừng, và lúc tắt app không còn gì để huỷ.
+_cleanup_task: asyncio.Task | None = None
+
+
+@app.on_event("startup")
+async def start_background_jobs() -> None:
+    """Dọn thư mục job cũ định kỳ ngay trong process backend (Phase 6).
+
+    Handler riêng và `async` có chủ đích: `asyncio.create_task` cần event loop
+    đang chạy, mà handler startup đồng bộ ở trên không đảm bảo điều đó.
+    """
+    global _cleanup_task
+    _cleanup_task = asyncio.create_task(storage_cleanup_service.run_periodic_cleanup())
+
+
+@app.on_event("shutdown")
+async def stop_background_jobs() -> None:
+    """Huỷ hẳn task nền khi tắt: bỏ mặc thì uvicorn đợi task không bao giờ kết
+    thúc, app đóng gói (Phase 12) sẽ treo lúc thoát."""
+    if _cleanup_task is None:
+        return
+    _cleanup_task.cancel()
+    try:
+        await _cleanup_task
+    except asyncio.CancelledError:
+        pass
 
 
 # Chuyên mục mồi để trang Trending không rỗng ở lần chạy đầu; danh sách đầy đủ
