@@ -199,6 +199,44 @@ export interface TrendingVideo {
   published_at: string | null
 }
 
+/** YouTube CHỈ dùng để xem xu hướng/tính điểm chủ đề — không tải video (khác
+ * Bilibili/Douyin). Xem docs/phases/phase-17-content-opportunity.md. */
+export interface YoutubeCategory {
+  id: string
+  name: string
+}
+
+export interface YoutubeVideo {
+  video_id: string
+  title: string
+  channel_title: string
+  thumbnail_url: string | null
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+  published_at: string | null
+}
+
+export interface YoutubeTrendingPage {
+  videos: YoutubeVideo[]
+  next_page_token: string | null
+  has_more: boolean
+}
+
+export interface Topic {
+  id: number
+  name: string
+  query: string
+  note: string | null
+  created_at: string
+  score: number | null
+  sample_video_count: number | null
+  competition_count: number | null
+  top_video_title: string | null
+  top_video_url: string | null
+  scored_at: string | null
+}
+
 export interface TranscriptSegment {
   start: number
   end: number
@@ -1354,4 +1392,60 @@ export async function exportProjectToLibrary(projectId: number) {
 /** URL video đã dựng — dùng trực tiếp trong <video>. */
 export function projectOutputUrl(projectId: number) {
   return `${API_BASE_URL}/api/projects/${projectId}/output`
+}
+
+export async function getYoutubeStatus() {
+  const { data } = await api.get<{ configured: boolean }>(
+    '/api/trending/youtube/status'
+  )
+  return data
+}
+
+export async function getYoutubeCategories(regionCode = 'VN') {
+  const { data } = await api.get<YoutubeCategory[]>(
+    '/api/trending/youtube/categories',
+    { params: { region_code: regionCode } }
+  )
+  return data
+}
+
+export async function getYoutubeTrending(
+  regionCode: string,
+  categoryId: string | null,
+  pageToken: string | null
+) {
+  const { data } = await api.get<YoutubeTrendingPage>(
+    '/api/trending/youtube/trending',
+    {
+      params: {
+        region_code: regionCode,
+        category_id: categoryId ?? undefined,
+        page_token: pageToken ?? undefined,
+      },
+    }
+  )
+  return data
+}
+
+export async function getTopics() {
+  const { data } = await api.get<Topic[]>('/api/topics')
+  return data
+}
+
+export async function createTopic(payload: {
+  name: string
+  query?: string
+  note?: string
+}) {
+  const { data } = await api.post<Topic>('/api/topics', payload)
+  return data
+}
+
+export async function deleteTopic(topicId: number) {
+  await api.delete(`/api/topics/${topicId}`)
+}
+
+export async function computeTopicScore(topicId: number) {
+  const { data } = await api.post<Topic>(`/api/topics/${topicId}/score`)
+  return data
 }

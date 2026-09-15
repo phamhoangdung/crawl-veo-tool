@@ -29,7 +29,6 @@ import {
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
-import { CoverImage } from '@/components/cover-image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -41,16 +40,19 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CategoryChart } from './category-chart'
-import { CategoryPicker } from './category-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { CoverImage } from '@/components/cover-image'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { CategoryChart } from './category-chart'
+import { CategoryPicker } from './category-picker'
+import { formatCompact, formatRelativeDate } from './format'
+import { YoutubePanel } from './youtube-panel'
 
 function bilibiliVideoUrl(bvid: string) {
   return `https://www.bilibili.com/video/${bvid}`
@@ -65,23 +67,6 @@ function formatDuration(seconds: number | null) {
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   return `${minutes}:${rest.toString().padStart(2, '0')}`
-}
-
-function formatCompact(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}Tr`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}N`
-  return String(value)
-}
-
-/** "3 ngày trước" — chỉ cần độ chính xác cỡ ngày, không cần giờ/phút. */
-function formatRelativeDate(iso: string | null) {
-  if (!iso) return null
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
-  if (days <= 0) return 'Hôm nay'
-  if (days === 1) return 'Hôm qua'
-  if (days < 30) return `${days} ngày trước`
-  const months = Math.floor(days / 30)
-  return `${months} tháng trước`
 }
 
 /**
@@ -138,7 +123,11 @@ function VideoGridPanel({
         if (seen.has(v.bvid)) continue
         seen.add(v.bvid)
         flat.push(v)
-        if (page.source === 'search' && sawNonSearch && firstSearchBvid === null) {
+        if (
+          page.source === 'search' &&
+          sawNonSearch &&
+          firstSearchBvid === null
+        ) {
           firstSearchBvid = v.bvid
         }
       }
@@ -160,7 +149,8 @@ function VideoGridPanel({
         `Đã thêm ${job.videos.length} video vào hàng đợi. Mở trang Crawl để tải.`
       )
     },
-    onError: () => toast.error('Không tạo được job. Kiểm tra backend đang chạy.'),
+    onError: () =>
+      toast.error('Không tạo được job. Kiểm tra backend đang chạy.'),
   })
 
   function toggle(bvid: string) {
@@ -182,7 +172,8 @@ function VideoGridPanel({
   }
 
   const pickedVideos = videos?.filter((v) => selected.has(v.bvid)) ?? []
-  const allSelected = Boolean(videos?.length) && selected.size === videos?.length
+  const allSelected =
+    Boolean(videos?.length) && selected.size === videos?.length
 
   return (
     <div className='space-y-4'>
@@ -201,13 +192,17 @@ function VideoGridPanel({
           size='sm'
           variant='outline'
           onClick={() =>
-            setSelected(allSelected ? new Set() : new Set(videos?.map((v) => v.bvid)))
+            setSelected(
+              allSelected ? new Set() : new Set(videos?.map((v) => v.bvid))
+            )
           }
         >
           {allSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
         </Button>
         {selected.size > 0 && (
-          <span className='text-sm text-muted-foreground'>Đã chọn {selected.size}</span>
+          <span className='text-sm text-muted-foreground'>
+            Đã chọn {selected.size}
+          </span>
         )}
       </div>
 
@@ -221,8 +216,8 @@ function VideoGridPanel({
                 <div className='col-span-full -mb-1 flex items-center gap-2 pt-2 text-xs text-muted-foreground'>
                   <div className='h-px flex-1 bg-border' />
                   <span>
-                    Duyệt thêm theo chuyên mục — không phải bảng xếp hạng, có thể
-                    lẫn video không liên quan
+                    Duyệt thêm theo chuyên mục — không phải bảng xếp hạng, có
+                    thể lẫn video không liên quan
                   </span>
                   <div className='h-px flex-1 bg-border' />
                 </div>
@@ -288,12 +283,16 @@ function VideoGridPanel({
                   </div>
                 </div>
                 <CardHeader>
-                  <CardTitle className='line-clamp-2 text-sm'>{video.title}</CardTitle>
+                  <CardTitle className='line-clamp-2 text-sm'>
+                    {video.title}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
                   <div className='flex items-center justify-between'>
                     <span className='truncate'>{video.author_name ?? '—'}</span>
-                    <span className='shrink-0'>{formatDuration(video.duration_seconds)}</span>
+                    <span className='shrink-0'>
+                      {formatDuration(video.duration_seconds)}
+                    </span>
                   </div>
                   <div className='flex items-center justify-between'>
                     <span className='flex items-center gap-2'>
@@ -307,7 +306,9 @@ function VideoGridPanel({
                         <span>{formatCompact(video.coin_count)} xu</span>
                       )}
                     </span>
-                    {relativeDate && <span className='shrink-0'>{relativeDate}</span>}
+                    {relativeDate && (
+                      <span className='shrink-0'>{relativeDate}</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -376,6 +377,7 @@ function VideoGridPanel({
 
 export function Trending() {
   const queryClient = useQueryClient()
+  const [platform, setPlatform] = useState<'bilibili' | 'youtube'>('bilibili')
   const [searchInput, setSearchInput] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
 
@@ -387,7 +389,8 @@ export function Trending() {
     queryKey: ['trending', 'bilibili', 'categories'],
     queryFn: getTrendingCategories,
     refetchInterval: (query) => {
-      const pending = query.state.data?.some((c) => c.name === c.name_zh) ?? false
+      const pending =
+        query.state.data?.some((c) => c.name === c.name_zh) ?? false
       return pending ? 8000 : false
     },
   })
@@ -442,98 +445,149 @@ export function Trending() {
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Trending</h1>
             <p className='text-muted-foreground'>
-              Video đang hot trên Bilibili theo từng chuyên mục — dùng để chọn từ khoá crawl.
+              {platform === 'bilibili'
+                ? 'Video đang hot trên Bilibili theo từng chuyên mục — dùng để chọn từ khoá crawl.'
+                : 'Xu hướng YouTube — chỉ để tham khảo ý tưởng, không tải video ở đây.'}
             </p>
           </div>
           <div className='flex items-center gap-2'>
-            <Button
-              variant='ghost'
-              size='sm'
-              disabled={refresh.isPending}
-              onClick={() => refresh.mutate()}
-            >
-              {refresh.isPending && <Loader2 className='size-3.5 animate-spin' />}
-              {refresh.isPending ? 'Đang quét...' : 'Quét chuyên mục mới'}
-            </Button>
-            {categories && (
-              <CategoryPicker
-                categories={categories}
-                selected={selectedRids}
-                onChange={(rids) => saveFollowed.mutate(rids)}
-              />
+            {platform === 'bilibili' && (
+              <>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  disabled={refresh.isPending}
+                  onClick={() => refresh.mutate()}
+                >
+                  {refresh.isPending && (
+                    <Loader2 className='size-3.5 animate-spin' />
+                  )}
+                  {refresh.isPending ? 'Đang quét...' : 'Quét chuyên mục mới'}
+                </Button>
+                {categories && (
+                  <CategoryPicker
+                    categories={categories}
+                    selected={selectedRids}
+                    onChange={(rids) => saveFollowed.mutate(rids)}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
 
-        <form onSubmit={submitSearch} className='mb-4 flex gap-2'>
-          <Input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder='Tìm video theo từ khoá bất kỳ, không giới hạn chuyên mục...'
-            className='max-w-md'
-          />
-          <Button type='submit' variant='secondary' disabled={!searchInput.trim()}>
-            <SearchIcon className='size-4' />
-            Tìm
+        <div className='mb-4 flex w-fit gap-1 rounded-lg border bg-muted/50 p-1'>
+          <Button
+            type='button'
+            size='sm'
+            variant={platform === 'bilibili' ? 'default' : 'ghost'}
+            onClick={() => setPlatform('bilibili')}
+          >
+            Bilibili
           </Button>
-          {activeSearch && (
-            <Button
-              type='button'
-              variant='ghost'
-              onClick={() => {
-                setActiveSearch('')
-                setSearchInput('')
-              }}
-            >
-              <X className='size-4' />
-              Xoá tìm kiếm
-            </Button>
-          )}
-        </form>
+          <Button
+            type='button'
+            size='sm'
+            variant={platform === 'youtube' ? 'default' : 'ghost'}
+            onClick={() => setPlatform('youtube')}
+          >
+            YouTube
+          </Button>
+        </div>
 
-        {activeSearch ? (
-          <div className='space-y-4'>
-            <p className='text-sm text-muted-foreground'>
-              Kết quả tìm kiếm cho &quot;{activeSearch}&quot; — không phải bảng
-              xếp hạng, có thể lẫn video không liên quan.
-            </p>
-            <VideoGridPanel
-              queryKey={['trending', 'bilibili', 'search', activeSearch]}
-              fetchPage={(page) => searchBilibili(activeSearch, page)}
-            />
-          </div>
+        {platform === 'youtube' ? (
+          <YoutubePanel />
         ) : (
           <>
-            <div className='mb-6'>
-              <CategoryChart rids={selectedRids} />
-            </div>
+            <form onSubmit={submitSearch} className='mb-4 flex gap-2'>
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder='Tìm video theo từ khoá bất kỳ, không giới hạn chuyên mục...'
+                className='max-w-md'
+              />
+              <Button
+                type='submit'
+                variant='secondary'
+                disabled={!searchInput.trim()}
+              >
+                <SearchIcon className='size-4' />
+                Tìm
+              </Button>
+              {activeSearch && (
+                <Button
+                  type='button'
+                  variant='ghost'
+                  onClick={() => {
+                    setActiveSearch('')
+                    setSearchInput('')
+                  }}
+                >
+                  <X className='size-4' />
+                  Xoá tìm kiếm
+                </Button>
+              )}
+            </form>
 
-            <Tabs defaultValue='all'>
-              <div className='overflow-x-auto'>
-                <TabsList>
-                  <TabsTrigger value='all'>Tất cả</TabsTrigger>
-                  {activeCategories.map((category) => (
-                    <TabsTrigger key={category.rid} value={String(category.rid)}>
-                      {category.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-              <TabsContent value='all' className='mt-4'>
+            {activeSearch ? (
+              <div className='space-y-4'>
+                <p className='text-sm text-muted-foreground'>
+                  Kết quả tìm kiếm cho &quot;{activeSearch}&quot; — không phải
+                  bảng xếp hạng, có thể lẫn video không liên quan.
+                </p>
                 <VideoGridPanel
-                  queryKey={['trending', 'bilibili', 'popular-page']}
-                  fetchPage={getPopularPage}
+                  queryKey={['trending', 'bilibili', 'search', activeSearch]}
+                  fetchPage={(page) => searchBilibili(activeSearch, page)}
                 />
-              </TabsContent>
-              {activeCategories.map((category) => (
-                <TabsContent key={category.rid} value={String(category.rid)} className='mt-4'>
-                  <VideoGridPanel
-                    queryKey={['trending', 'bilibili', 'category-page', category.rid]}
-                    fetchPage={(page) => getCategoryPage(category.rid, page)}
-                  />
-                </TabsContent>
-              ))}
-            </Tabs>
+              </div>
+            ) : (
+              <>
+                <div className='mb-6'>
+                  <CategoryChart rids={selectedRids} />
+                </div>
+
+                <Tabs defaultValue='all'>
+                  <div className='overflow-x-auto'>
+                    <TabsList>
+                      <TabsTrigger value='all'>Tất cả</TabsTrigger>
+                      {activeCategories.map((category) => (
+                        <TabsTrigger
+                          key={category.rid}
+                          value={String(category.rid)}
+                        >
+                          {category.name}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
+                  <TabsContent value='all' className='mt-4'>
+                    <VideoGridPanel
+                      queryKey={['trending', 'bilibili', 'popular-page']}
+                      fetchPage={getPopularPage}
+                    />
+                  </TabsContent>
+                  {activeCategories.map((category) => (
+                    <TabsContent
+                      key={category.rid}
+                      value={String(category.rid)}
+                      className='mt-4'
+                    >
+                      <VideoGridPanel
+                        queryKey={[
+                          'trending',
+                          'bilibili',
+                          'category-page',
+                          category.rid,
+                        ]}
+                        fetchPage={(page) =>
+                          getCategoryPage(category.rid, page)
+                        }
+                      />
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </>
+            )}
           </>
         )}
       </Main>

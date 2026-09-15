@@ -24,8 +24,10 @@ from app.api import (
     pipeline,
     projects,
     timeline,
+    topics,
     translate,
     trending,
+    youtube,
 )
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
 from app.models.category import Category
@@ -63,6 +65,8 @@ app.include_router(translate.router)
 app.include_router(ai_generation.router)
 app.include_router(mcp_tokens.router)
 app.include_router(projects.router)
+app.include_router(youtube.router)
+app.include_router(topics.router)
 
 
 @app.on_event("startup")

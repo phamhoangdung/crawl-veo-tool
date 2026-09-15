@@ -24,6 +24,7 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedVideosIndexRouteImport } from './routes/_authenticated/videos/index'
 import { Route as AuthenticatedTrendingIndexRouteImport } from './routes/_authenticated/trending/index'
+import { Route as AuthenticatedTopicsIndexRouteImport } from './routes/_authenticated/topics/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedLibraryIndexRouteImport } from './routes/_authenticated/library/index'
@@ -113,6 +114,12 @@ const AuthenticatedTrendingIndexRoute =
   AuthenticatedTrendingIndexRouteImport.update({
     id: '/trending/',
     path: '/trending/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTopicsIndexRoute =
+  AuthenticatedTopicsIndexRouteImport.update({
+    id: '/topics/',
+    path: '/topics/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSettingsIndexRoute =
@@ -219,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/library/': typeof AuthenticatedLibraryIndexRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/topics/': typeof AuthenticatedTopicsIndexRoute
   '/trending/': typeof AuthenticatedTrendingIndexRoute
   '/videos/': typeof AuthenticatedVideosIndexRoute
 }
@@ -247,6 +255,7 @@ export interface FileRoutesByTo {
   '/library': typeof AuthenticatedLibraryIndexRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
+  '/topics': typeof AuthenticatedTopicsIndexRoute
   '/trending': typeof AuthenticatedTrendingIndexRoute
   '/videos': typeof AuthenticatedVideosIndexRoute
 }
@@ -278,6 +287,7 @@ export interface FileRoutesById {
   '/_authenticated/library/': typeof AuthenticatedLibraryIndexRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/_authenticated/topics/': typeof AuthenticatedTopicsIndexRoute
   '/_authenticated/trending/': typeof AuthenticatedTrendingIndexRoute
   '/_authenticated/videos/': typeof AuthenticatedVideosIndexRoute
 }
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/library/'
     | '/projects/'
     | '/settings/'
+    | '/topics/'
     | '/trending/'
     | '/videos/'
   fileRoutesByTo: FileRoutesByTo
@@ -337,6 +348,7 @@ export interface FileRouteTypes {
     | '/library'
     | '/projects'
     | '/settings'
+    | '/topics'
     | '/trending'
     | '/videos'
   id:
@@ -367,6 +379,7 @@ export interface FileRouteTypes {
     | '/_authenticated/library/'
     | '/_authenticated/projects/'
     | '/_authenticated/settings/'
+    | '/_authenticated/topics/'
     | '/_authenticated/trending/'
     | '/_authenticated/videos/'
   fileRoutesById: FileRoutesById
@@ -490,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/trending'
       fullPath: '/trending/'
       preLoaderRoute: typeof AuthenticatedTrendingIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/topics/': {
+      id: '/_authenticated/topics/'
+      path: '/topics'
+      fullPath: '/topics/'
+      preLoaderRoute: typeof AuthenticatedTopicsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings/': {
@@ -620,6 +640,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedLibraryIndexRoute: typeof AuthenticatedLibraryIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
+  AuthenticatedTopicsIndexRoute: typeof AuthenticatedTopicsIndexRoute
   AuthenticatedTrendingIndexRoute: typeof AuthenticatedTrendingIndexRoute
   AuthenticatedVideosIndexRoute: typeof AuthenticatedVideosIndexRoute
 }
@@ -635,6 +656,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedLibraryIndexRoute: AuthenticatedLibraryIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
+  AuthenticatedTopicsIndexRoute: AuthenticatedTopicsIndexRoute,
   AuthenticatedTrendingIndexRoute: AuthenticatedTrendingIndexRoute,
   AuthenticatedVideosIndexRoute: AuthenticatedVideosIndexRoute,
 }

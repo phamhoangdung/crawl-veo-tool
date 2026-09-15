@@ -27,6 +27,7 @@ const PROVIDERS = [
   { id: 'openai', label: 'OpenAI (dịch)' },
   { id: 'elevenlabs', label: 'ElevenLabs (giọng đọc)' },
   { id: 'falai', label: 'fal.ai (sinh ảnh/video — AI Studio)' },
+  { id: 'youtube', label: 'YouTube Data API (xem xu hướng)' },
 ]
 
 const STATUS_LABEL: Record<ApiKeyRead['status'], string> = {

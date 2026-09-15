@@ -6,6 +6,7 @@ import {
   HelpCircle,
   KeyRound,
   LibraryBig,
+  Lightbulb,
   Palette,
   Settings,
   Sparkles,
@@ -36,6 +37,11 @@ export const sidebarData: SidebarData = {
           title: 'Xu hướng',
           url: '/trending',
           icon: TrendingUp,
+        },
+        {
+          title: 'Chủ đề quan tâm',
+          url: '/topics',
+          icon: Lightbulb,
         },
         {
           title: 'Tìm & tải',
