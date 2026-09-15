@@ -14,3 +14,5 @@ pytest>=8.3
 pytest-asyncio>=0.24
 ruff>=0.16  # format/lint theo docs/conventions.md
 pyinstaller>=6.22  # Phase 12: đóng gói desktop app, không cần cho chạy dev thường
+yt-dlp>=2026.8  # Phase 3: tải video Douyin không watermark, xem docs/phases/phase-3-multiprovider-douyin.md
+gmssl>=3.2  # Phase 3: SM3 hash cho thuật toán ký a_bogus (tìm kiếm Douyin), xem app/adapters/douyin/_vendor_abogus.py

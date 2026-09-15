@@ -5,11 +5,12 @@ dạng JSON của Douyin chỉ biết được khi gọi thật bằng cookie h�
 của `app/services/douyin_service.py`).
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.adapters.douyin.client import DouyinCookieExpiredError
+from app.adapters.douyin.search import DouyinLoginRequiredError
 from app.core.config import Settings
 from app.services import douyin_service
 
@@ -103,3 +104,94 @@ class TestProbe:
 
         assert result["detail_keys"] == []
         assert result["top_level_keys"] == ["la_gi_the_nay"]
+
+
+class TestDownloadVideo:
+    """`download_video` giao phần bóc tách/tải cho yt-dlp — test ở đây chỉ kiểm
+    tra wiring (resolve trước, cookie truyền đúng), không test yt-dlp thật (xem
+    tests/adapters/test_douyin_client.py cho phần đó)."""
+
+    @pytest.mark.asyncio
+    async def test_without_cookie_raises_with_actionable_hint(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings(""))
+        with pytest.raises(douyin_service.DouyinNotConfiguredError):
+            await douyin_service.download_video("https://v.douyin.com/abc/", tmp_path / "v.mp4")
+
+    @pytest.mark.asyncio
+    async def test_resolves_share_url_then_downloads_with_configured_cookie(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("sessionid=ok"))
+        dest = tmp_path / "original.mp4"
+        with patch.object(douyin_service, "DouyinClient") as client_cls:
+            client = client_cls.return_value.__aenter__.return_value
+            client.resolve_share_url = AsyncMock(return_value="7123")
+            client.download_no_watermark = MagicMock(return_value={"id": "7123"})
+
+            result = await douyin_service.download_video("https://v.douyin.com/abc/", dest)
+
+        client.resolve_share_url.assert_awaited_once_with("https://v.douyin.com/abc/")
+        client.download_no_watermark.assert_called_once_with("7123", dest, cookie="sessionid=ok")
+        assert result == {"id": "7123"}
+
+    @pytest.mark.asyncio
+    async def test_cookie_expired_during_resolve_propagates(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("sessionid=cu"))
+        with patch.object(douyin_service, "DouyinClient") as client_cls:
+            client = client_cls.return_value.__aenter__.return_value
+            client.resolve_share_url = AsyncMock(side_effect=DouyinCookieExpiredError("HTTP 403"))
+
+            with pytest.raises(DouyinCookieExpiredError):
+                await douyin_service.download_video("https://v.douyin.com/abc/", tmp_path / "v.mp4")
+
+    @pytest.mark.asyncio
+    async def test_ytdlp_fresh_cookies_error_propagates(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("sessionid=cu"))
+        with patch.object(douyin_service, "DouyinClient") as client_cls:
+            client = client_cls.return_value.__aenter__.return_value
+            client.resolve_share_url = AsyncMock(return_value="7123")
+            client.download_no_watermark = MagicMock(
+                side_effect=DouyinCookieExpiredError("Fresh cookies needed")
+            )
+
+            with pytest.raises(DouyinCookieExpiredError):
+                await douyin_service.download_video("https://v.douyin.com/abc/", tmp_path / "v.mp4")
+
+
+class TestSearchVideos:
+    """`search_videos` cần cookie ĐĂNG NHẬP thật, khác `probe_share_url`/
+    `download_video` — xem docstring `douyin_service`. Test wiring, không gọi
+    mạng thật (xem tests/adapters/test_douyin_search.py cho phần đó)."""
+
+    @pytest.mark.asyncio
+    async def test_without_any_cookie_raises_not_configured(self, monkeypatch) -> None:
+        monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings(""))
+        with pytest.raises(douyin_service.DouyinNotConfiguredError):
+            await douyin_service.search_videos("review dien thoai")
+
+    @pytest.mark.asyncio
+    async def test_anonymous_cookie_configured_still_raises_login_required(
+        self, monkeypatch
+    ) -> None:
+        """`is_configured()` chỉ kiểm tra cookie có giá trị, không phân biệt được
+        ẩn danh hay đăng nhập — lỗi phải lộ ra ở tầng gọi API thật, không phải bị
+        `is_configured()` nuốt mất."""
+        monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("s_v_web_id=anon"))
+        with patch.object(douyin_service, "probe_search", new_callable=AsyncMock) as mock_probe:
+            mock_probe.side_effect = DouyinLoginRequiredError("请先登录，再继续搜索吧")
+
+            with pytest.raises(DouyinLoginRequiredError):
+                await douyin_service.search_videos("review dien thoai")
+
+    @pytest.mark.asyncio
+    async def test_success_passes_through_raw_result(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            douyin_service, "get_settings", lambda: _settings("sessionid=logged-in")
+        )
+        with patch.object(douyin_service, "probe_search", new_callable=AsyncMock) as mock_probe:
+            mock_probe.return_value = {"status_code": 0, "data": [{"aweme_id": "1"}]}
+
+            result = await douyin_service.search_videos("review", offset=15, count=10)
+
+        mock_probe.assert_awaited_once_with("review", "sessionid=logged-in", offset=15, count=10)
+        assert result == {"status_code": 0, "data": [{"aweme_id": "1"}]}

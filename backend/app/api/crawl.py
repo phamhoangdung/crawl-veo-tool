@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.adapters.douyin.client import DouyinCookieExpiredError
+from app.adapters.douyin.search import DouyinLoginRequiredError, DouyinSearchError
 from app.core.db import get_db
 from app.models.job import Job
 from app.schemas.job import (
@@ -116,3 +117,37 @@ async def douyin_probe(payload: DouyinProbeRequest) -> DouyinProbeRead:
             status_code=422, detail=f"Không đọc được link chia sẻ Douyin: {exc}"
         ) from exc
     return DouyinProbeRead(**result)
+
+
+class DouyinSearchRequest(BaseModel):
+    keyword: str = Field(min_length=1)
+    offset: int = 0
+    count: int = 15
+
+
+@router.post("/douyin/search-probe", tags=["douyin"])
+async def douyin_search_probe(payload: DouyinSearchRequest) -> dict:
+    """Thăm dò tìm kiếm từ khoá — CHƯA phải tính năng tìm kiếm hoàn chỉnh.
+
+    Douyin đòi cookie ĐĂNG NHẬP tài khoản thật cho tìm kiếm (khác cookie ẩn danh
+    đủ dùng cho tải video) — hầu hết sẽ nhận 409 ở đây cho tới khi bạn tự đăng
+    nhập Douyin và cập nhật `DOUYIN_COOKIE`. Trả JSON thô khi thành công vì hình
+    dạng lúc thành công chưa biết, xem docs/phases/phase-3-multiprovider-douyin.md.
+    """
+    try:
+        return await douyin_service.search_videos(
+            payload.keyword, offset=payload.offset, count=payload.count
+        )
+    except douyin_service.DouyinNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DouyinLoginRequiredError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Douyin yêu cầu đăng nhập để tìm kiếm ({exc}). Cookie ẩn danh "
+                "(đủ để tải video) không đủ — cần đăng nhập tài khoản Douyin thật "
+                "trên trình duyệt rồi lấy lại cookie."
+            ),
+        ) from exc
+    except DouyinSearchError as exc:
+        raise HTTPException(status_code=502, detail=f"Douyin trả lỗi: {exc}") from exc
