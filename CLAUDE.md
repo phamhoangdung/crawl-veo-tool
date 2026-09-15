@@ -34,9 +34,9 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 | Phase | File | Trạng thái |
 |---|---|---|
 | 0. Scaffolding (backend+frontend khung) | [docs/phases/phase-0-scaffolding.md](docs/phases/phase-0-scaffolding.md) | **Hoàn thành** |
-| 1. Crawl & Trend Discovery (Bilibili) | [docs/phases/phase-1-crawl-bilibili.md](docs/phases/phase-1-crawl-bilibili.md) | **Xong** (trừ batch queue concurrency, không cấp thiết) |
+| 1. Crawl & Trend Discovery (Bilibili) | [docs/phases/phase-1-crawl-bilibili.md](docs/phases/phase-1-crawl-bilibili.md) | **Xong** (trừ batch queue concurrency, không cấp thiết) — 2026-09-16: cải thiện chất lượng trang Trending (chuyên mục dùng bảng phân khu chính thức thay vì đoán, video/chart dùng điểm `pts` thật của Bilibili) |
 | 2. AI Pipeline MVP (1 provider) | [docs/phases/phase-2-ai-pipeline-mvp.md](docs/phases/phase-2-ai-pipeline-mvp.md) | **Xong** — verify end-to-end video thật; UI chạy hàng loạt đã có (2026-09-12) |
-| 3. Multi-provider + Douyin | [docs/phases/phase-3-multiprovider-douyin.md](docs/phases/phase-3-multiprovider-douyin.md) | Một phần — cost estimate xong; Douyin đã có cấu hình cookie + UI + thăm dò, **phần tải video vẫn chờ cookie thật của bạn** |
+| 3. Multi-provider + Douyin | [docs/phases/phase-3-multiprovider-douyin.md](docs/phases/phase-3-multiprovider-douyin.md) | Một phần — cost estimate xong; tải video giao cho yt-dlp (viết xong, chờ cookie ẩn danh + URL mẫu để verify); tìm kiếm từ khoá đã vendor `a_bogus` nhưng **BLOCKED & tạm dừng** — cần tài khoản Douyin đăng nhập thật mà bạn hiện không có, đã chọn tạm dừng quyết định thay vì tạo tài khoản hoặc bỏ tính năng |
 | 4. Audio quality (tách nhạc nền) + video dài | [docs/phases/phase-4-audio-quality.md](docs/phases/phase-4-audio-quality.md) | **Xong & verify thật** — chunking video dài đã làm (audio mẫu tự sinh bằng ffmpeg); chưa chạy Demucs thật trên file dài |
 | 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | **Xong & verify thật** — thêm tuỳ chọn vị trí phụ đề trên/dưới (trừ cảnh báo hardsub) |
 | 6. Hardening & Ops | [docs/phases/phase-6-hardening-ops.md](docs/phases/phase-6-hardening-ops.md) | **Xong & verify thật** — dọn dẹp storage giờ chạy định kỳ trong app + nút bấm tay |

@@ -71,6 +71,9 @@ export interface SnapshotPoint {
   captured_at: string
   total_plays: number
   avg_plays: number
+  /** Tổng điểm `pts` (Bilibili tự tính) — đáng tin hơn total_plays để so
+   * sánh "độ hot" giữa các chuyên mục, xem backend `schemas/trending.py`. */
+  total_pts: number
   heat_score: number
 }
 
@@ -157,6 +160,11 @@ export interface TrendingPage {
   videos: TrendingVideo[]
   page: number
   has_more: boolean
+  /** "ranking" = bảng xếp hạng thật theo chuyên mục; "popular" = danh sách phổ
+   * biến toàn trang (tab "Tất cả", có phân trang thật); "search" = tìm theo từ
+   * khoá (tên chuyên mục khi lướt quá trang 1, hoặc ô tìm kiếm tự do) — rộng
+   * hơn nhưng có thể lẫn video không liên quan. UI hiển thị khác nhau. */
+  source: 'ranking' | 'popular' | 'search'
 }
 
 export interface CategoryStats {
@@ -168,6 +176,8 @@ export interface CategoryStats {
   avg_plays: number
   max_plays: number
   total_likes: number
+  /** Tổng điểm `pts` — dùng làm chỉ số chính so sánh "độ hot" giữa chuyên mục. */
+  total_pts: number
   top_video_title: string | null
 }
 
@@ -179,6 +189,14 @@ export interface TrendingVideo {
   like_count: number | null
   duration_seconds: number | null
   cover_url: string | null
+  comment_count: number | null
+  danmaku_count: number | null
+  coin_count: number | null
+  /** Điểm xếp hạng thật của Bilibili — chỉ có khi video đến từ bảng xếp hạng
+   * (source: "ranking"). null nghĩa là video này từ search, không phải đang
+   * xu hướng thật. */
+  heat_score: number | null
+  published_at: string | null
 }
 
 export interface TranscriptSegment {
@@ -363,6 +381,22 @@ export async function getCategoryPage(rid: number, page: number) {
       params: { rid, page },
     }
   )
+  return data
+}
+
+/** Danh sách phổ biến toàn trang Bilibili (tab "Tất cả") — có phân trang thật. */
+export async function getPopularPage(page: number) {
+  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/popular', {
+    params: { page },
+  })
+  return data
+}
+
+/** Tìm kiếm tự do theo từ khoá bất kỳ, không giới hạn 1 chuyên mục. */
+export async function searchBilibili(keyword: string, page: number) {
+  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/search', {
+    params: { keyword, page },
+  })
   return data
 }
 

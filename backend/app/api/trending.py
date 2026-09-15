@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -32,18 +32,39 @@ def _to_read(category: Category) -> CategoryRead:
     )
 
 
+def _queue_translation_if_pending(background_tasks: BackgroundTasks, db: Session) -> None:
+    """Dịch tên chuyên mục chạy NỀN, không chặn response — chỉ xếp hàng khi thật
+    sự còn mục chưa dịch, tránh tốn 1 query đếm + spawn task thừa mỗi lần load
+    trang. An toàn dùng chung `db` của request: FastAPI đảm bảo cleanup của
+    dependency `yield` (đóng session) chạy SAU khi background task xong."""
+    if category_service.count_pending_translations(db) > 0:
+        background_tasks.add_task(
+            category_service.translate_missing_names, db, _DEFAULT_USER_ID
+        )
+
+
 @router.get("/categories", response_model=list[CategoryRead])
-async def categories(db: Session = Depends(get_db)) -> list[CategoryRead]:
-    """Chuyên mục đã phát hiện, lấy từ DB (không hardcode — xem category_service)."""
+async def categories(
+    background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+) -> list[CategoryRead]:
+    """Chuyên mục đã phát hiện, lấy từ DB (không hardcode — xem category_service).
+
+    Mỗi lần gọi cũng tự động dịch nốt tên còn thiếu ở nền — người dùng không cần
+    bấm "Quét chuyên mục mới" nhiều lần chỉ để chờ dịch xong hết backlog.
+    """
+    _queue_translation_if_pending(background_tasks, db)
     rows = db.query(Category).order_by(Category.rid).all()
     return [_to_read(c) for c in rows]
 
 
 @router.post("/categories/refresh", response_model=list[CategoryRead])
-async def refresh_categories(db: Session = Depends(get_db)) -> list[CategoryRead]:
-    """Quét API Bilibili tìm chuyên mục mới, rồi dịch dần tên sang tiếng Việt."""
+async def refresh_categories(
+    background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+) -> list[CategoryRead]:
+    """Quét API Bilibili tìm chuyên mục mới; dịch tên chạy nền (xem docstring
+    `_queue_translation_if_pending`) — response trả về ngay, không chờ dịch."""
     await category_service.discover_categories(db)
-    await category_service.translate_missing_names(db, _DEFAULT_USER_ID)
+    _queue_translation_if_pending(background_tasks, db)
     rows = db.query(Category).order_by(Category.rid).all()
     return [_to_read(c) for c in rows]
 
@@ -61,9 +82,17 @@ async def get_followed(db: Session = Depends(get_db)) -> list[int]:
     return category_service.get_followed_rids(db)
 
 
-@router.get("/popular", response_model=list[TrendingVideoRead])
-async def popular(page: int = 1, page_size: int = 20) -> list[TrendingVideoRead]:
-    return await trending_service.get_bilibili_popular(page=page, page_size=page_size)
+@router.get("/popular", response_model=TrendingPageRead)
+async def popular(page: int = 1, page_size: int = 20) -> TrendingPageRead:
+    """Danh sách phổ biến toàn trang Bilibili — dùng cho tab "Tất cả" (không
+    giới hạn theo chuyên mục), có phân trang thật."""
+    return await trending_service.get_bilibili_popular_page(page=page, page_size=page_size)
+
+
+@router.get("/search", response_model=TrendingPageRead)
+async def search(keyword: str, page: int = 1) -> TrendingPageRead:
+    """Tìm kiếm tự do theo từ khoá bất kỳ — không giới hạn trong 1 chuyên mục."""
+    return await trending_service.search_bilibili(keyword, page=page)
 
 
 @router.get("/ranking", response_model=list[TrendingVideoRead])
@@ -108,6 +137,7 @@ async def history(
                 captured_at=snapshot.captured_at,
                 total_plays=snapshot.total_plays,
                 avg_plays=snapshot.avg_plays,
+                total_pts=snapshot.total_pts,
                 heat_score=snapshot.heat_score,
             )
         )

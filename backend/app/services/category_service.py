@@ -17,8 +17,90 @@ from app.services import translate_service
 
 logger = logging.getLogger(__name__)
 
-# Gợi ý nhóm cho chuyên mục mới, khớp theo từ khoá trong tên tiếng Trung.
-# Không khớp thì để None — UI xếp vào "Khác", vẫn dùng được bình thường.
+# Bảng phân khu (tid) → nhóm tiếng Việt, đối chiếu từ tài liệu cộng đồng
+# (github.com/pskdje/bilibili-API-collect, docs/video/video_zone.md — bản đồng bộ
+# từ repo gốc SocialSisterYi/bilibili-API-collect trước khi bị gỡ) — nguồn CHÍNH
+# CHỦ Bilibili dùng khi phân loại video lúc đăng, không phải đoán qua từ khoá.
+#
+# **Verify thật (2026-09-16):** đối chiếu với DB hiện có — rid=138 (搞笑/Hài
+# hước) trước đây bị heuristic cũ xếp nhầm vào "Giải trí" (khớp từ khoá 搞笑),
+# nhưng theo bảng phân khu thật thì 138 thuộc phân khu 生活 (Đời sống, tid 160).
+# Danh sách dưới đây liệt kê rid ở CẢ mức phân khu chính lẫn phân khu con —
+# rid ranking/region trả về có thể là 1 trong 2 mức tuỳ chuyên mục.
+#
+# Bỏ qua các tid đã "已下线" (ngừng dùng) trong tài liệu nguồn — tid cũ có thể bị
+# Bilibili tái sử dụng cho mục đích khác, giữ lại dễ gán nhầm hơn là để trống.
+_TID_GROUP: dict[int, str] = {
+    # 动画 Anime/Hoạt hình
+    1: "Anime", 24: "Anime", 25: "Anime", 47: "Anime", 257: "Anime",
+    210: "Anime", 86: "Anime", 253: "Anime", 27: "Anime",
+    # 番剧 Phim hoạt hình dài tập
+    13: "Phim hoạt hình", 51: "Phim hoạt hình", 152: "Phim hoạt hình",
+    32: "Phim hoạt hình", 33: "Phim hoạt hình",
+    # 国创 Hoạt hình Trung Quốc
+    167: "Hoạt hình Trung Quốc", 153: "Hoạt hình Trung Quốc",
+    168: "Hoạt hình Trung Quốc", 169: "Hoạt hình Trung Quốc",
+    170: "Hoạt hình Trung Quốc", 195: "Hoạt hình Trung Quốc",
+    # 音乐 Âm nhạc
+    3: "Âm nhạc", 28: "Âm nhạc", 29: "Âm nhạc", 31: "Âm nhạc", 59: "Âm nhạc",
+    243: "Âm nhạc", 30: "Âm nhạc", 193: "Âm nhạc", 266: "Âm nhạc",
+    265: "Âm nhạc", 267: "Âm nhạc", 244: "Âm nhạc", 130: "Âm nhạc",
+    # 舞蹈 Vũ đạo
+    129: "Vũ đạo", 20: "Vũ đạo", 198: "Vũ đạo", 199: "Vũ đạo", 200: "Vũ đạo",
+    255: "Vũ đạo", 154: "Vũ đạo", 156: "Vũ đạo",
+    # 游戏 Game
+    4: "Game", 17: "Game", 171: "Game", 172: "Game", 65: "Game",
+    173: "Game", 121: "Game", 136: "Game", 19: "Game",
+    # 知识 Kiến thức
+    36: "Kiến thức", 201: "Kiến thức", 124: "Kiến thức", 228: "Kiến thức",
+    207: "Kiến thức", 208: "Kiến thức", 209: "Kiến thức", 229: "Kiến thức",
+    122: "Kiến thức",
+    # 科技 Công nghệ
+    188: "Công nghệ", 95: "Công nghệ", 230: "Công nghệ", 231: "Công nghệ",
+    232: "Công nghệ", 233: "Công nghệ",
+    # 运动 Thể thao
+    234: "Thể thao", 235: "Thể thao", 249: "Thể thao", 164: "Thể thao",
+    236: "Thể thao", 237: "Thể thao", 238: "Thể thao",
+    # 汽车 Xe cộ
+    223: "Xe cộ", 258: "Xe cộ", 227: "Xe cộ", 247: "Xe cộ", 245: "Xe cộ",
+    246: "Xe cộ", 240: "Xe cộ", 248: "Xe cộ", 176: "Xe cộ",
+    # 生活 Đời sống — 138 (搞笑) thuộc nhóm này, KHÔNG phải Giải trí.
+    160: "Đời sống", 138: "Đời sống", 254: "Đời sống", 250: "Đời sống",
+    251: "Đời sống", 239: "Đời sống", 161: "Đời sống", 162: "Đời sống",
+    21: "Đời sống",
+    # 美食 Ẩm thực
+    211: "Ẩm thực", 76: "Ẩm thực", 212: "Ẩm thực", 213: "Ẩm thực",
+    214: "Ẩm thực", 215: "Ẩm thực",
+    # 动物圈 Động vật
+    217: "Động vật", 218: "Động vật", 219: "Động vật", 222: "Động vật",
+    221: "Động vật", 220: "Động vật", 75: "Động vật",
+    # 鬼畜 Chế (kuso)
+    119: "Chế", 22: "Chế", 26: "Chế", 126: "Chế", 216: "Chế", 127: "Chế",
+    # 时尚 Thời trang
+    155: "Thời trang", 157: "Thời trang", 252: "Thời trang",
+    158: "Thời trang", 159: "Thời trang",
+    # 资讯 Tin tức (lưu ý: phân khu này Bilibili không có bảng xếp hạng riêng)
+    202: "Tin tức", 203: "Tin tức", 204: "Tin tức", 205: "Tin tức",
+    206: "Tin tức",
+    # 娱乐 Giải trí
+    5: "Giải trí", 241: "Giải trí", 262: "Giải trí", 263: "Giải trí",
+    242: "Giải trí", 264: "Giải trí", 137: "Giải trí", 71: "Giải trí",
+    # 影视 Phim ảnh
+    181: "Phim ảnh", 182: "Phim ảnh", 183: "Phim ảnh", 260: "Phim ảnh",
+    259: "Phim ảnh", 184: "Phim ảnh", 85: "Phim ảnh", 256: "Phim ảnh",
+    261: "Phim ảnh",
+    # 纪录片 Phim tài liệu
+    177: "Phim tài liệu", 37: "Phim tài liệu", 178: "Phim tài liệu",
+    179: "Phim tài liệu", 180: "Phim tài liệu",
+    # 电影 Điện ảnh
+    23: "Điện ảnh", 147: "Điện ảnh", 145: "Điện ảnh", 146: "Điện ảnh",
+    83: "Điện ảnh",
+    # 电视剧 Phim truyền hình
+    11: "Phim truyền hình", 185: "Phim truyền hình", 187: "Phim truyền hình",
+}
+
+# Gợi ý nhóm dự phòng theo từ khoá — chỉ dùng cho tid CHƯA có trong bảng chính
+# thức ở trên (phân khu quá mới, tài liệu cộng đồng chưa kịp cập nhật).
 _GROUP_HINTS: list[tuple[tuple[str, ...], str]] = [
     (("美食", "吃"), "Ẩm thực"),
     (("动物", "喵", "汪", "宠"), "Động vật"),
@@ -38,11 +120,34 @@ _GROUP_HINTS: list[tuple[tuple[str, ...], str]] = [
 ]
 
 
-def _guess_group(name_zh: str) -> str | None:
+def _guess_group(rid: int, name_zh: str) -> str | None:
+    if rid in _TID_GROUP:
+        return _TID_GROUP[rid]
     for keywords, group in _GROUP_HINTS:
         if any(keyword in name_zh for keyword in keywords):
             return group
     return None
+
+
+def resync_known_groups(db: Session) -> int:
+    """Gán lại nhóm cho MỌI chuyên mục đã có trong DB theo `_TID_GROUP` mới nhất.
+
+    Khác với vòng lặp trong `discover_categories()` (chỉ chạm tới chuyên mục vừa
+    quét thấy trong lần gọi này), hàm này quét toàn bộ bảng — cần thiết vì 1
+    chuyên mục đang theo dõi có thể không "hot" đủ để xuất hiện lại trong lần
+    quét sau, nhưng vẫn cần được sửa nhóm nếu `_TID_GROUP` vừa cập nhật (như đợt
+    sửa 2026-09-16: "Hài hước" rid=138 từng bị đoán nhầm vào "Giải trí").
+    Trả về số dòng đã đổi nhóm.
+    """
+    changed = 0
+    for category in db.query(Category).all():
+        new_group = _guess_group(category.rid, category.name_zh)
+        if new_group is not None and new_group != category.group_name:
+            category.group_name = new_group
+            changed += 1
+    if changed:
+        db.commit()
+    return changed
 
 
 async def discover_categories(db: Session) -> list[Category]:
@@ -77,7 +182,7 @@ async def discover_categories(db: Session) -> list[Category]:
             category = Category(
                 rid=rid,
                 name_zh=name_zh,
-                group_name=_guess_group(name_zh),
+                group_name=_guess_group(rid, name_zh),
                 first_seen_at=now,
                 last_seen_at=now,
             )
@@ -88,16 +193,27 @@ async def discover_categories(db: Session) -> list[Category]:
             category.last_seen_at = now
 
     db.commit()
+    resync_known_groups(db)
     if created:
         logger.info("Phát hiện %d chuyên mục mới", len(created))
     return created
 
 
-async def translate_missing_names(db: Session, user_id: int, limit: int = 20) -> int:
+def count_pending_translations(db: Session) -> int:
+    """Số chuyên mục chưa có tên tiếng Việt — dùng để quyết định có cần chạy
+    nền dịch tiếp hay không (đỡ tốn 1 lượt query DB thừa khi không có gì để dịch)."""
+    return db.query(Category).filter(Category.name_vi.is_(None)).count()
+
+
+async def translate_missing_names(db: Session, user_id: int, limit: int = 100) -> int:
     """Dịch tên chuyên mục chưa có tiếng Việt. Trả về số mục đã dịch.
 
-    Dịch dần từng đợt để không bắt người dùng chờ hàng chục lần gọi API; mục
-    chưa dịch vẫn dùng được (UI hiển thị tên tiếng Trung).
+    Kết quả dịch cache bền trong bảng `translation_cache` (khoá theo hash nội
+    dung text, xem `translate_service`) — chuyên mục trùng tên hoặc gọi lại hàm
+    này nhiều lần không tốn thêm lượt gọi API dịch thật, đúng ý "chỉ dịch khi
+    có chủ đề mới thật sự". Hàm này được gọi từ `BackgroundTasks` (xem
+    `app/api/trending.py`) nên không cần giới hạn thấp để tránh chặn request —
+    limit chỉ còn là 1 mức trần an toàn (tránh 1 lần quét quá lớn kéo dài mãi).
     """
     pending = (
         db.query(Category)
@@ -112,7 +228,7 @@ async def translate_missing_names(db: Session, user_id: int, limit: int = 20) ->
     translated = 0
     for category in pending:
         try:
-            name_vi = await translate_service.translate_text(
+            name_vi, _from_cache = await translate_service.translate_cached(
                 db, user_id, category.name_zh, source_lang="zh", target_lang="vi"
             )
         except Exception as exc:  # noqa: BLE001 — dịch hỏng thì để nguyên, thử lại lần sau
@@ -155,6 +271,7 @@ def save_snapshot(
     avg_plays: int,
     max_plays: int,
     total_likes: int,
+    total_pts: int,
     heat_score: float,
     min_interval_minutes: int = 30,
 ) -> CategorySnapshot | None:
@@ -183,6 +300,7 @@ def save_snapshot(
         avg_plays=avg_plays,
         max_plays=max_plays,
         total_likes=total_likes,
+        total_pts=total_pts,
         heat_score=heat_score,
     )
     db.add(snapshot)

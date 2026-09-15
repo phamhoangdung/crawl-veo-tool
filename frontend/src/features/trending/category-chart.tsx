@@ -113,7 +113,9 @@ export function CategoryChart({ rids }: { rids: number[] }) {
       for (const point of history.points) {
         const key = point.captured_at
         const row = byTime.get(key) ?? { time: formatTime(key) }
-        row[history.name] = point.total_plays
+        // Dùng total_pts (điểm xếp hạng thật Bilibili) thay vì total_plays —
+        // xem docstring backend `schemas/trending.py::SnapshotPoint.total_pts`.
+        row[history.name] = point.total_pts
         byTime.set(key, row)
       }
     }
@@ -136,7 +138,7 @@ export function CategoryChart({ rids }: { rids: number[] }) {
         <CardTitle>Chủ đề đang được quan tâm</CardTitle>
         <CardDescription>
           {hasTrend
-            ? 'Tổng lượt xem của các video đang lên xu hướng, theo thời gian.'
+            ? 'Tổng điểm xếp hạng (Bilibili tự tính) của các video đang hot, theo thời gian — đáng tin hơn lượt xem thô vì không bị lệch bởi 1 video cũ có view khủng.'
             : 'Số liệu được ghi lại mỗi lần bạn mở trang này — mở thêm vài lần trong ngày để thấy đường xu hướng.'}
         </CardDescription>
       </CardHeader>
@@ -200,7 +202,7 @@ export function CategoryChart({ rids }: { rids: number[] }) {
 function CurrentSnapshot({
   stats,
 }: {
-  stats: Array<{ rid: number; name: string; total_plays: number; avg_plays: number }>
+  stats: Array<{ rid: number; name: string; total_pts: number }>
 }) {
   if (stats.length === 0) {
     return (
@@ -210,7 +212,7 @@ function CurrentSnapshot({
     )
   }
 
-  const max = Math.max(...stats.map((s) => s.total_plays), 1)
+  const max = Math.max(...stats.map((s) => s.total_pts), 1)
 
   return (
     <ul className='space-y-3'>
@@ -219,14 +221,14 @@ function CurrentSnapshot({
           <div className='flex items-baseline justify-between gap-4 text-sm'>
             <span className='truncate'>{item.name}</span>
             <span className='shrink-0 text-muted-foreground tabular-nums'>
-              {item.total_plays.toLocaleString('vi-VN')}
+              {item.total_pts.toLocaleString('vi-VN')}
             </span>
           </div>
           <div className='h-2 overflow-hidden rounded-full bg-muted'>
             <div
               className='h-full rounded-full'
               style={{
-                width: `${(item.total_plays / max) * 100}%`,
+                width: `${(item.total_pts / max) * 100}%`,
                 backgroundColor: SERIES_COLORS[index % SERIES_COLORS.length],
               }}
             />

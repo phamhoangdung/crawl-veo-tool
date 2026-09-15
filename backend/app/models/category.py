@@ -53,5 +53,8 @@ class CategorySnapshot(Base):
     avg_plays: Mapped[int] = mapped_column(Integer, default=0)
     max_plays: Mapped[int] = mapped_column(Integer, default=0)
     total_likes: Mapped[int] = mapped_column(Integer, default=0)
+    # Tổng `pts` — điểm xếp hạng thật Bilibili tự tính, đáng tin hơn total_plays
+    # để so sánh "độ hot" giữa các thời điểm/chuyên mục (xem schemas/trending.py).
+    total_pts: Mapped[int] = mapped_column(Integer, default=0)
     # Lượt xem trung bình chia cho số ngày kể từ khi video đăng — xấp xỉ "độ nóng".
     heat_score: Mapped[float] = mapped_column(Float, default=0.0)

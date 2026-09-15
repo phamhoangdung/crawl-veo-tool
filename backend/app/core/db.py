@@ -83,6 +83,11 @@ def ensure_schema_columns() -> None:
             "timeline_json": "JSON",
             "timeline_rendered_path": "VARCHAR",
         },
+        "category_snapshots": {
+            # Phase Trending cải thiện (2026-09-16): điểm `pts` thật của Bilibili,
+            # đáng tin hơn total_plays để đo "độ hot" — xem schemas/trending.py.
+            "total_pts": "INTEGER DEFAULT 0",
+        },
     }
 
     with engine.begin() as conn:
