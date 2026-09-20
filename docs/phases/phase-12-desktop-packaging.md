@@ -5,6 +5,10 @@ Trạng thái: **Đã ra installer thật** (`.msi` + `.exe` sinh ra được b�
 ## Quyết định hướng phân phối (chốt phiên 2026-09-07)
 Ưu tiên đóng gói desktop app trước, **tạm gác** hướng host multi-tenant SaaS/bán license qua web (lý do đầy đủ: chi phí compute Whisper/Demucs cao nếu host cho nhiều người + rủi ro pháp lý tăng khi thương mại hoá việc giúp người lạ scrape/re-up nội dung có bản quyền — xem `docs/scale-reup-features/plan.md` phần đánh giá host/license). Quyết định này không cố định vĩnh viễn, có thể quay lại hướng SaaS sau khi có tư vấn pháp lý riêng.
 
+**CẬP NHẬT 2026-09-20: đã đảo lại quyết định này** — chuyển hướng ưu tiên host web multi-tenant, xem [docs/phases/phase-18-auth-license-hosting.md](phase-18-auth-license-hosting.md). Phase 12 (desktop app) vẫn giữ nguyên các phần đã làm, không xoá.
+
+**CẬP NHẬT thêm cùng phiên 2026-09-20: desktop app KHÔNG bị bỏ, trở thành 1 phần chính thức của mô hình phân phối** — vì bản host web sẽ bị giới hạn bởi phần cứng server dùng chung, user gói Pro/ProMax được phép tải bản desktop này để tự chạy bằng phần cứng riêng. Việc "Ngoài phạm vi: license key/anti-piracy (chưa lên kế hoạch)" ghi ở dưới **nay ĐÃ lên kế hoạch** — xem Phase 18 Giai đoạn E (thêm màn hình đăng nhập + check license online mỗi lần mở app vào đúng bản đóng gói này, không đổi cơ chế build/sidecar hiện có).
+
 ## Mục tiêu
 Đóng gói web app hiện có (FastAPI backend + React frontend) thành ứng dụng desktop cài đặt được (Windows trước), chạy 100% local như hiện tại — không đổi kiến trúc lõi pipeline, chỉ thay lớp phân phối/khởi chạy.
 

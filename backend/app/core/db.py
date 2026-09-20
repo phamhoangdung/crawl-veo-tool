@@ -78,6 +78,7 @@ def ensure_schema_columns() -> None:
             "cover_url": "VARCHAR",
             "timeline_json": "JSON",
             "timeline_rendered_path": "VARCHAR",
+            "speaker_voices_json": "JSON",
         },
         "generation_projects": {
             "timeline_json": "JSON",

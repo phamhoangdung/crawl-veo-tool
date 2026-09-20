@@ -29,6 +29,7 @@ from app.api import (
     trending,
     youtube,
 )
+from app.core import worker_pool
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
 from app.models.category import Category
 from app.models.user import User
@@ -104,6 +105,13 @@ async def stop_background_jobs() -> None:
         await _cleanup_task
     except asyncio.CancelledError:
         pass
+
+
+@app.on_event("shutdown")
+def stop_worker_pool() -> None:
+    """Không để worker process của `worker_pool` (Phase: tối ưu hiệu năng P2) mồ
+    côi khi server tắt."""
+    worker_pool.shutdown()
 
 
 # Chuyên mục mồi để trang Trending không rỗng ở lần chạy đầu; danh sách đầy đủ

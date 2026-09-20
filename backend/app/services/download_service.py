@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -31,7 +32,10 @@ async def _stream_to_file(
         if video_id is not None and stage is not None:
             raw_length = response.headers.get("content-length")
             progress_service.set_stage(
-                video_id, stage, int(raw_length) if raw_length else None, kind="download"
+                video_id,
+                stage,
+                int(raw_length) if raw_length else None,
+                kind="download",
             )
         with open(dest, "wb") as f:
             async for chunk in response.aiter_bytes():
@@ -40,7 +44,9 @@ async def _stream_to_file(
                     progress_service.advance(video_id, len(chunk), kind="download")
 
 
-async def download_bilibili_video(job_id: int, video_id: int, bvid: str, cid: int) -> Path:
+async def download_bilibili_video(
+    job_id: int, video_id: int, bvid: str, cid: int
+) -> Path:
     """Tải video-only + audio-only stream (DASH) rồi ghép bằng ffmpeg.
 
     Raises FfmpegNotFoundError sớm (trước khi tải) nếu chưa cài ffmpeg, tránh tải
@@ -60,11 +66,18 @@ async def download_bilibili_video(job_id: int, video_id: int, bvid: str, cid: in
     audio_url = dash["audio"][0]["baseUrl"]
 
     async with httpx.AsyncClient(headers=_DOWNLOAD_HEADERS, timeout=60) as http:
-        await _stream_to_file(http, video_url, video_tmp, video_id=video_id, stage="video")
-        await _stream_to_file(http, audio_url, audio_tmp, video_id=video_id, stage="audio")
+        await _stream_to_file(
+            http, video_url, video_tmp, video_id=video_id, stage="video"
+        )
+        await _stream_to_file(
+            http, audio_url, audio_tmp, video_id=video_id, stage="audio"
+        )
 
     progress_service.set_stage(video_id, "merging", kind="download")
-    ffmpeg.merge_video_audio(video_tmp, audio_tmp, output_path)
+    # to_thread: subprocess.run là lệnh chặn — gọi thẳng ở đây sẽ đứng cả event
+    # loop (hàm này chạy trực tiếp trên loop chính khi được queue làm background
+    # task, xem docs/performance-optimization/plan.md mục P0).
+    await asyncio.to_thread(ffmpeg.merge_video_audio, video_tmp, audio_tmp, output_path)
     video_tmp.unlink(missing_ok=True)
     audio_tmp.unlink(missing_ok=True)
     return output_path

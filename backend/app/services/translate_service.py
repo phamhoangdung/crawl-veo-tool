@@ -1,13 +1,16 @@
 import asyncio
 import logging
 import random
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.adapters.provider_errors import AllProvidersExhaustedError, ProviderQuotaExceededError
+from app.adapters.provider_errors import (
+    AllProvidersExhaustedError,
+    ProviderQuotaExceededError,
+)
 from app.adapters.translate import google as google_translate
 from app.adapters.translate import openai as openai_translate
 from app.services import api_key_service
@@ -16,6 +19,24 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _BASE_DELAY_SECONDS = 1.0
+
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """1 client dùng chung suốt vòng đời process thay vì mở mới mỗi lần dịch —
+    tránh bắt tay TLS/dựng connection pool lặp lại khi nhiều đoạn dịch song
+    song (xem docs/performance-optimization/plan.md mục P1). Không đóng lại
+    tường minh: đây là app 1 process chạy dài, OS tự dọn socket khi process
+    thoát, không đáng thêm lifecycle/shutdown handler chỉ vì việc này.
+
+    Timeout 60s (thay vì 30s của `translate_text` gốc) để đủ dùng chung với
+    `complete_text` — chỉ là giới hạn trên, không làm chậm request bình thường.
+    """
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=60)
+    return _client
 
 
 async def _call_with_retry(label: str, call: Callable[[], Awaitable[str]]) -> str:
@@ -37,56 +58,71 @@ async def _call_with_retry(label: str, call: Callable[[], Awaitable[str]]) -> st
             if is_last_attempt:
                 raise ProviderQuotaExceededError(label, exc) from exc
             retry_after = exc.response.headers.get("Retry-After")
-            delay = float(retry_after) if retry_after else _BASE_DELAY_SECONDS * (2**attempt)
+            delay = (
+                float(retry_after)
+                if retry_after
+                else _BASE_DELAY_SECONDS * (2**attempt)
+            )
             delay += random.uniform(0, 0.5)
             logger.warning(
                 "%s bị rate limit (429), thử lại sau %.1fs (lần %d/%d)",
-                label, delay, attempt + 1, _MAX_RETRIES,
+                label,
+                delay,
+                attempt + 1,
+                _MAX_RETRIES,
             )
             await asyncio.sleep(delay)
-    raise AssertionError("unreachable")  # vòng for luôn return hoặc raise trước khi hết vòng
+    raise AssertionError(
+        "unreachable"
+    )  # vòng for luôn return hoặc raise trước khi hết vòng
 
 
-async def translate_text(db: Session, user_id: int, text: str, source_lang: str, target_lang: str) -> str:
+async def translate_text(
+    db: Session, user_id: int, text: str, source_lang: str, target_lang: str
+) -> str:
     """Xoay vòng key OpenAI trong pool (Phase 8) khi bị hết quota/rate-limit; hết cả
     pool thì fallback Google Translate (free) như trước. Nếu Google free cũng lỗi
     (hết quota/rate-limit của chính endpoint free, hoặc lỗi mạng khác), ném
     `AllProvidersExhaustedError` để dubbing_service chuyển video sang PAUSED_QUOTA
     thay vì fail hẳn.
     """
-    async with httpx.AsyncClient(timeout=30) as client:
-        tried_key_ids: set[int] = set()
-        while True:
-            picked = api_key_service.pick_decrypted_key(db, user_id, "openai")
-            if picked is None or picked[0] in tried_key_ids:
-                break
-            key_id, api_key = picked
-            tried_key_ids.add(key_id)
-            try:
-                result = await _call_with_retry(
-                    "OpenAI translate",
-                    lambda: openai_translate.translate(client, api_key, text, source_lang, target_lang),
-                )
-                api_key_service.mark_key_result(db, key_id, success=True)
-                return result
-            except ProviderQuotaExceededError:
-                api_key_service.mark_key_result(db, key_id, success=False)
-                logger.warning("OpenAI key #%d hết quota, thử key khác trong pool", key_id)
-                continue
-            except httpx.HTTPError as exc:
-                logger.warning("OpenAI translate failed (%s), falling back to Google Translate", exc)
-                break
-
+    client = _get_client()
+    tried_key_ids: set[int] = set()
+    while True:
+        picked = api_key_service.pick_decrypted_key(db, user_id, "openai")
+        if picked is None or picked[0] in tried_key_ids:
+            break
+        key_id, api_key = picked
+        tried_key_ids.add(key_id)
         try:
-            return await _call_with_retry(
-                "Google translate",
-                lambda: google_translate.translate(client, text, source_lang, target_lang),
+            result = await _call_with_retry(
+                "OpenAI translate",
+                lambda: openai_translate.translate(
+                    client, api_key, text, source_lang, target_lang
+                ),
             )
-        except (ProviderQuotaExceededError, httpx.HTTPError) as exc:
-            raise AllProvidersExhaustedError(
-                "Dịch thất bại: hết quota toàn bộ key OpenAI trong pool "
-                "và Google Translate (free) cũng lỗi"
-            ) from exc
+            api_key_service.mark_key_result(db, key_id, success=True)
+            return result
+        except ProviderQuotaExceededError:
+            api_key_service.mark_key_result(db, key_id, success=False)
+            logger.warning("OpenAI key #%d hết quota, thử key khác trong pool", key_id)
+            continue
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "OpenAI translate failed (%s), falling back to Google Translate", exc
+            )
+            break
+
+    try:
+        return await _call_with_retry(
+            "Google translate",
+            lambda: google_translate.translate(client, text, source_lang, target_lang),
+        )
+    except (ProviderQuotaExceededError, httpx.HTTPError) as exc:
+        raise AllProvidersExhaustedError(
+            "Dịch thất bại: hết quota toàn bộ key OpenAI trong pool "
+            "và Google Translate (free) cũng lỗi"
+        ) from exc
 
 
 async def complete_text(db: Session, user_id: int, prompt: str) -> str:
@@ -96,29 +132,29 @@ async def complete_text(db: Session, user_id: int, prompt: str) -> str:
     free không nhận prompt tự do. Hết key thì báo lỗi để người dùng biết cần cấu
     hình API key, thay vì trả rác.
     """
-    async with httpx.AsyncClient(timeout=60) as client:
-        tried_key_ids: set[int] = set()
-        while True:
-            picked = api_key_service.pick_decrypted_key(db, user_id, "openai")
-            if picked is None or picked[0] in tried_key_ids:
-                break
-            key_id, api_key = picked
-            tried_key_ids.add(key_id)
-            try:
-                result = await _call_with_retry(
-                    "OpenAI complete",
-                    lambda: openai_translate.complete(client, api_key, prompt),
-                )
-                api_key_service.mark_key_result(db, key_id, success=True)
-                return result
-            except ProviderQuotaExceededError:
-                api_key_service.mark_key_result(db, key_id, success=False)
-                logger.warning("OpenAI key #%d hết quota, thử key khác trong pool", key_id)
-                continue
-            except httpx.HTTPError as exc:
-                api_key_service.mark_key_result(db, key_id, success=False)
-                logger.warning("OpenAI complete lỗi với key #%d: %s", key_id, exc)
-                continue
+    client = _get_client()
+    tried_key_ids: set[int] = set()
+    while True:
+        picked = api_key_service.pick_decrypted_key(db, user_id, "openai")
+        if picked is None or picked[0] in tried_key_ids:
+            break
+        key_id, api_key = picked
+        tried_key_ids.add(key_id)
+        try:
+            result = await _call_with_retry(
+                "OpenAI complete",
+                lambda: openai_translate.complete(client, api_key, prompt),
+            )
+            api_key_service.mark_key_result(db, key_id, success=True)
+            return result
+        except ProviderQuotaExceededError:
+            api_key_service.mark_key_result(db, key_id, success=False)
+            logger.warning("OpenAI key #%d hết quota, thử key khác trong pool", key_id)
+            continue
+        except httpx.HTTPError as exc:
+            api_key_service.mark_key_result(db, key_id, success=False)
+            logger.warning("OpenAI complete lỗi với key #%d: %s", key_id, exc)
+            continue
 
     raise AllProvidersExhaustedError(
         "Cần API key OpenAI để sinh metadata — thêm ở trang API Keys."

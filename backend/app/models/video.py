@@ -62,7 +62,12 @@ class Video(Base):
     # Phase 13: draft timeline (edit operations) — chưa render, cho sửa nhiều lần
     # trước khi bấm nút render riêng (nguyên tắc "AI gợi ý, người quyết định").
     timeline_json: Mapped[dict | None] = mapped_column(JSON, default=None)
-    status: Mapped[VideoStatus] = mapped_column(Enum(VideoStatus), default=VideoStatus.QUEUED)
+    # Phase 19: map speaker_label -> {"provider", "voice_id"} — vai nào chưa gán
+    # thì dùng giọng mặc định chung như trước (không bắt buộc phải phân vai).
+    speaker_voices_json: Mapped[dict | None] = mapped_column(JSON, default=None)
+    status: Mapped[VideoStatus] = mapped_column(
+        Enum(VideoStatus), default=VideoStatus.QUEUED
+    )
     error_message: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

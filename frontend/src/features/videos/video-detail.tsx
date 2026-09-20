@@ -10,11 +10,13 @@ import {
   Languages,
   Mic,
   Trash2,
+  Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   burnSubtitles,
   deleteFileVariant,
+  diarizeVideo,
   downloadVideo,
   dubVideo,
   getDownloadUrl,
@@ -49,6 +51,7 @@ import { Search } from '@/components/search'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { TimelineEditor } from '@/features/editor'
+import { SpeakerVoices } from './speaker-voices'
 import { SubtitleEditor } from './subtitle-editor'
 import { SubtitleReview } from './subtitle-review'
 
@@ -138,6 +141,15 @@ const STEPS: StepDef[] = [
     run: (id) => translateVideo(id),
     requires: ({ hasTranscript }) =>
       hasTranscript ? null : 'Cần tách lời thoại trước',
+  },
+  {
+    kind: 'diarize',
+    label: 'Phân vai người nói',
+    icon: Users,
+    description:
+      'Tự nhận diện có bao nhiêu người nói khác nhau trong video, tách theo từng vai để gán giọng đọc riêng (không bắt buộc).',
+    run: (id) => diarizeVideo(id),
+    requires: ({ hasTranscript }) => (hasTranscript ? null : 'Cần tách lời thoại trước'),
   },
   {
     kind: 'dub',
@@ -390,6 +402,7 @@ export function VideoDetail() {
   const hasFile = fileList.some((f) => f.variant === 'original' && f.exists)
   const hasTranscript = transcript.length > 0
   const hasTranslation = transcript.some((s) => s.translated_text?.trim())
+  const hasSpeakers = transcript.some((s) => s.speaker?.trim())
 
   const title = files?.title ?? detail?.title ?? 'Video'
 
@@ -469,6 +482,9 @@ export function VideoDetail() {
                       {transcript.length}
                     </span>
                   )}
+                </TabsTrigger>
+                <TabsTrigger value='voices' disabled={!hasSpeakers}>
+                  Giọng đọc
                 </TabsTrigger>
                 <TabsTrigger value='editor' disabled={!hasFile}>
                   Dựng video
@@ -584,6 +600,14 @@ export function VideoDetail() {
                         : 'original'
                   }
                   onEdit={() => setEditorOpen(true)}
+                />
+              </TabsContent>
+
+              <TabsContent value='voices'>
+                <SpeakerVoices
+                  videoId={videoId}
+                  segments={transcript}
+                  speakerVoices={detail?.speaker_voices ?? {}}
                 />
               </TabsContent>
 

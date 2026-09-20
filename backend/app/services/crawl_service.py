@@ -63,11 +63,13 @@ def _normalize_cover_url(raw: str | None) -> str | None:
     if raw.startswith("//"):
         return f"https:{raw}"
     if raw.startswith("http://"):
-        return f"https://{raw[len('http://'):]}"
+        return f"https://{raw[len('http://') :]}"
     return raw
 
 
-async def translate_keyword_to_chinese(db: Session, user_id: int, keyword: str) -> tuple[str, bool]:
+async def translate_keyword_to_chinese(
+    db: Session, user_id: int, keyword: str
+) -> tuple[str, bool]:
     """Dịch từ khoá sang tiếng Trung giản thể để search trên Bilibili.
 
     Trả lại từ khoá gốc nếu dịch lỗi — thà search nguyên văn còn hơn chặn cả job.
@@ -104,7 +106,9 @@ async def create_bilibili_crawl_job(
     search_keyword = keyword
     translation_failed = False
     if translate_keyword:
-        search_keyword, translated_ok = await translate_keyword_to_chinese(db, user_id, keyword)
+        search_keyword, translated_ok = await translate_keyword_to_chinese(
+            db, user_id, keyword
+        )
         translation_failed = not translated_ok
 
     job = Job(
@@ -210,13 +214,20 @@ async def create_job_from_selection(
     db.add(job)
     db.flush()
 
-    for item in items:
-        exists = (
-            db.query(Video)
-            .filter(Video.platform == Platform.BILIBILI, Video.platform_video_id == item.bvid)
-            .first()
+    # 1 query cho cả danh sách thay vì query từng item trong vòng lặp (N+1) —
+    # cùng pattern đã dùng ở `create_bilibili_crawl_job`.
+    existing_bvids = {
+        row[0]
+        for row in db.query(Video.platform_video_id)
+        .filter(
+            Video.platform == Platform.BILIBILI,
+            Video.platform_video_id.in_([item.bvid for item in items]),
         )
-        if exists:
+        .all()
+    }
+
+    for item in items:
+        if item.bvid in existing_bvids:
             continue
         db.add(
             Video(
@@ -239,7 +250,9 @@ async def create_job_from_selection(
     return job
 
 
-async def append_videos_to_job(db: Session, job_id: int, page: int) -> tuple[list[Video], bool]:
+async def append_videos_to_job(
+    db: Session, job_id: int, page: int
+) -> tuple[list[Video], bool]:
     """Tải thêm 1 trang kết quả search vào job đã có (infinite scroll trang Crawl).
 
     Dùng lại `job.keyword` — vốn đã là từ khoá thực sự đem đi search (đã dịch
@@ -252,17 +265,19 @@ async def append_videos_to_job(db: Session, job_id: int, page: int) -> tuple[lis
     async with BilibiliClient() as client:
         results = await client.search_videos(job.keyword, page=page)
 
+    # 1 query cho cả trang kết quả thay vì query từng item trong vòng lặp (N+1).
+    bvids = [item["bvid"] for item in results if item.get("bvid")]
+    existing_bvids = {
+        row[0]
+        for row in db.query(Video.platform_video_id)
+        .filter(Video.platform == Platform.BILIBILI, Video.platform_video_id.in_(bvids))
+        .all()
+    }
+
     created: list[Video] = []
     for item in results:
         bvid = item.get("bvid")
-        if not bvid:
-            continue
-        exists = (
-            db.query(Video)
-            .filter(Video.platform == Platform.BILIBILI, Video.platform_video_id == bvid)
-            .first()
-        )
-        if exists:
+        if not bvid or bvid in existing_bvids:
             continue
         video = Video(
             user_id=job.user_id,

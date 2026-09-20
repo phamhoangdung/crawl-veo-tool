@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -9,12 +10,19 @@ from app.adapters import ffmpeg
 from app.adapters.bilibili.client import BilibiliClient
 from app.core.db import SessionLocal, get_db
 from app.models.video import Video, VideoStatus
-from app.schemas.pipeline import TranscriptSegment, TranslateRequest, VideoDetailRead
+from app.schemas.pipeline import (
+    TranscriptSegment,
+    TranslateRequest,
+    VideoDetailRead,
+    VoiceOption,
+    VoiceRef,
+)
 from app.services import (
     download_service,
     dubbing_service,
     progress_service,
     subtitle_service,
+    voice_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,9 +43,12 @@ def _to_detail(video: Video) -> VideoDetailRead:
     return VideoDetailRead(
         id=video.id,
         status=video.status.value,
-        transcript=[TranscriptSegment(**segment) for segment in (video.transcript_json or [])],
+        transcript=[
+            TranscriptSegment(**segment) for segment in (video.transcript_json or [])
+        ],
         dubbed_path=video.dubbed_path,
         burned_path=video.burned_path,
+        speaker_voices=video.speaker_voices_json or {},
     )
 
 
@@ -77,7 +88,7 @@ async def _run_download(video_id: int) -> None:
             video.error_message = None
             db.commit()
             progress_service.finish(video.id)
-        except Exception as exc:  # noqa: BLE001 — chạy nền, không ai bắt được lỗi này
+        except Exception as exc:
             logger.exception("Tải video %s thất bại", video_id)
             video.status = VideoStatus.FAILED_DOWNLOAD
             video.error_message = str(exc)
@@ -113,12 +124,14 @@ def _run_transcribe(video_id: int) -> None:
     with SessionLocal() as db:
         video = db.get(Video, video_id)
         if video is None:
-            progress_service.finish(video_id, error="Video không còn tồn tại", kind="transcribe")
+            progress_service.finish(
+                video_id, error="Video không còn tồn tại", kind="transcribe"
+            )
             return
         try:
             dubbing_service.run_transcribe(db, video)
             progress_service.finish(video_id, kind="transcribe")
-        except Exception as exc:  # noqa: BLE001 — chạy nền, không ai bắt được lỗi này
+        except Exception as exc:
             logger.exception("Tách lời thoại video %s thất bại", video_id)
             video.error_message = str(exc)
             db.commit()
@@ -131,7 +144,9 @@ def transcribe_video(
 ) -> VideoDetailRead:
     video = _get_video_or_404(db, video_id)
     if progress_service.is_running(video_id, "transcribe"):
-        raise HTTPException(status_code=409, detail="Video này đang được tách lời thoại.")
+        raise HTTPException(
+            status_code=409, detail="Video này đang được tách lời thoại."
+        )
     if not video.local_path:
         raise HTTPException(status_code=400, detail="Chưa tải video về máy.")
 
@@ -144,14 +159,16 @@ async def _run_translate(video_id: int, source_lang: str, target_lang: str) -> N
     with SessionLocal() as db:
         video = db.get(Video, video_id)
         if video is None:
-            progress_service.finish(video_id, error="Video không còn tồn tại", kind="translate")
+            progress_service.finish(
+                video_id, error="Video không còn tồn tại", kind="translate"
+            )
             return
         try:
             await dubbing_service.run_translate(
                 db, _DEFAULT_USER_ID, video, source_lang, target_lang
             )
             progress_service.finish(video_id, kind="translate")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("Dịch video %s thất bại", video_id)
             video.error_message = str(exc)
             db.commit()
@@ -172,7 +189,72 @@ async def translate_video(
         raise HTTPException(status_code=400, detail="Chưa có lời thoại để dịch.")
 
     progress_service.start(video.id, video.title, kind="translate")
-    background.add_task(_run_translate, video.id, payload.source_lang, payload.target_lang)
+    background.add_task(
+        _run_translate, video.id, payload.source_lang, payload.target_lang
+    )
+    return _to_detail(video)
+
+
+def _run_diarize(video_id: int) -> None:
+    """Chạy nền: trích embedding giọng nói cho từng đoạn + cluster mất vài giây
+    đến vài phút tuỳ độ dài video, không giữ request mở suốt thời gian đó."""
+    with SessionLocal() as db:
+        video = db.get(Video, video_id)
+        if video is None:
+            progress_service.finish(
+                video_id, error="Video không còn tồn tại", kind="diarize"
+            )
+            return
+        try:
+            dubbing_service.run_diarize(db, video)
+            progress_service.finish(video_id, kind="diarize")
+        except Exception as exc:
+            logger.exception("Phân vai người nói video %s thất bại", video_id)
+            video.error_message = str(exc)
+            db.commit()
+            progress_service.finish(video_id, error=str(exc), kind="diarize")
+
+
+@router.post("/{video_id}/diarize", response_model=VideoDetailRead)
+def diarize_video(
+    video_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
+) -> VideoDetailRead:
+    """Nhận diện có bao nhiêu người nói khác nhau, gắn nhãn cho từng đoạn thoại
+    — không bắt buộc, bỏ qua bước này thì `/dub` vẫn chạy bằng 1 giọng chung."""
+    video = _get_video_or_404(db, video_id)
+    if progress_service.is_running(video_id, "diarize"):
+        raise HTTPException(
+            status_code=409, detail="Video này đang được phân vai người nói."
+        )
+    if not video.transcript_json:
+        raise HTTPException(status_code=400, detail="Chưa có lời thoại để phân vai.")
+
+    progress_service.start(video.id, video.title, kind="diarize")
+    background.add_task(_run_diarize, video.id)
+    return _to_detail(video)
+
+
+@router.get("/{video_id}/voices", response_model=list[VoiceOption])
+async def get_available_voices(
+    video_id: int, db: Session = Depends(get_db)
+) -> list[VoiceOption]:
+    """Giọng Edge-TTS (luôn có) + giọng ElevenLabs thật của user nếu đã cấu hình
+    key — dùng để đổ vào dropdown gán giọng theo vai."""
+    _get_video_or_404(db, video_id)
+    voices = await voice_service.list_available_voices(db, _DEFAULT_USER_ID)
+    return [VoiceOption(**v) for v in voices]
+
+
+@router.put("/{video_id}/speaker-voices", response_model=VideoDetailRead)
+def update_speaker_voices(
+    video_id: int, speaker_voices: dict[str, VoiceRef], db: Session = Depends(get_db)
+) -> VideoDetailRead:
+    """Lưu giọng đọc đã gán cho từng vai — `/dub` đọc lại map này khi chạy."""
+    video = _get_video_or_404(db, video_id)
+    video.speaker_voices_json = {
+        label: ref.model_dump() for label, ref in speaker_voices.items()
+    }
+    db.commit()
     return _to_detail(video)
 
 
@@ -191,14 +273,16 @@ async def _run_dub(video_id: int, keep_background: bool) -> None:
     with SessionLocal() as db:
         video = db.get(Video, video_id)
         if video is None:
-            progress_service.finish(video_id, error="Video không còn tồn tại", kind="dub")
+            progress_service.finish(
+                video_id, error="Video không còn tồn tại", kind="dub"
+            )
             return
         try:
             await dubbing_service.run_dub_and_mux(
                 db, _DEFAULT_USER_ID, video, keep_background=keep_background
             )
             progress_service.finish(video_id, kind="dub")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("Lồng tiếng video %s thất bại", video_id)
             video.error_message = str(exc)
             db.commit()
@@ -234,7 +318,9 @@ def _burn_subtitles_for(video: Video, position: str = "bottom") -> None:
     source_path = Path(video.dubbed_path or video.local_path)
     video_dir = source_path.parent
 
-    srt_path = subtitle_service.write_srt(video.transcript_json or [], video_dir / "subtitles.srt")
+    srt_path = subtitle_service.write_srt(
+        video.transcript_json or [], video_dir / "subtitles.srt"
+    )
     width, height = ffmpeg.get_video_dimensions(source_path)
     font_size = subtitle_service.pick_font_size_for(width, height)
 
@@ -245,21 +331,51 @@ def _burn_subtitles_for(video: Video, position: str = "bottom") -> None:
     video.burned_path = str(output_path)
 
 
+def _run_burn(video_id: int, position: str) -> None:
+    """Chạy nền: ffmpeg re-encode để burn phụ đề có thể mất vài phút với video
+    dài, không thể giữ request mở suốt thời gian đó (khác hành vi cũ)."""
+    with SessionLocal() as db:
+        video = db.get(Video, video_id)
+        if video is None:
+            progress_service.finish(
+                video_id, error="Video không còn tồn tại", kind="burn"
+            )
+            return
+        try:
+            _burn_subtitles_for(video, position)
+            db.commit()
+            progress_service.finish(video_id, kind="burn")
+        except Exception as exc:
+            logger.exception("Ghép phụ đề video %s thất bại", video_id)
+            video.error_message = str(exc)
+            db.commit()
+            progress_service.finish(video_id, error=str(exc), kind="burn")
+
+
 @router.post("/{video_id}/burn-subtitles", response_model=VideoDetailRead)
 def burn_subtitles(
-    video_id: int, position: str = "bottom", db: Session = Depends(get_db)
+    video_id: int,
+    background: BackgroundTasks,
+    position: str = "bottom",
+    db: Session = Depends(get_db),
 ) -> VideoDetailRead:
-    """Ghép phụ đề cứng vào video.
+    """Ghép phụ đề cứng vào video, chạy nền — trước đây chạy đồng bộ trong request,
+    giữ cả 1 thread của threadpool suốt thời gian ffmpeg re-encode (xem
+    docs/performance-optimization/plan.md mục P0).
 
     `position="top"` dùng khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc
-    định thì hai lớp chữ chồng lên nhau, không đọc được lớp nào.
+    định thì hai lớp chữ chồng lên nhau, không đọc được lớp nào. Lỗi `position`
+    không hợp lệ giờ báo qua `video.error_message`/tiến độ thay vì HTTP 422 ngay
+    lập tức, nhất quán với các bước khác trong pipeline.
     """
     video = _get_video_or_404(db, video_id)
-    try:
-        _burn_subtitles_for(video, position)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    db.commit()
+    if progress_service.is_running(video_id, "burn"):
+        raise HTTPException(status_code=409, detail="Video này đang được ghép phụ đề.")
+    if not video.transcript_json:
+        raise HTTPException(status_code=400, detail="Chưa có lời thoại để ghép phụ đề.")
+
+    progress_service.start(video.id, video.title, kind="burn")
+    background.add_task(_run_burn, video.id, position)
     return _to_detail(video)
 
 
@@ -288,13 +404,19 @@ async def run_step(step: str, video_id: int) -> None:
                 video.local_path = str(output_path)
                 video.status = VideoStatus.DOWNLOADED
             elif step == "transcribe":
-                dubbing_service.run_transcribe(db, video)
+                # to_thread: run_step chạy trực tiếp trên event loop chính (được
+                # await từ batch_service), gọi thẳng hàm chặn ở đây sẽ đứng cả
+                # server suốt thời gian faster-whisper chạy — xem
+                # docs/performance-optimization/plan.md mục P0.
+                await asyncio.to_thread(dubbing_service.run_transcribe, db, video)
             elif step == "translate":
-                await dubbing_service.run_translate(db, _DEFAULT_USER_ID, video, "zh", "vi")
+                await dubbing_service.run_translate(
+                    db, _DEFAULT_USER_ID, video, "zh", "vi"
+                )
             elif step == "dub":
                 await dubbing_service.run_dub_and_mux(db, _DEFAULT_USER_ID, video)
             elif step == "burn":
-                _burn_subtitles_for(video)
+                await asyncio.to_thread(_burn_subtitles_for, video)
             else:
                 raise ValueError(f"Bước không hợp lệ: {step}")
 

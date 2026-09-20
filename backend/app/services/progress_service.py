@@ -11,7 +11,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Literal
 
-TaskKind = Literal["download", "transcribe", "translate", "dub", "burn", "render_project"]
+TaskKind = Literal[
+    "download", "transcribe", "translate", "diarize", "dub", "burn", "render_project"
+]
 
 # Tác vụ có thể thuộc về 1 video (pipeline crawl) hoặc 1 dự án nhiều cảnh
 # (Phase 15). Phân biệt tường minh bằng field riêng thay vì mã hoá vào id —
@@ -29,6 +31,7 @@ Stage = Literal[
     "separating",
     "transcribing",
     "translating",
+    "diarizing",
     "synthesizing",
     "muxing",
     "burning",
@@ -48,6 +51,7 @@ _STAGE_LABELS: dict[str, str] = {
     "separating": "Đang tách nhạc nền",
     "transcribing": "Đang tách lời thoại",
     "translating": "Đang dịch",
+    "diarizing": "Đang phân vai người nói",
     "synthesizing": "Đang tạo giọng đọc",
     "muxing": "Đang ghép âm thanh",
     "burning": "Đang ghép phụ đề",
@@ -61,6 +65,7 @@ _KIND_LABELS: dict[str, str] = {
     "download": "Tải video",
     "transcribe": "Tách lời thoại",
     "translate": "Dịch phụ đề",
+    "diarize": "Phân vai người nói",
     "dub": "Lồng tiếng",
     "burn": "Ghép phụ đề",
     "render_project": "Dựng video dự án",

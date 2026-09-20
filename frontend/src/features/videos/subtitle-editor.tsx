@@ -74,10 +74,19 @@ function SubtitleEditorContent({
       draft.some(
         (segment, i) =>
           segment.text !== segments[i]?.text ||
-          segment.translated_text !== segments[i]?.translated_text
+          segment.translated_text !== segments[i]?.translated_text ||
+          segment.speaker !== segments[i]?.speaker
       ),
     [draft, segments]
   )
+
+  // Danh sách vai đã có (từ bước "Phân vai người nói") để đổ vào dropdown sửa
+  // tay — chỉ hiện khi ít nhất 1 đoạn đã có speaker, không ép mọi video phải
+  // phân vai mới sửa được phụ đề.
+  const knownSpeakers = useMemo(() => {
+    const set = new Set(segments.map((s) => s.speaker).filter(Boolean))
+    return Array.from(set).sort()
+  }, [segments])
 
   // Câu đang phát — dùng để tô sáng và tự cuộn tới.
   const activeIndex = useMemo(
@@ -221,6 +230,23 @@ function SubtitleEditorContent({
                       className='min-h-0 resize-none text-xs text-primary'
                       placeholder='Bản dịch tiếng Việt'
                     />
+                    {knownSpeakers.length > 0 && (
+                      <select
+                        value={segment.speaker}
+                        onChange={(e) =>
+                          updateSegment(index, { speaker: e.target.value })
+                        }
+                        className='h-6 rounded-md border bg-transparent px-1.5 text-[11px]'
+                        title='Vai người nói — sửa tay nếu nhận nhầm'
+                      >
+                        <option value=''>(chưa xác định)</option>
+                        {knownSpeakers.map((speaker) => (
+                          <option key={speaker} value={speaker}>
+                            {speaker}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </li>
                 ))}
               </ul>

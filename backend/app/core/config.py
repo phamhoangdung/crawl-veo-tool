@@ -26,7 +26,9 @@ def app_data_dir() -> Path:
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     else:
-        base = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
+        base = Path(
+            os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+        )
     return base / "VieDubStudio"
 
 
@@ -60,7 +62,7 @@ def _default_master_key() -> str:
         return _ensure_master_key_file()
     raise RuntimeError(
         "MASTER_KEY chưa được cấu hình — copy .env.example thành .env rồi điền "
-        "MASTER_KEY (xem docs/phases/phase-0-scaffolding.md mục \"Cách chạy dự án\")."
+        'MASTER_KEY (xem docs/phases/phase-0-scaffolding.md mục "Cách chạy dự án").'
     )
 
 
@@ -72,6 +74,12 @@ class Settings(BaseSettings):
 
     master_key: str = Field(default_factory=_default_master_key)
     database_url: str = f"sqlite:///{DEFAULT_DB_PATH}"
+
+    # Phase: tối ưu hiệu năng (P2) — số worker process cho compute thuần CPU/GPU
+    # (faster-whisper, SpeechBrain diarization). Mặc định 1 để khớp hành vi hiện
+    # tại (1 việc nặng tại 1 thời điểm, tránh tranh RAM trên máy cá nhân) — tăng
+    # qua env khi deploy trên server nhiều core hơn (Phase 18), không đoán trước.
+    cpu_worker_count: int = 1
 
     # Phase 14 — sinh ảnh/video AI. Mặc định "fake" để phát triển không tốn phí;
     # đặt "real" khi muốn gọi API thật (cần key fal.ai trong pool).

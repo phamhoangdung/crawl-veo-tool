@@ -87,6 +87,7 @@ export type TaskKind =
   | 'download'
   | 'transcribe'
   | 'translate'
+  | 'diarize'
   | 'dub'
   | 'burn'
   | 'render_project'
@@ -242,6 +243,19 @@ export interface TranscriptSegment {
   end: number
   text: string
   translated_text: string
+  /** Phase 19: nhãn người nói (vd "SPEAKER_00") — rỗng nghĩa là chưa phân vai. */
+  speaker: string
+}
+
+/** Phase 19: đủ thông tin để backend biết gọi provider nào với voice id nào. */
+export interface VoiceRef {
+  provider: string // "edge" | "elevenlabs"
+  voice_id: string
+}
+
+export interface VoiceOption extends VoiceRef {
+  name: string
+  gender: string
 }
 
 export interface VideoDetail {
@@ -257,6 +271,7 @@ export interface VideoDetail {
   duration_seconds: number | null
   local_path: string | null
   error_message: string | null
+  speaker_voices: Record<string, VoiceRef>
 }
 
 export type ApiKeyStatus = 'active' | 'cooldown' | 'exhausted' | 'invalid'
@@ -499,6 +514,32 @@ export async function updateTranscript(
   const { data } = await api.put<VideoDetail>(
     `/api/videos/${videoId}/transcript`,
     segments
+  )
+  return data
+}
+
+/** Nhận diện có bao nhiêu người nói khác nhau, gắn nhãn cho từng đoạn thoại —
+ * không bắt buộc, bỏ qua thì `dubVideo` vẫn chạy bằng 1 giọng chung. */
+export async function diarizeVideo(videoId: number) {
+  const { data } = await api.post<VideoDetail>(
+    `/api/videos/${videoId}/diarize`
+  )
+  return data
+}
+
+/** Giọng Edge-TTS (luôn có) + giọng ElevenLabs thật của user nếu đã cấu hình key. */
+export async function getAvailableVoices(videoId: number) {
+  const { data } = await api.get<VoiceOption[]>(`/api/videos/${videoId}/voices`)
+  return data
+}
+
+export async function updateSpeakerVoices(
+  videoId: number,
+  speakerVoices: Record<string, VoiceRef>
+) {
+  const { data } = await api.put<VideoDetail>(
+    `/api/videos/${videoId}/speaker-voices`,
+    speakerVoices
   )
   return data
 }

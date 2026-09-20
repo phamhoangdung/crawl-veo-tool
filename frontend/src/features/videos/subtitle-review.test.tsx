@@ -10,6 +10,7 @@ const segments: TranscriptSegment[] = Array.from({ length: 32 }, (_, i) => ({
   end: i * 5 + 4,
   text: `第${i}句中文字幕`,
   translated_text: `Câu phụ đề tiếng Việt số ${i}`,
+  speaker: '',
 }))
 
 async function renderReview() {

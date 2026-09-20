@@ -10,6 +10,7 @@ ghép lại. Cắt vào khoảng lặng thì chỗ nối rơi vào đúng chỗ 
 """
 
 import logging
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -101,7 +102,9 @@ def separate_vocals(
     for index, (start, end) in enumerate(chunks):
         part_path = work_dir / f"part{index:03d}.wav"
         ffmpeg.slice_audio(audio_path, part_path, start, end)
-        vocals, background = demucs.separate_vocals(part_path, work_dir / f"out{index:03d}")
+        vocals, background = demucs.separate_vocals(
+            part_path, work_dir / f"out{index:03d}"
+        )
         vocal_parts.append(vocals)
         background_parts.append(background)
         if on_chunk_done is not None:
@@ -113,4 +116,11 @@ def separate_vocals(
     background_out = stem_dir / "no_vocals.wav"
     ffmpeg.concat_audio(vocal_parts, vocals_out)
     ffmpeg.concat_audio(background_parts, background_out)
+
+    # File khúc trung gian (part*.wav, out*/htdemucs/...) không còn cần sau khi
+    # đã nối xong — dọn ngay thay vì để tích luỹ tới lần cleanup 30 ngày
+    # (storage_cleanup_service), quan trọng hơn khi host nhiều user dùng chung
+    # ổ đĩa (xem docs/performance-optimization/plan.md mục P1).
+    shutil.rmtree(work_dir, ignore_errors=True)
+
     return vocals_out, background_out

@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Languages,
   Mic,
+  Users,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -36,6 +37,7 @@ const KIND_ICONS: Record<TaskKind, typeof Download> = {
   download: Download,
   transcribe: Captions,
   translate: Languages,
+  diarize: Users,
   dub: Mic,
   burn: AudioLines,
   // Dựng video dự án nhiều cảnh (Phase 16) — thiếu mục này thì job đó hiện
