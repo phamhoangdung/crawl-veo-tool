@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { X } from 'lucide-react'
 import type { TimelineClip } from '@/lib/api'
+import { usePointerDrag } from '@/hooks/use-pointer-drag'
 import { useEditorStore } from './store'
 
 /** Kéo mép nào — 'move' là kéo cả khung. */
@@ -15,55 +16,53 @@ type Handle = 'move' | 'se'
  * trong bản render, dù preview bị scale nhỏ lại.
  */
 export function BlurRegionLayer({ currentTime }: { currentTime: number }) {
-  const operations = useEditorStore((s) => s.operations)
-  const updateClip = useEditorStore((s) => s.updateClip)
+  // Chỉ subscribe đúng track "blur" — xem giải thích ở OverlayLayer (cùng lý
+  // do, cùng cách làm).
+  const trackIndex = useEditorStore((s) =>
+    s.operations.tracks.findIndex((t) => t.type === 'blur')
+  )
+  const track = useEditorStore((s) => s.operations.tracks.find((t) => t.type === 'blur') ?? null)
+  const updateClipDuringGesture = useEditorStore((s) => s.updateClipDuringGesture)
+  const beginGesture = useEditorStore((s) => s.beginGesture)
+  const endGesture = useEditorStore((s) => s.endGesture)
   const removeClip = useEditorStore((s) => s.removeClip)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  const trackIndex = operations.tracks.findIndex((t) => t.type === 'blur')
-  const track = trackIndex >= 0 ? operations.tracks[trackIndex] : null
+  const startDrag = usePointerDrag(containerRef)
 
   if (!track) return null
 
   function beginDrag(clipIndex: number, clip: TimelineClip, handle: Handle) {
-    return (e: React.PointerEvent) => {
-      e.stopPropagation()
-      const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect || rect.width === 0 || rect.height === 0) return
+    const origin = {
+      x: clip.x ?? 0,
+      y: clip.y ?? 0,
+      width: clip.width ?? 0.2,
+      height: clip.height ?? 0.1,
+    }
 
-      const startX = e.clientX
-      const startY = e.clientY
-      const origin = {
-        x: clip.x ?? 0,
-        y: clip.y ?? 0,
-        width: clip.width ?? 0.2,
-        height: clip.height ?? 0.1,
-      }
+    const handlePointerDown = startDrag((dxPx, dyPx, rect) => {
+      const dx = dxPx / rect.width
+      const dy = dyPx / rect.height
 
-      const onMove = (ev: PointerEvent) => {
-        const dx = (ev.clientX - startX) / rect.width
-        const dy = (ev.clientY - startY) / rect.height
-
-        if (handle === 'move') {
-          updateClip(trackIndex, clipIndex, {
-            // Chặn ở mép: vùng che tràn ra ngoài khung làm ffmpeg crop lỗi.
-            x: Math.min(1 - origin.width, Math.max(0, origin.x + dx)),
-            y: Math.min(1 - origin.height, Math.max(0, origin.y + dy)),
-          })
-          return
-        }
-
-        updateClip(trackIndex, clipIndex, {
-          width: Math.min(1 - origin.x, Math.max(0.02, origin.width + dx)),
-          height: Math.min(1 - origin.y, Math.max(0.02, origin.height + dy)),
+      if (handle === 'move') {
+        updateClipDuringGesture(trackIndex, clipIndex, {
+          // Chặn ở mép: vùng che tràn ra ngoài khung làm ffmpeg crop lỗi.
+          x: Math.min(1 - origin.width, Math.max(0, origin.x + dx)),
+          y: Math.min(1 - origin.height, Math.max(0, origin.y + dy)),
         })
+        return
       }
-      const onUp = () => {
-        window.removeEventListener('pointermove', onMove)
-        window.removeEventListener('pointerup', onUp)
-      }
-      window.addEventListener('pointermove', onMove)
-      window.addEventListener('pointerup', onUp)
+
+      updateClipDuringGesture(trackIndex, clipIndex, {
+        width: Math.min(1 - origin.x, Math.max(0.02, origin.width + dx)),
+        height: Math.min(1 - origin.y, Math.max(0.02, origin.height + dy)),
+      })
+    }, endGesture)
+
+    // `beginGesture` phải chạy lúc pointerdown THẬT sự xảy ra, không phải lúc
+    // JSX gọi `beginDrag(...)` để dựng handler (chuyện đó xảy ra mỗi lần render).
+    return (e: React.PointerEvent) => {
+      beginGesture()
+      handlePointerDown(e)
     }
   }
 

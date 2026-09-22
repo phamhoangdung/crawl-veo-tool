@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label'
 import { AssetPanel } from './asset-panel'
 import { BlurRegionLayer } from './blur-region-layer'
 import { CropBoxSelector } from './crop-box-selector'
+import { ImageLayer } from './image-layer'
 import { defaultVerticalCrop } from './layout'
 import { OverlayLayer } from './overlay-layer'
 import { useEditorStore } from './store'
@@ -358,58 +359,91 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className='text-base'>Xem trước</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className='relative mx-auto w-full max-w-md overflow-hidden rounded-lg bg-black'>
-            {previewUrl ? (
-              <video
-                ref={videoRef}
-                src={previewUrl}
-                controls
-                className='max-h-[55vh] w-full object-contain'
-                onTimeUpdate={(e) =>
-                  setCurrentTime(e.currentTarget.currentTime)
-                }
-                onLoadedMetadata={(e) =>
-                  setVideoDims({
-                    width: e.currentTarget.videoWidth,
-                    height: e.currentTarget.videoHeight,
-                  })
-                }
-              />
-            ) : (
-              <div className='flex h-48 items-center justify-center text-sm text-muted-foreground'>
-                {isLoading
-                  ? 'Đang tải...'
-                  : isVideo
-                    ? 'Video chưa được tải về máy — chạy bước "Tải video" trước.'
-                    : 'Chưa có bản dựng thô — bấm "Dựng video" ở canvas trước, rồi quay lại đây tinh chỉnh.'}
-              </div>
-            )}
-            <OverlayLayer currentTime={currentTime} />
-            <BlurRegionLayer currentTime={currentTime} />
-            {selectedCandidate && crop && (
-              <CropBoxSelector
-                videoWidth={videoDims.width}
-                videoHeight={videoDims.height}
-                value={crop}
-                onChange={setCrop}
-              />
-            )}
-          </div>
+      {/* 2 cột từ màn hình rộng: khung xem trước bên trái theo đúng tỉ lệ khung
+          hình video thật (dọc 9:16 hay ngang 16:9 đều tận dụng hết chiều cao/
+          rộng có được, không còn bó cứng vào 1 bề rộng nhỏ), panel công cụ bên
+          phải luôn thấy được song song — trước đây xếp dọc 1 cột buộc phải cuộn
+          qua hết khung preview mới chạm tới AssetPanel/SubtitleBoxPanel. */}
+      <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start'>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>Xem trước</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* `width` tự tính bằng min(): cạnh nhỏ hơn giữa "vừa hết bề rộng cột"
+                và "vừa hết chiều cao 70vh quy theo tỉ lệ" — cho `aspect-ratio` tự
+                suy ra chiều còn lại từ width đã CHẮC CHẮN (block box suy height từ
+                width ổn định, chiều ngược lại thì không — đã tự đo bằng video dọc
+                thật mới phát hiện: dùng flex-item hay w-full cố định đều chỉ đúng
+                1 trong 2 loại tỉ lệ, không đúng cả 2). Nhờ vậy video ngang lấp đầy
+                cột, video dọc thu gọn theo chiều cao, không cần đo bằng JS. */}
+            {(() => {
+              const ratio =
+                videoDims.width && videoDims.height
+                  ? videoDims.width / videoDims.height
+                  : 16 / 9
+              return (
+                <div
+                  className='relative mx-auto overflow-hidden rounded-lg bg-black'
+                  style={{
+                    aspectRatio: ratio,
+                    width: `min(100%, calc(70vh * ${ratio}))`,
+                  }}
+                >
+                  {previewUrl ? (
+                    <video
+                      ref={videoRef}
+                      src={previewUrl}
+                      controls
+                      className='size-full object-contain'
+                      onTimeUpdate={(e) =>
+                        setCurrentTime(e.currentTarget.currentTime)
+                      }
+                      onLoadedMetadata={(e) =>
+                        setVideoDims({
+                          width: e.currentTarget.videoWidth,
+                          height: e.currentTarget.videoHeight,
+                        })
+                      }
+                    />
+                  ) : (
+                    <div className='flex h-48 items-center justify-center text-sm text-muted-foreground'>
+                      {isLoading
+                        ? 'Đang tải...'
+                        : isVideo
+                          ? 'Video chưa được tải về máy — chạy bước "Tải video" trước.'
+                          : 'Chưa có bản dựng thô — bấm "Dựng video" ở canvas trước, rồi quay lại đây tinh chỉnh.'}
+                    </div>
+                  )}
+                  <OverlayLayer currentTime={currentTime} />
+                  <ImageLayer currentTime={currentTime} />
+                  <BlurRegionLayer currentTime={currentTime} />
+                  {selectedCandidate && crop && (
+                    <CropBoxSelector
+                      videoWidth={videoDims.width}
+                      videoHeight={videoDims.height}
+                      value={crop}
+                      onChange={setCrop}
+                    />
+                  )}
+                </div>
+              )
+            })()}
 
-          <div className='mx-auto mt-4 w-full max-w-md'>
-            <VolumeMixer />
-          </div>
-        </CardContent>
-      </Card>
+            <div className='mt-4'>
+              <VolumeMixer />
+            </div>
+          </CardContent>
+        </Card>
 
-      <AssetPanel />
-
-      <SubtitleBoxPanel />
+        {/* Sticky trên màn hình rộng: cuộn trang xuống xem Timeline vẫn thấy
+            panel công cụ, không mất dấu clip đang chỉnh ở ClipInspector. */}
+        <div className='space-y-4 xl:sticky xl:top-4'>
+          <AssetPanel />
+          <SubtitleBoxPanel />
+          <ClipInspector />
+        </div>
+      </div>
 
       <Card>
         <CardHeader>
@@ -423,72 +457,72 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
         </CardContent>
       </Card>
 
-      <ClipInspector />
-
       {/* Gợi ý cắt clip lấy từ transcript đã dịch của video crawl — dự án AI
           không có transcript nên ẩn hẳn thay vì hiện một thẻ luôn rỗng. */}
       {isVideo && (
-      <Card>
-        <CardHeader>
-          <CardTitle className='text-base'>
-            Cắt clip ngắn (TikTok/Shorts)
-          </CardTitle>
-          <CardDescription>
-            Gợi ý đoạn nổi bật từ transcript chỉ để tham khảo thứ tự — không tự
-            chọn/loại bỏ thay bạn, tự chọn đoạn ưng ý rồi kéo khung crop trên
-            khung preview phía trên.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='space-y-3'>
-          {!clipCandidates || clipCandidates.length === 0 ? (
-            <p className='text-sm text-muted-foreground'>
-              Chưa có gợi ý — cần phụ đề đã dịch trước.
-            </p>
-          ) : (
-            <div className='flex flex-col gap-2'>
-              {clipCandidates.map((candidate, i) => (
-                <button
-                  key={i}
-                  type='button'
-                  onClick={() => selectCandidate(candidate)}
-                  className={cn(
-                    'rounded-md border p-2 text-start text-xs hover:bg-muted/60',
-                    selectedCandidate === candidate &&
-                      'border-primary bg-primary/5'
-                  )}
-                >
-                  <span className='font-medium'>
-                    {formatClipTime(candidate.start)} →{' '}
-                    {formatClipTime(candidate.end)}
-                  </span>
-                  <p className='line-clamp-2 text-muted-foreground'>
-                    {candidate.text}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {selectedCandidate && (
-            <div className='flex flex-wrap items-end gap-2'>
-              <div className='min-w-48 flex-1 space-y-1'>
-                <Label className='text-xs'>Text CTA (tuỳ chọn)</Label>
-                <Input
-                  value={ctaText}
-                  onChange={(e) => setCtaText(e.target.value)}
-                  placeholder='Xem full tại YouTube: ...'
-                />
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>
+              Cắt clip ngắn (TikTok/Shorts)
+            </CardTitle>
+            <CardDescription>
+              Gợi ý đoạn nổi bật từ transcript chỉ để tham khảo thứ tự — không
+              tự chọn/loại bỏ thay bạn, tự chọn đoạn ưng ý rồi kéo khung crop
+              trên khung preview phía trên.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-3'>
+            {!clipCandidates || clipCandidates.length === 0 ? (
+              <p className='text-sm text-muted-foreground'>
+                Chưa có gợi ý — cần phụ đề đã dịch trước.
+              </p>
+            ) : (
+              <div className='flex flex-col gap-2'>
+                {clipCandidates.map((candidate, i) => (
+                  <button
+                    key={i}
+                    type='button'
+                    onClick={() => selectCandidate(candidate)}
+                    className={cn(
+                      'rounded-md border p-2 text-start text-xs hover:bg-muted/60',
+                      selectedCandidate === candidate &&
+                        'border-primary bg-primary/5'
+                    )}
+                  >
+                    <span className='font-medium'>
+                      {formatClipTime(candidate.start)} →{' '}
+                      {formatClipTime(candidate.end)}
+                    </span>
+                    <p className='line-clamp-2 text-muted-foreground'>
+                      {candidate.text}
+                    </p>
+                  </button>
+                ))}
               </div>
-              <Button
-                disabled={createClipMutation.isPending}
-                onClick={() => createClipMutation.mutate()}
-              >
-                {createClipMutation.isPending ? 'Đang tạo clip...' : 'Tạo clip'}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+
+            {selectedCandidate && (
+              <div className='flex flex-wrap items-end gap-2'>
+                <div className='min-w-48 flex-1 space-y-1'>
+                  <Label className='text-xs'>Text CTA (tuỳ chọn)</Label>
+                  <Input
+                    value={ctaText}
+                    onChange={(e) => setCtaText(e.target.value)}
+                    placeholder='Xem full tại YouTube: ...'
+                  />
+                </div>
+                <Button
+                  disabled={createClipMutation.isPending}
+                  onClick={() => createClipMutation.mutate()}
+                >
+                  {createClipMutation.isPending
+                    ? 'Đang tạo clip...'
+                    : 'Tạo clip'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   )
@@ -582,6 +616,58 @@ function ClipInspector() {
               }
             />
           </div>
+        )}
+        {track.type === 'image' && (
+          <div className='space-y-1'>
+            <Label className='text-xs'>Độ mờ (0-1)</Label>
+            <Input
+              type='number'
+              step='0.05'
+              min={0}
+              max={1}
+              className='w-24'
+              value={clip.opacity ?? 1}
+              onChange={(e) =>
+                updateClip(selected.trackIndex, selected.clipIndex, {
+                  opacity: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+        )}
+        {track.type === 'blur' && (
+          <>
+            <div className='space-y-1'>
+              <Label className='text-xs'>Kiểu che</Label>
+              <select
+                className='h-9 w-32 rounded-md border bg-transparent px-2 text-sm'
+                value={clip.mode ?? 'blur'}
+                onChange={(e) =>
+                  updateClip(selected.trackIndex, selected.clipIndex, {
+                    mode: e.target.value as 'blur' | 'pixelate',
+                  })
+                }
+              >
+                <option value='blur'>Làm nhoè</option>
+                <option value='pixelate'>Ô vuông (che chữ tốt hơn)</option>
+              </select>
+            </div>
+            <div className='space-y-1'>
+              <Label className='text-xs'>Độ mạnh</Label>
+              <Input
+                type='number'
+                step='1'
+                min={1}
+                className='w-24'
+                value={clip.strength ?? 20}
+                onChange={(e) =>
+                  updateClip(selected.trackIndex, selected.clipIndex, {
+                    strength: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </>
         )}
         {track.type === 'video' && (
           <div className='space-y-1'>

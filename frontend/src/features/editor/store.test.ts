@@ -27,6 +27,7 @@ beforeEach(() => {
     selected: null,
     past: [],
     future: [],
+    gestureSnapshot: null,
   })
 })
 
@@ -130,6 +131,76 @@ describe('undo/redo', () => {
   })
 })
 
+describe('beginGesture/endGesture (undo sau khi kéo)', () => {
+  it('nhiều updateClipDuringGesture giữa begin/end chỉ tốn đúng 1 bước lịch sử', () => {
+    useEditorStore.getState().beginGesture()
+    for (let i = 0; i < 20; i++) {
+      useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 10 + i })
+    }
+    useEditorStore.getState().endGesture()
+
+    expect(useEditorStore.getState().past).toHaveLength(1)
+  })
+
+  it('undo sau gesture trả về đúng trạng thái TRƯỚC gesture, không phải 1 bước cuối', () => {
+    useEditorStore.getState().beginGesture()
+    for (let i = 0; i < 20; i++) {
+      useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 10 + i })
+    }
+    useEditorStore.getState().endGesture()
+
+    useEditorStore.getState().undo()
+
+    expect(useEditorStore.getState().operations.tracks[0].clips[0].end).toBe(10)
+  })
+
+  it('endGesture không tốn bước lịch sử nếu operations không đổi (click không kéo)', () => {
+    useEditorStore.getState().beginGesture()
+    useEditorStore.getState().endGesture()
+
+    expect(useEditorStore.getState().past).toHaveLength(0)
+  })
+
+  it('gọi beginGesture lồng nhau không ghi đè snapshot gốc', () => {
+    useEditorStore.getState().beginGesture()
+    useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 11 })
+    useEditorStore.getState().beginGesture() // gọi lần 2 giữa chừng — phải bị bỏ qua
+    useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 12 })
+    useEditorStore.getState().endGesture()
+
+    useEditorStore.getState().undo()
+
+    expect(useEditorStore.getState().operations.tracks[0].clips[0].end).toBe(10)
+  })
+
+  it('updateClipDuringGesture không tự đẩy lịch sử nếu quên gọi endGesture', () => {
+    useEditorStore.getState().beginGesture()
+    useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 99 })
+
+    expect(useEditorStore.getState().past).toHaveLength(0)
+    expect(useEditorStore.getState().operations.tracks[0].clips[0].end).toBe(99)
+  })
+})
+
+describe('updateTrackClips', () => {
+  it('áp patch cho mọi clip của track trong 1 bước lịch sử', () => {
+    useEditorStore.getState().updateTrackClips(0, { font_color: 'FF0000' })
+
+    const clips = useEditorStore.getState().operations.tracks[0].clips
+    expect(clips.every((c) => c.font_color === 'FF0000')).toBe(true)
+    // 1 patch cho N clip = đúng 1 bước undo, không phải N bước.
+    expect(useEditorStore.getState().past).toHaveLength(1)
+  })
+
+  it('hoàn tác trả lại đúng mọi clip về trạng thái cũ trong 1 bước', () => {
+    useEditorStore.getState().updateTrackClips(0, { font_color: 'FF0000' })
+    useEditorStore.getState().undo()
+
+    const clips = useEditorStore.getState().operations.tracks[0].clips
+    expect(clips.every((c) => c.font_color === undefined)).toBe(true)
+  })
+})
+
 describe('zoom', () => {
   it('kẹp trong khoảng cho phép', () => {
     useEditorStore.getState().setZoom(99999)
@@ -197,5 +268,25 @@ describe('addClipToTrack', () => {
     useEditorStore.getState().undo()
 
     expect(useEditorStore.getState().operations.tracks).toHaveLength(0)
+  })
+})
+
+describe('reference-stability của track không đổi (nền tảng cho selector hẹp)', () => {
+  it('sửa track video không tạo reference mới cho track audio — OverlayLayer/BlurRegionLayer/ImageLayer/SubtitleBoxPanel dựa vào tính chất này để không render lại khi track khác đổi', () => {
+    const audioTrackBefore = useEditorStore.getState().operations.tracks[1]
+
+    useEditorStore.getState().updateClip(0, 0, { end: 8 })
+
+    const audioTrackAfter = useEditorStore.getState().operations.tracks[1]
+    expect(audioTrackAfter).toBe(audioTrackBefore)
+  })
+
+  it('sửa track audio thì CHÍNH track đó đổi reference (khác track không đổi)', () => {
+    const audioTrackBefore = useEditorStore.getState().operations.tracks[1]
+
+    useEditorStore.getState().updateClip(1, 0, { volume: 0.5 })
+
+    const audioTrackAfter = useEditorStore.getState().operations.tracks[1]
+    expect(audioTrackAfter).not.toBe(audioTrackBefore)
   })
 })

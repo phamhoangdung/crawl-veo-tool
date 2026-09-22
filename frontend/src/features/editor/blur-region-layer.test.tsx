@@ -33,6 +33,7 @@ describe('BlurRegionLayer', () => {
       past: [],
       future: [],
       selected: null,
+      gestureSnapshot: null,
     })
   })
 
@@ -59,6 +60,19 @@ describe('BlurRegionLayer', () => {
     expect(clip.y).toBeCloseTo(0.15, 2)
     expect(clip.width).toBe(0.2)
     expect(clip.height).toBe(0.1)
+  })
+
+  it('kéo qua nhiều pointermove chỉ tốn đúng 1 bước undo', async () => {
+    await render(<Harness />)
+    const box = document.querySelector('[data-testid=blur-region-0]')!
+
+    dispatchPointer(box, 'pointerdown', 300, 50)
+    for (let i = 1; i <= 15; i++) {
+      dispatchPointer(window, 'pointermove', 300 - i, 50 + i)
+    }
+    dispatchPointer(window, 'pointerup', 285, 65)
+
+    expect(useEditorStore.getState().past).toHaveLength(1)
   })
 
   it('kéo góc dưới-phải thì đổi kích thước, không đổi vị trí', async () => {

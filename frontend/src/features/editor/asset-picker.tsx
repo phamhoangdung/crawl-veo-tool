@@ -7,6 +7,7 @@ import {
   type AssetKind,
   assetFileUrl,
   deleteAsset,
+  getApiErrorMessage,
   listAssets,
   uploadAsset,
 } from '@/lib/api'
@@ -83,9 +84,7 @@ export function AssetPicker({
       onOpenChange(false)
     },
     onError: (error: unknown) => {
-      const detail =
-        (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-      toast.error(detail ?? 'Tải file lên thất bại')
+      toast.error(getApiErrorMessage(error, 'Tải file lên thất bại'))
     },
   })
 

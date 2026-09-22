@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { usePointerDrag } from '@/hooks/use-pointer-drag'
 import { asTimed } from './layout'
 import { useEditorStore } from './store'
 
@@ -12,37 +13,39 @@ interface OverlayLayerProps {
  * `x=w*fx-text_w/2`), để vị trí xem trước và bản render ra khớp nhau.
  */
 export function OverlayLayer({ currentTime }: OverlayLayerProps) {
-  const operations = useEditorStore((s) => s.operations)
-  const updateClip = useEditorStore((s) => s.updateClip)
+  // Chỉ subscribe đúng track "overlay" — trước đây lấy cả `s.operations` khiến
+  // component này render lại mỗi khi BẤT KỲ track nào đổi (vd kéo watermark),
+  // dù chẳng liên quan gì tới overlay text. `mapTrack` trong store giữ nguyên
+  // reference của track không đổi nên so sánh mặc định (Object.is) của Zustand
+  // vẫn đúng — track "overlay" không đổi thì không render lại, không cần
+  // `useShallow`.
+  const overlayTrackIndex = useEditorStore((s) =>
+    s.operations.tracks.findIndex((t) => t.type === 'overlay')
+  )
+  const overlayTrack = useEditorStore(
+    (s) => s.operations.tracks.find((t) => t.type === 'overlay') ?? null
+  )
+  const updateClipDuringGesture = useEditorStore((s) => s.updateClipDuringGesture)
+  const beginGesture = useEditorStore((s) => s.beginGesture)
+  const endGesture = useEditorStore((s) => s.endGesture)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  const overlayTrackIndex = operations.tracks.findIndex((t) => t.type === 'overlay')
-  const overlayTrack = overlayTrackIndex >= 0 ? operations.tracks[overlayTrackIndex] : null
+  const startDrag = usePointerDrag(containerRef)
 
   if (!overlayTrack) return null
 
   function beginDrag(clipIndex: number, originX: number, originY: number) {
-    return (e: React.PointerEvent) => {
-      e.stopPropagation()
-      const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect || rect.width === 0 || rect.height === 0) return
-      const startX = e.clientX
-      const startY = e.clientY
+    const handlePointerDown = startDrag((dxPx, dyPx, rect) => {
+      updateClipDuringGesture(overlayTrackIndex, clipIndex, {
+        x: Math.min(1, Math.max(0, originX + dxPx / rect.width)),
+        y: Math.min(1, Math.max(0, originY + dyPx / rect.height)),
+      })
+    }, endGesture)
 
-      const onMove = (moveEvent: PointerEvent) => {
-        const dx = (moveEvent.clientX - startX) / rect.width
-        const dy = (moveEvent.clientY - startY) / rect.height
-        updateClip(overlayTrackIndex, clipIndex, {
-          x: Math.min(1, Math.max(0, originX + dx)),
-          y: Math.min(1, Math.max(0, originY + dy)),
-        })
-      }
-      const onUp = () => {
-        window.removeEventListener('pointermove', onMove)
-        window.removeEventListener('pointerup', onUp)
-      }
-      window.addEventListener('pointermove', onMove)
-      window.addEventListener('pointerup', onUp)
+    // `beginGesture` phải chạy lúc pointerdown THẬT sự xảy ra, không phải lúc
+    // JSX gọi `beginDrag(...)` để dựng handler (chuyện đó xảy ra mỗi lần render).
+    return (e: React.PointerEvent) => {
+      beginGesture()
+      handlePointerDown(e)
     }
   }
 

@@ -31,6 +31,10 @@ interface EditorStore {
   future: TimelineOperations[]
   undo: () => void
   redo: () => void
+  /** Snapshot lúc bắt đầu 1 cử chỉ kéo (drag); null khi không đang kéo. */
+  gestureSnapshot: TimelineOperations | null
+  beginGesture: () => void
+  endGesture: () => void
   /** Cắt đôi clip tại giây `atSeconds` (tính trên timeline output). */
   splitClip: (trackIndex: number, clipIndex: number, atSeconds: number) => void
   duplicateClip: (trackIndex: number, clipIndex: number) => void
@@ -43,6 +47,19 @@ interface EditorStore {
   ) => void
   setOperations: (operations: TimelineOperations) => void
   updateClip: (trackIndex: number, clipIndex: number, patch: Partial<TimelineClip>) => void
+  /** Như `updateClip` nhưng KHÔNG đẩy lịch sử — dùng trong lúc đang kéo
+   * (`pointermove`), giữa `beginGesture`/`endGesture`. `updateClip` đẩy 1 bước
+   * lịch sử mỗi lần gọi nên trước đây 1 cú kéo dài (~60-120 lần/giây) tiêu hết
+   * cả 50 bước lịch sử — Undo sau khi kéo gần như vô dụng (xem `endGesture`). */
+  updateClipDuringGesture: (
+    trackIndex: number,
+    clipIndex: number,
+    patch: Partial<TimelineClip>
+  ) => void
+  /** Áp cùng 1 patch cho MỌI clip của 1 track, trong 1 bước lịch sử duy nhất —
+   * dùng cho style áp cả track (vd font phụ đề). Gọi `updateClip` lặp lại từng
+   * clip sẽ đẩy N bước undo riêng cho 1 thay đổi khái niệm là 1 bước. */
+  updateTrackClips: (trackIndex: number, patch: Partial<TimelineClip>) => void
   removeClip: (trackIndex: number, clipIndex: number) => void
   select: (selection: Selection) => void
   clearSelection: () => void
@@ -73,13 +90,14 @@ function mapTrack(
   }
 }
 
-export const useEditorStore = create<EditorStore>((set) => ({
+export const useEditorStore = create<EditorStore>((set, get) => ({
   operations: { tracks: [] },
   selected: null,
   seekRequest: null,
   pxPerSecond: DEFAULT_PX_PER_SECOND,
   past: [],
   future: [],
+  gestureSnapshot: null,
 
   requestSeek: (seconds) =>
     set((state) => ({
@@ -147,6 +165,46 @@ export const useEditorStore = create<EditorStore>((set) => ({
         mapTrack(state.operations, trackIndex, (track) => ({
           ...track,
           clips: track.clips.map((clip, i) => (i === clipIndex ? { ...clip, ...patch } : clip)),
+        }))
+      )
+    ),
+
+  updateClipDuringGesture: (trackIndex, clipIndex, patch) =>
+    set((state) => ({
+      operations: mapTrack(state.operations, trackIndex, (track) => ({
+        ...track,
+        clips: track.clips.map((clip, i) => (i === clipIndex ? { ...clip, ...patch } : clip)),
+      })),
+    })),
+
+  beginGesture: () => {
+    if (get().gestureSnapshot !== null) return // đã trong cử chỉ, không chồng lấn
+    set((state) => ({ gestureSnapshot: state.operations }))
+  },
+
+  endGesture: () =>
+    set((state) => {
+      const snapshot = state.gestureSnapshot
+      if (snapshot === null) return {}
+      // Click (không thực kéo) thì đừng tiêu 1 ô lịch sử — so sánh nông đủ dùng
+      // vì object gốc chỉ đổi khi có patch thật (mapTrack luôn tạo mảng/track
+      // mới), snapshot khác state.operations về REFERENCE ngay khi có ít nhất 1
+      // `updateClipDuringGesture` xảy ra.
+      if (snapshot === state.operations) return { gestureSnapshot: null }
+      return {
+        past: [...state.past, snapshot].slice(-MAX_HISTORY),
+        future: [] as TimelineOperations[],
+        gestureSnapshot: null,
+      }
+    }),
+
+  updateTrackClips: (trackIndex, patch) =>
+    set((state) =>
+      withHistory(
+        state,
+        mapTrack(state.operations, trackIndex, (track) => ({
+          ...track,
+          clips: track.clips.map((clip) => ({ ...clip, ...patch })),
         }))
       )
     ),

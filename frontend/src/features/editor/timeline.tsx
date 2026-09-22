@@ -71,7 +71,9 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
   const select = useEditorStore((s) => s.select)
   const requestSeek = useEditorStore((s) => s.requestSeek)
   const pxPerSecond = useEditorStore((s) => s.pxPerSecond)
-  const updateClip = useEditorStore((s) => s.updateClip)
+  const updateClipDuringGesture = useEditorStore((s) => s.updateClipDuringGesture)
+  const beginGesture = useEditorStore((s) => s.beginGesture)
+  const endGesture = useEditorStore((s) => s.endGesture)
   const dragRef = useRef<{ mode: DragMode; startX: number; original: TimelineClip } | null>(null)
 
   // Listener kéo gắn 1 lần nên không thấy pxPerSecond mới; đồng bộ qua ref để
@@ -91,10 +93,11 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
       const deltaSeconds = pxToSeconds(e.clientX - drag.startX, pxPerSecondRef.current)
       const patch = applyDragToClip(drag.original, track.type, drag.mode, deltaSeconds)
       if (Object.keys(patch).length > 0) {
-        updateClip(trackIndex, clipIndex, patch)
+        updateClipDuringGesture(trackIndex, clipIndex, patch)
       }
     }
     function onUp() {
+      if (dragRef.current) endGesture()
       dragRef.current = null
     }
     window.addEventListener('pointermove', onMove)
@@ -103,7 +106,7 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [track.type, trackIndex, clipIndex, updateClip])
+  }, [track.type, trackIndex, clipIndex, updateClipDuringGesture, endGesture])
 
   /** Chọn clip đồng thời tua video tới đầu clip đó, để xem ngay đang sửa đoạn nào. */
   function selectAndSeek() {
@@ -116,6 +119,7 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
     const mode = (e.currentTarget.dataset.dragMode as DragMode | undefined) ?? 'move'
     selectAndSeek()
     dragRef.current = { mode, startX: e.clientX, original: clip }
+    beginGesture()
   }
 
   // Logo hiện suốt video (không có start/end) thì không kéo được: kéo sẽ tạo ra

@@ -29,7 +29,13 @@ const OPERATIONS: TimelineOperations = {
 }
 
 beforeEach(() => {
-  useEditorStore.setState({ operations: OPERATIONS, selected: null })
+  useEditorStore.setState({
+    operations: structuredClone(OPERATIONS),
+    selected: null,
+    past: [],
+    future: [],
+    gestureSnapshot: null,
+  })
 })
 
 describe('Timeline', () => {
@@ -76,6 +82,47 @@ describe('Timeline', () => {
 
     const audioClip = useEditorStore.getState().operations.tracks[1].clips[0]
     expect(audioClip.track_start).toBeCloseTo(3, 1)
+  })
+
+  it('coalesces many pointermove events during 1 drag into exactly 1 undo step', async () => {
+    const screen = await render(<Timeline />)
+    const handle = screen.getByTestId('resize-end-1-0').element() as HTMLElement
+
+    dispatchPointer(handle, 'pointerdown', 0)
+    // Mô phỏng nhiều sự kiện pointermove như chuột thật di chuyển (60-120Hz) —
+    // trước khi sửa, MỖI sự kiện này đẩy 1 bước lịch sử riêng.
+    for (let x = 1; x <= 20; x++) {
+      dispatchPointer(window, 'pointermove', x * (PX_PER_SECOND / 10))
+    }
+    dispatchPointer(window, 'pointerup', 20 * (PX_PER_SECOND / 10))
+
+    expect(useEditorStore.getState().past).toHaveLength(1)
+  })
+
+  it('undo after a drag restores the exact pre-drag state, not 1 pointermove back', async () => {
+    const screen = await render(<Timeline />)
+    const handle = screen.getByTestId('resize-end-1-0').element() as HTMLElement
+    const originalEnd = useEditorStore.getState().operations.tracks[1].clips[0].end
+
+    dispatchPointer(handle, 'pointerdown', 0)
+    for (let x = 1; x <= 20; x++) {
+      dispatchPointer(window, 'pointermove', x * (PX_PER_SECOND / 10))
+    }
+    dispatchPointer(window, 'pointerup', 20 * (PX_PER_SECOND / 10))
+
+    useEditorStore.getState().undo()
+
+    expect(useEditorStore.getState().operations.tracks[1].clips[0].end).toBe(originalEnd)
+  })
+
+  it('a click without movement does not consume an undo step', async () => {
+    const screen = await render(<Timeline />)
+    const handle = screen.getByTestId('resize-end-1-0').element() as HTMLElement
+
+    dispatchPointer(handle, 'pointerdown', 0)
+    dispatchPointer(window, 'pointerup', 0)
+
+    expect(useEditorStore.getState().past).toHaveLength(0)
   })
 
   it('shows the empty state when there are no tracks', async () => {

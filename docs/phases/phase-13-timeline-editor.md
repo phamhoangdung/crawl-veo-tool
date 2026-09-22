@@ -103,3 +103,61 @@ Kèm 2 lỗi phát hiện lúc sửa:
 **Tab Phụ đề chạy theo video** (`subtitle-review.tsx`): video bên trái, danh sách câu bên phải tự cuộn và tô sáng câu đang phát, bấm câu để nhảy tới đoạn đó. Có nút tắt tự-cuộn (người dùng có thể muốn đọc chỗ khác trong lúc video chạy). Chọn biến thể phát theo thứ tự burned → dubbed → original.
 
 **Còn thiếu** (chưa làm trong phiên này): preview chưa phản ánh đúng bản render (vẫn phát 1 file gốc, không thấy hiệu ứng cắt/chuyển cảnh/trộn âm lượng); chưa thêm ảnh/logo/watermark, nhạc nền từ file ngoài, chỉnh tốc độ phát, fade in/out âm thanh; chưa snap khi kéo.
+
+## Watermark kéo-thả + kiểu chữ phụ đề (phiên 2026-09-21)
+
+**Yêu cầu**: thêm watermark/logo và vùng làm mờ để che watermark gốc — cả 2 tự kéo-thả; tuỳ chỉnh vị trí/font/màu/đậm cho phụ đề, áp cho cả Timeline Editor và luồng "Ghép phụ đề vào video" (burn_subtitles, Phase 5).
+
+**Khảo sát trước khi code phát hiện**: vùng làm mờ che watermark gốc (`BlurRegionLayer`) và vị trí phụ đề kéo-thả (`OverlayLayer` + `box_width`) đã làm từ trước (phần "Che logo/phụ đề gốc" ở trên) — chỉ thiếu 2 việc thật sự: (1) track `image` (logo/watermark) có đủ ở backend nhưng **chưa có lớp kéo-thả ở frontend** (chỉ đặt được vị trí mặc định cứng), và (2) **chưa chọn được font/màu/đậm** ở cả 2 luồng (drawtext hard-code `fontcolor=white` + font hệ thống, burn_subtitles không có `FontName`/màu).
+
+### Font đóng gói sẵn (`font_service.py`)
+Tải 4 family từ Google Fonts (giấy phép OFL) — **Be Vietnam Pro, Barlow, Fira Sans, Anton** — mỗi family bản Regular + Bold (riêng Anton chỉ có 1 file, đã đủ đậm sẵn theo thiết kế). Chỉ chọn family có **subset "vietnamese" chính thức** trên Google Fonts (kiểm tra `METADATA.pb` từng family) — nhiều font Latin cơ bản (vd Poppins, PT Sans) thiếu hẳn dấu tiếng Việt dù trông như hỗ trợ Unicode, chọn nhầm sẽ ra chữ mất dấu mà không báo lỗi gì.
+
+Đóng gói **cùng mã nguồn** (`app/resources/fonts/`), không dò font hệ thống — quan trọng cho bản đóng gói desktop (Phase 12): máy user cài Windows sạch có thể thiếu font. `config.py` thêm `resource_dir()` (đọc từ `sys._MEIPASS` khi đã đóng gói PyInstaller, từ `BACKEND_DIR` khi chạy dev); `viedub-backend.spec` thêm `datas=[('app/resources/fonts', ...)]` — **chưa build lại + chạy thử bản đóng gói thật để xác nhận PyInstaller gom đúng** (ngoài phạm vi phiên này).
+
+`GET /api/fonts` (danh sách), `GET /api/fonts/{id}/file` (tải file .ttf, dùng cho `@font-face` xem trước — hiện **chưa** dùng ở frontend, chỉ mới có endpoint).
+
+### Watermark/logo kéo-thả
+`ImageLayer` mới (song song `OverlayLayer`/`BlurRegionLayer`): kéo di chuyển x/y (toạ độ tâm), kéo góc dưới-phải đổi `width`. Không cần sửa backend — `render_timeline` track `image` đã hỗ trợ đủ từ Phase 9. `ClipInspector` thêm case `image` (opacity) và `blur` (mode blur/pixelate, strength) — trước đó 2 loại clip này **không sửa lại được qua UI** sau khi thêm (chỉ đặt được lúc tạo).
+
+### Font/màu/đậm cho phụ đề — cả 2 luồng
+- **Timeline Editor (track overlay)**: `TimelineClip` thêm `font_family`/`font_color`/`bold`. `render_timeline` resolve fontfile qua `font_service`, `fontcolor=0x{hex}` thay cố định trắng. Áp **theo cả track** (giống `box_width` đã có) chứ không theo từng câu — control gộp vào `SubtitleBoxPanel` (dropdown font + color picker + checkbox đậm), tránh mỗi câu 1 kiểu.
+- **burn_subtitles (Phase 5)**: thêm `font_family`/`font_color`/`bold`. `force_style` thêm `FontName=`/`PrimaryColour=`/`Bold=`; `PrimaryColour` dùng định dạng ASS `&HAABBGGRR&` (đảo BGR, alpha 00=đục) — hàm `_hex_to_ass_color()` convert, có test riêng vì thứ tự byte rất dễ đảo nhầm (giống bẫy `Alignment` SSA v4 đã gặp trước đó). Dùng `fontsdir=` trỏ vào thư mục font đã đóng gói để libass tìm đúng font mà **không** phụ thuộc fontconfig hệ thống — né đúng lỗi "Fontconfig error" đã gặp với `drawtext` trước đây. UI: 3 tuỳ chọn mới (font/màu/đậm) thêm vào step "Ghép phụ đề vào video" ở `video-detail.tsx`, dùng chung schema `StepOption` có sẵn (thêm type `'color'`).
+
+### Test
+- `test_font_service.py` (13 test): catalog, fallback khi id lạ/rỗng, mọi file đăng ký thật sự tồn tại trên đĩa (bắt lỗi gõ nhầm tên file).
+- `test_ffmpeg.py` (+21 test sau vòng review): render thật qua từng font trong 4 font (không crash), `font_color` đổi màu chữ thật — đo bằng `signalstats` SATAVG (chữ trắng SATAVG~0, chữ đỏ SATAVG tăng rõ rệt) thay vì OCR; `_hex_to_ass_color`/`_validate_hex_color` test riêng (pure function, không cần ffmpeg), gồm ca ký tự không phải hex (`'0:0000'`) phải bị chặn.
+- `ImageLayer.test.tsx` (5 test, browser thật qua `vitest-browser-react`): vị trí đúng tỉ lệ, kéo đổi x/y, kéo góc đổi width, ẩn/hiện theo mốc thời gian.
+- `store.test.ts` (+2 test): `updateTrackClips` áp patch cho cả track trong đúng 1 bước lịch sử (không phải N bước).
+- 461 test backend, 197 test frontend, `ruff check`/`tsc -b`/`eslint` sạch (không tính 2 lỗi có sẵn từ trước, không liên quan: `pipeline.py` B008 Depends-in-default và `editor/index.tsx` exhaustive-deps).
+
+### Vòng review + verify UI thật (2026-09-21, cùng phiên)
+Chạy `/code-review medium` (5 agent song song), verify từng phát hiện bằng code/ffmpeg thật thay vì tin theo lời agent:
+- **Sửa thật (2 bug + 1 tối ưu)**: (1) `font_color` chỉ kiểm tra độ dài 6 ký tự, không kiểm tra có phải hex hay không — chuỗi như `'0:0000'` lọt qua rồi phá cú pháp filter ffmpeg (dấu `:` là delimiter option); thêm `_validate_hex_color()` dùng regex, áp cho cả `burn_subtitles` lẫn `render_timeline` overlay. (2) `SubtitleBoxPanel.setStyle`/`setBoxWidth` gọi `updateClip` lặp cho từng câu — mỗi lần gọi đẩy 1 bước vào lịch sử undo (đọc code `store.ts` xác nhận), đổi màu track 50 câu thành 50 bước undo cho 1 thay đổi khái niệm là 1 bước; thêm action `updateTrackClips` áp patch cho cả track trong đúng 1 bước. (3) `useQuery(getFonts)` thêm `staleTime: Infinity` — danh sách font tĩnh, không cần refetch mỗi lần mở editor.
+- **Verify rồi bác bỏ 1 claim**: agent báo `force_style Bold=1` sai chuẩn ASS/SSA (chỉ `Bold=-1` mới đúng chuẩn). Tự render thật bằng ffmpeg (`Bold=0/1/-1`, đo cả file size lẫn `signalstats` YAVG): `Bold=1` và `Bold=-1` ra **ảnh giống hệt byte-for-byte** (YAVG=40.64 cả hai), khác hẳn `Bold=0` (YAVG=29.08) — claim sai trên bản ffmpeg/libass đang dùng, **không sửa**.
+- **Cân nhắc rồi bỏ qua có chủ đích**: vài phát hiện về trùng lặp (danh sách font hard-code ở `video-detail.tsx` STEPS trong khi `SubtitleBoxPanel` lấy động qua API; 3 component kéo-thả `OverlayLayer`/`BlurRegionLayer`/`ImageLayer` lặp lại cùng 1 pattern pointer-drag) — chấp nhận đánh đổi, khớp quy ước "3 dòng lặp lại còn hơn abstraction sớm", không phải bug.
+
+**Verify qua Playwright thật (browser thật, không phải test suite)**: tạo video test tổng hợp bằng ffmpeg (1 video ngang 640×360, 1 video dọc 360×640) + insert thẳng vào DB dev, chạy qua UI thật:
+- Kéo watermark trên canvas → lưu đúng toạ độ mới vào `timeline_json` → **render ra file thật bằng ffmpeg**, logo đúng vị trí.
+- Đổi font/màu/đậm phụ đề trong Timeline Editor → lưu đúng vào track overlay → render ra file, đo `SATAVG` xác nhận đúng màu đã chọn.
+- Đổi font/màu/đậm trong luồng "Ghép phụ đề vào video" (burn_subtitles) → chạy qua UI thật → `SATAVG≈92` xác nhận màu đỏ `#ff2200` đã áp đúng.
+- `ClipInspector` hiện đúng field mới cho `image` (opacity) và cho phép chọn clip qua Timeline.
+
+### Ghi chú phát sinh
+- **Không thể verify family name thật trong file .ttf** bằng công cụ có sẵn (`fontTools` không có trong venv, không muốn thêm dependency chỉ để đọc tên) — tin vào quy ước đặt tên chuẩn của Google Fonts (family name khớp đúng tên hiển thị: "Be Vietnam Pro", "Barlow", "Fira Sans", "Anton"). Nếu sau này đổi bộ font, nhớ double-check field `family_name` khớp tên thật trong file, không phải suy đoán.
+- **`GET /api/fonts/{id}/file` (xem trước bằng `@font-face`) chưa được dùng ở frontend** — mới có endpoint, dropdown chọn font hiện chỉ hiện tên chữ bằng font hệ thống trình duyệt, chưa preview đúng font thật. Để dành nếu cần UX tốt hơn sau này.
+
+## Bố cục lại: tận dụng diện tích cho cả video dọc lẫn ngang (2026-09-21, cùng phiên)
+
+**Vấn đề bạn phát hiện lúc xem UI thật**: khung xem trước cố định `max-w-md` (448px) dù màn hình rộng hơn nhiều, và mọi panel công cụ (thêm logo/nhạc nền, kiểu chữ phụ đề, chi tiết clip) xếp dọc MỘT cột phía dưới khung preview — phải cuộn qua hết preview mới chạm tới.
+
+**Sửa bố cục** (`features/editor/index.tsx`): 2 cột từ màn hình rộng (`xl:grid-cols-[minmax(0,1fr)_22rem]`) — khung xem trước bên trái, panel công cụ (`AssetPanel`, `SubtitleBoxPanel`, `ClipInspector`) bên phải dạng sidebar `sticky`. `ClipInspector` dời từ dưới Timeline lên sidebar này — chọn clip ở Timeline (dưới cùng) vẫn thấy Inspector cập nhật ngay bên cạnh, không cần cuộn lên/xuống.
+
+**Khung preview theo đúng tỉ lệ khung hình thật** — bỏ hẳn `max-w-md`, đo `videoDims` (đã có sẵn từ `onLoadedMetadata`) để tính `aspect-ratio` động. **2 lần thử sai trước khi ra công thức đúng, cả 2 đều tự phát hiện bằng cách đo trên browser thật với video dọc + video ngang** (không phải chỉ nhìn code):
+1. `width:100% + aspect-ratio + max-height:70vh` trên block thường: height bị `max-height` cắt xuống nhưng width KHÔNG co lại theo — video dọc bị kẹp đen 2 bên như letterbox thay vì thu nhỏ vừa khung.
+2. Bọc bằng `flex + justify-center` cho box aspect-ratio trở thành flex-item: video dọc đúng, nhưng video NGANG lại co về đúng kích thước gốc (640×360) thay vì lấp đầy cột rộng — vì không còn gì ép nó lớn lên khi height không chạm mức 70vh.
+3. **Công thức cuối cùng, đúng cả 2 chiều**: `width: min(100%, calc(70vh * ratio))` (không cần flex wrapper, không cần đo JS) — cạnh nào hẹp hơn giữa "vừa hết bề rộng cột" và "vừa hết chiều cao 70vh quy theo tỉ lệ" thắng, rồi CSS `aspect-ratio` tự suy chiều còn lại từ `width` đã chắc chắn (chiều suy ngược, từ height sang width, thì CSS không hỗ trợ tốt trên block box — đây là gốc của lỗi #1). Verify bằng browser thật: video ngang 640×360 → box 830×467 (lấp đầy cột); video dọc 360×640 → box 368×655 (≈70vh chiều cao, không letterbox).
+
+**Không cần code mới cho việc này** — không đổi API, không đổi test hiện có (bố cục CSS thuần, không có test tự động nào phủ layout — verify hoàn toàn bằng đo `getBoundingClientRect()` qua Playwright thật trên cả 2 tỉ lệ khung hình).
+
+**Thu gọn header video khi ở tab "Dựng video"** (`features/videos/video-detail.tsx`, phát sinh ngay khi bạn xem lại layout mới): khối ảnh bìa + tiêu đề lớn + badge trạng thái/tác giả/thời lượng/link nguồn vốn hiện **cố định** trên mọi tab — dư thừa ở tab Dựng video vì khung preview bên trong đã hiện video rồi, lại choán thêm khoảng dọc ngay phía trên. Đổi `Tabs` từ uncontrolled (`defaultValue`) sang controlled (`value`/`onValueChange`, state `activeTab`), khi `activeTab === 'editor'` chỉ hiện 1 dòng tiêu đề gọn, các tab khác (Xử lý/Phụ đề/Giọng đọc) giữ nguyên khối đầy đủ vì vẫn cần ảnh bìa/badge để định hướng. Verify qua Playwright thật: chuyển qua lại giữa tab Xử lý ↔ Dựng video, khối header ẩn/hiện đúng theo tab.
