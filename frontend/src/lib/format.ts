@@ -26,3 +26,24 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
   return `${bytes} B`
 }
+
+/** "1.2Tr" / "45N" — số lượt xem/bình luận... trên card video (màn Khám phá,
+ * Báo cáo xu hướng) — trước đây định nghĩa riêng ở features/trending/format.ts
+ * và bị trùng lặp lần nữa ở category-chart.tsx (Phase: rà soát tái sử dụng
+ * component 2026-09-22), giờ gộp về đây cùng các hàm format khác. */
+export function formatCompact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}Tr`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}N`
+  return String(value)
+}
+
+/** "3 ngày trước" — chỉ cần độ chính xác cỡ ngày, không cần giờ/phút. */
+export function formatRelativeDate(iso: string | null): string | null {
+  if (!iso) return null
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (days <= 0) return 'Hôm nay'
+  if (days === 1) return 'Hôm qua'
+  if (days < 30) return `${days} ngày trước`
+  const months = Math.floor(days / 30)
+  return `${months} tháng trước`
+}

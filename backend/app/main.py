@@ -12,6 +12,7 @@ from app.api import (
     api_keys,
     assets,
     batch,
+    channels,
     clips,
     crawl,
     downloads,
@@ -24,6 +25,7 @@ from app.api import (
     metadata,
     pipeline,
     projects,
+    settings,
     timeline,
     topics,
     translate,
@@ -34,7 +36,7 @@ from app.core import worker_pool
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
 from app.models.category import Category
 from app.models.user import User
-from app.services import storage_cleanup_service
+from app.services import storage_cleanup_service, trending_service
 
 logging.basicConfig(level=logging.INFO)
 
@@ -70,6 +72,8 @@ app.include_router(mcp_tokens.router)
 app.include_router(projects.router)
 app.include_router(youtube.router)
 app.include_router(topics.router)
+app.include_router(settings.router)
+app.include_router(channels.router)
 
 
 @app.on_event("startup")
@@ -83,6 +87,7 @@ def on_startup() -> None:
 # Giữ tham chiếu tới task nền: mất tham chiếu thì Python có thể thu gom task
 # giữa chừng, và lúc tắt app không còn gì để huỷ.
 _cleanup_task: asyncio.Task | None = None
+_snapshot_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
@@ -92,21 +97,25 @@ async def start_background_jobs() -> None:
     Handler riêng và `async` có chủ đích: `asyncio.create_task` cần event loop
     đang chạy, mà handler startup đồng bộ ở trên không đảm bảo điều đó.
     """
-    global _cleanup_task
+    global _cleanup_task, _snapshot_task
     _cleanup_task = asyncio.create_task(storage_cleanup_service.run_periodic_cleanup())
+    # Phase 20: ghi snapshot chuyên mục đều đặn, không phụ thuộc ai có mở
+    # trang Báo cáo xu hướng hay không — xem docstring `run_periodic_snapshot`.
+    _snapshot_task = asyncio.create_task(trending_service.run_periodic_snapshot(SessionLocal))
 
 
 @app.on_event("shutdown")
 async def stop_background_jobs() -> None:
     """Huỷ hẳn task nền khi tắt: bỏ mặc thì uvicorn đợi task không bao giờ kết
     thúc, app đóng gói (Phase 12) sẽ treo lúc thoát."""
-    if _cleanup_task is None:
-        return
-    _cleanup_task.cancel()
-    try:
-        await _cleanup_task
-    except asyncio.CancelledError:
-        pass
+    for task in (_cleanup_task, _snapshot_task):
+        if task is None:
+            continue
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @app.on_event("shutdown")

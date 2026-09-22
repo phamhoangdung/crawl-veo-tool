@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -6,6 +6,7 @@ from app.adapters.douyin.client import DouyinCookieExpiredError
 from app.adapters.douyin.search import DouyinLoginRequiredError, DouyinSearchError
 from app.core.db import get_db
 from app.models.job import Job
+from app.models.video import VideoStatus
 from app.schemas.job import (
     JobCreateRequest,
     JobFromSelectionRequest,
@@ -13,7 +14,11 @@ from app.schemas.job import (
     JobWithVideosRead,
     VideoRead,
 )
-from app.services import cost_service, crawl_service, douyin_service
+from app.services import cost_service, crawl_service, douyin_service, download_service, progress_service
+
+# Trạng thái coi là "chưa tải" — khớp `DOWNLOADABLE` ở frontend
+# (features/crawl/index.tsx trước đây, giờ features/discover/).
+_DOWNLOADABLE_STATUSES = {VideoStatus.QUEUED, VideoStatus.FAILED_DOWNLOAD}
 
 router = APIRouter(prefix="/api/jobs", tags=["crawl"])
 
@@ -32,12 +37,43 @@ async def create_job(payload: JobCreateRequest, db: Session = Depends(get_db)) -
 
 @router.post("/from-selection", response_model=JobWithVideosRead)
 async def create_job_from_selection(
-    payload: JobFromSelectionRequest, db: Session = Depends(get_db)
+    payload: JobFromSelectionRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
 ) -> JobWithVideosRead:
-    """Tạo job từ các video người dùng tick chọn ở trang Trending."""
+    """Tạo job từ các video người dùng tick chọn ở màn Khám phá (Phase 20).
+
+    `payload.download=True` (mặc định): bắn tải nền ngay cho mọi video chưa có
+    file — trước đây chỉ tạo job rồi báo "mở trang Crawl để tải", nhưng không
+    màn hình nào hiển thị lại được job đó (xem phase-20 mục Khảo sát điểm 1).
+    Tải hàng loạt qua `download_service.run_download_task`, tự xếp hàng theo
+    `download_max_videos` — bắn 20 background task không có nghĩa 20 luồng tải
+    chạy thật cùng lúc.
+    """
     if not payload.videos:
         raise HTTPException(status_code=400, detail="Chưa chọn video nào.")
     job = await crawl_service.create_job_from_selection(db, _DEFAULT_USER_ID, payload.videos)
+
+    if payload.download:
+        to_download = [
+            v
+            for v in job.result_videos
+            if v.status in _DOWNLOADABLE_STATUSES and not v.local_path
+        ]
+        # Chốt id/title ra biến thường TRƯỚC khi commit: sau `db.commit()`,
+        # `expire_on_commit` (mặc định của Session) làm mọi attribute ánh xạ
+        # DB của các object này hết hạn — đọc lại `video.id`/`video.title` sau
+        # đó vẫn đúng (tự load lại) nhưng tốn thêm N query không cần thiết.
+        pending = [(v.id, v.title) for v in to_download]
+        for video in to_download:
+            video.status = VideoStatus.DOWNLOADING
+            video.error_message = None
+        if to_download:
+            db.commit()
+        for video_id, title in pending:
+            progress_service.start(video_id, title)
+            background.add_task(download_service.run_download_task, video_id)
+
     return JobWithVideosRead.model_validate(job, from_attributes=True)
 
 

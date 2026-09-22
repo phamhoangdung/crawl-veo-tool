@@ -83,10 +83,12 @@ async def get_followed(db: Session = Depends(get_db)) -> list[int]:
 
 
 @router.get("/popular", response_model=TrendingPageRead)
-async def popular(page: int = 1, page_size: int = 20) -> TrendingPageRead:
+async def popular(
+    page: int = 1, page_size: int = 20, db: Session = Depends(get_db)
+) -> TrendingPageRead:
     """Danh sách phổ biến toàn trang Bilibili — dùng cho tab "Tất cả" (không
     giới hạn theo chuyên mục), có phân trang thật."""
-    return await trending_service.get_bilibili_popular_page(page=page, page_size=page_size)
+    return await trending_service.get_bilibili_popular_page(db, page=page, page_size=page_size)
 
 
 @router.get("/search", response_model=TrendingPageRead)
@@ -105,6 +107,24 @@ async def search(
     return await trending_service.search_bilibili(
         db, _DEFAULT_USER_ID, keyword, page=page, translate_keyword=translate_keyword
     )
+
+
+@router.get("/related", response_model=TrendingPageRead)
+async def related(bvid: str, db: Session = Depends(get_db)) -> TrendingPageRead:
+    """Video liên quan (Phase 22) — dùng cho dải "Video tương tự" trong popup
+    xem trước. Endpoint công khai, không cần WBI, rủi ro risk-control thấp."""
+    return await trending_service.get_related(db, bvid)
+
+
+@router.get("/channel/{channel_id}/videos", response_model=TrendingPageRead)
+async def channel_videos(
+    channel_id: str, page: int = 1, db: Session = Depends(get_db)
+) -> TrendingPageRead:
+    """Video khác trong 1 kênh (Phase 22) — có thể trả `degraded=True` khi bị
+    Bilibili risk-control chặn (đo thật 2026-09-22: rủi ro này RẤT cao, xem
+    docstring `channel_service.ChannelVideosResult`). Frontend phải hiện đúng
+    thông báo suy giảm, không coi là danh sách rỗng."""
+    return await trending_service.get_channel_videos(db, channel_id, page=page)
 
 
 @router.get("/ranking", response_model=list[TrendingVideoRead])

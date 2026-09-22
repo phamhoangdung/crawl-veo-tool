@@ -79,6 +79,8 @@ def ensure_schema_columns() -> None:
             "timeline_json": "JSON",
             "timeline_rendered_path": "VARCHAR",
             "speaker_voices_json": "JSON",
+            # Phase 22: id kênh thật, xem docstring `models/video.py::Video.channel_id`.
+            "channel_id": "VARCHAR",
         },
         "generation_projects": {
             "timeline_json": "JSON",

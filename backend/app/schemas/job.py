@@ -22,10 +22,18 @@ class SelectedVideo(BaseModel):
     author_name: str | None = None
     duration_seconds: int | None = None
     cover_url: str | None = None
+    # Phase 22: id kênh thật — điền song song với author_name khi tạo Video.
+    channel_id: str | None = None
 
 
 class JobFromSelectionRequest(BaseModel):
     videos: list[SelectedVideo]
+    # Phase 20: màn Khám phá tải thẳng khi bấm "Tải video đã chọn" — trước đây
+    # chỉ tạo job rồi im lặng, không màn hình nào hiển thị lại được (xem
+    # docs/phases/phase-20-discovery-workspace.md mục "Khảo sát" điểm 1). Vẫn
+    # để cờ tắt được (mặc định True) cho các lối gọi khác trong tương lai muốn
+    # chỉ tạo job mà chưa tải ngay.
+    download: bool = True
 
 
 class VideoRead(BaseModel):

@@ -19,6 +19,19 @@ class BilibiliApiError(RuntimeError):
         self.code = code
 
 
+class BilibiliRiskControlError(BilibiliApiError):
+    """Phase 22: `x/space/wbi/arc/search` (video của 1 kênh) bị Bilibili siết
+    risk-control nặng hơn cả `x/web-interface/view` — trả HTTP 412 hoặc mã lỗi
+    -352 (đã ghi nhận qua tài liệu cộng đồng, xem
+    docs/phases/phase-22-channel-follow.md mục Khảo sát #3). KHÔNG phải lỗi
+    "kênh này không có video" — caller phải phân biệt được để hiện đúng thông
+    báo "đang bị giới hạn" thay vì "kênh trống", và KHÔNG được coi đây là lỗi
+    500 làm vỡ cả popup xem trước."""
+
+    def __init__(self, code: int, message: str) -> None:
+        super().__init__(code, message)
+
+
 def _strip_highlight_tags(title: str) -> str:
     """Search API đôi khi bọc từ khoá khớp trong <em class="keyword">...</em>."""
     return _EM_TAG_RE.sub("", title)
@@ -98,3 +111,36 @@ class BilibiliClient:
             "https://api.bilibili.com/x/player/wbi/playurl", params
         )
         return payload["data"]["dash"]
+
+    async def get_related(self, bvid: str) -> list[dict]:
+        """Video liên quan (Phase 22) — endpoint công khai, KHÔNG cần ký WBI,
+        rủi ro risk-control thấp (cùng API dùng cho sidebar "video liên quan"
+        trên chính trang xem Bilibili, traffic công khai rất lớn)."""
+        payload = await self._get_json(
+            "https://api.bilibili.com/x/web-interface/archive/related", {"bvid": bvid}
+        )
+        return payload["data"]
+
+    async def get_space_videos(
+        self, mid: str, page: int = 1, page_size: int = 25
+    ) -> list[dict]:
+        """Video khác trong 1 kênh (Phase 22) — cần ký WBI, và bị Bilibili siết
+        risk-control nặng (xem docstring `BilibiliRiskControlError`). Bọc lỗi
+        HTTP 412 lẫn mã lỗi -352 thành `BilibiliRiskControlError` để caller
+        phân biệt được với "kênh thật sự không có video"."""
+        params = await wbi.sign_params(
+            self._client, {"mid": mid, "pn": page, "ps": page_size, "order": "pubdate"}
+        )
+        try:
+            payload = await self._get_json(
+                "https://api.bilibili.com/x/space/wbi/arc/search", params
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 412:
+                raise BilibiliRiskControlError(412, "HTTP 412 — Bilibili risk control") from exc
+            raise
+        except BilibiliApiError as exc:
+            if exc.code in (-352, -412):
+                raise BilibiliRiskControlError(exc.code, str(exc)) from exc
+            raise
+        return payload["data"]["list"]["vlist"]

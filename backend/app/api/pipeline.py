@@ -67,35 +67,6 @@ def get_video_detail(video_id: int, db: Session = Depends(get_db)) -> VideoDetai
     return detail
 
 
-async def _run_download(video_id: int) -> None:
-    """Chạy nền: tự mở session riêng vì session của request đã đóng khi hàm này chạy."""
-    with SessionLocal() as db:
-        video = db.get(Video, video_id)
-        if video is None:
-            progress_service.finish(video_id, error="Video không còn tồn tại")
-            return
-        try:
-            async with BilibiliClient() as client:
-                cid = await client.get_video_cid(video.platform_video_id)
-            output_path = await download_service.download_bilibili_video(
-                job_id=video.job_id,
-                video_id=video.id,
-                bvid=video.platform_video_id,
-                cid=cid,
-            )
-            video.local_path = str(output_path)
-            video.status = VideoStatus.DOWNLOADED
-            video.error_message = None
-            db.commit()
-            progress_service.finish(video.id)
-        except Exception as exc:
-            logger.exception("Tải video %s thất bại", video_id)
-            video.status = VideoStatus.FAILED_DOWNLOAD
-            video.error_message = str(exc)
-            db.commit()
-            progress_service.finish(video.id, error=str(exc))
-
-
 @router.post("/{video_id}/download", response_model=VideoDetailRead)
 async def download_video(
     video_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
@@ -115,7 +86,7 @@ async def download_video(
     db.commit()
 
     progress_service.start(video.id, video.title)
-    background.add_task(_run_download, video.id)
+    background.add_task(download_service.run_download_task, video.id)
     return _to_detail(video)
 
 

@@ -51,6 +51,11 @@ class Video(Base):
     platform_video_id: Mapped[str] = mapped_column()
     title: Mapped[str] = mapped_column()
     author_name: Mapped[str | None] = mapped_column(default=None)
+    # Phase 22: id kênh thật (Bilibili: str(mid)) — điền song song với
+    # `author_name` (tên hiển thị, có thể trùng giữa các kênh khác nhau) ở mọi
+    # nơi đang set author_name. `author_name` giữ nguyên hành vi cũ, cột này
+    # chỉ bổ sung để tra cứu/theo dõi kênh (`models/channel.py`).
+    channel_id: Mapped[str | None] = mapped_column(default=None)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, default=None)
     cover_url: Mapped[str | None] = mapped_column(default=None)
     source_url: Mapped[str] = mapped_column()

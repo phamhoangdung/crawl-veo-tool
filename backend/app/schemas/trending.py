@@ -58,7 +58,17 @@ class TrendingVideoRead(BaseModel):
     # trả field này). None nghĩa là video này đến từ search, không phải đang
     # xếp hạng thật — frontend dùng để phân biệt, không phải video nào cũng "hot".
     heat_score: float | None = None
+    # Phase 20: gộp màn Khám phá — cho lưới Trending biết video này đã có trong
+    # thư viện (id thật trong DB) để hiện trạng thái tải/link "Video của tôi"
+    # ngay trên thẻ, không phải đoán qua bvid. None = chưa từng tải.
+    video_id: int | None = None
+    already_in_library: bool = False
     published_at: str | None = None  # ISO 8601 UTC
+    # Phase 22: id kênh thật (Bilibili: str(mid)) — có ở popular/search/ranking
+    # dưới field mid/owner.mid (xem trending_service._from_*_item). None nếu
+    # API không trả (hiếm).
+    channel_id: str | None = None
+    channel_is_followed: bool = False
 
 
 class TrendingPageRead(BaseModel):
@@ -78,6 +88,23 @@ class TrendingPageRead(BaseModel):
     # dịch từ khoá thất bại (đã tự rơi về tìm nguyên văn) để UI cảnh báo, giống
     # `translation_failed` của job crawl (xem crawl_service).
     translation_failed: bool = False
+    # Phase 22: True khi nguồn dữ liệu bị Bilibili risk-control chặn (chỉ áp
+    # dụng cho trang "video khác trong kênh" — xem channel_service.list_channel_videos).
+    # Khác hẳn "danh sách rỗng thật" — frontend phải hiện thông báo suy giảm,
+    # không phải "kênh này không có video".
+    degraded: bool = False
+
+
+class ChannelRead(BaseModel):
+    platform: str
+    channel_id: str
+    name: str
+    avatar_url: str | None = None
+    is_followed: bool = False
+
+
+class SetChannelFollowedRequest(BaseModel):
+    followed: bool
 
 
 class CategoryStatsRead(BaseModel):

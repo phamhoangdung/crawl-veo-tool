@@ -183,6 +183,10 @@ export interface TrendingPage {
   /** Chỉ có ý nghĩa khi `source==='search'` và đã bật dịch từ khoá — dịch thất
    * bại thì đã tự rơi về tìm nguyên văn, báo để cảnh báo người dùng. */
   translation_failed?: boolean
+  /** Phase 22: true khi nguồn bị Bilibili risk-control chặn (chỉ trang "video
+   * khác trong kênh") — khác hẳn danh sách rỗng thật, UI phải hiện thông báo
+   * suy giảm thay vì "kênh này không có video". */
+  degraded?: boolean
 }
 
 export interface CategoryStats {
@@ -215,6 +219,14 @@ export interface TrendingVideo {
    * xu hướng thật. */
   heat_score: number | null
   published_at: string | null
+  /** Id thật trong DB — có nghĩa là video này đã từng tải (Phase 20, màn Khám
+   * phá). `null` = chưa từng tải. */
+  video_id: number | null
+  already_in_library: boolean
+  /** Id kênh thật (Bilibili: mid dạng chuỗi) — Phase 22. `null` nếu API
+   * không trả (hiếm). */
+  channel_id: string | null
+  channel_is_followed: boolean
 }
 
 /** YouTube CHỈ dùng để xem xu hướng/tính điểm chủ đề — không tải video (khác
@@ -358,6 +370,7 @@ export async function createJobFromSelection(videos: TrendingVideo[]) {
         author_name: v.author_name,
         duration_seconds: v.duration_seconds,
         cover_url: v.cover_url,
+        channel_id: v.channel_id,
       })),
     }
   )
@@ -471,6 +484,54 @@ export async function searchBilibili(
   const { data } = await api.get<TrendingPage>('/api/trending/bilibili/search', {
     params: { keyword, page, translate_keyword: options.translateKeyword ?? false },
   })
+  return data
+}
+
+/** Video liên quan (Phase 22) — dùng cho dải "Video tương tự" trong popup xem trước. */
+export async function getRelatedVideos(bvid: string) {
+  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/related', {
+    params: { bvid },
+  })
+  return data
+}
+
+/** Video khác trong 1 kênh (Phase 22) — có thể trả `degraded: true` khi bị
+ * Bilibili risk-control chặn (đo thật: rủi ro này rất cao khi chưa có
+ * cookie đăng nhập) — UI phải hiện đúng thông báo suy giảm. */
+export async function getChannelVideos(channelId: string, page = 1) {
+  const { data } = await api.get<TrendingPage>(
+    `/api/trending/bilibili/channel/${channelId}/videos`,
+    { params: { page } }
+  )
+  return data
+}
+
+export interface Channel {
+  platform: string
+  channel_id: string
+  name: string
+  avatar_url: string | null
+  is_followed: boolean
+}
+
+export async function getFollowedChannels(platform = 'bilibili') {
+  const { data } = await api.get<Channel[]>('/api/channels/followed', {
+    params: { platform },
+  })
+  return data
+}
+
+export async function setChannelFollowed(
+  platform: string,
+  channelId: string,
+  name: string,
+  followed: boolean
+) {
+  const { data } = await api.put<Channel>(
+    `/api/channels/${platform}/${channelId}/followed`,
+    { followed },
+    { params: { name } }
+  )
   return data
 }
 
@@ -1542,5 +1603,24 @@ export async function deleteTopic(topicId: number) {
 
 export async function computeTopicScore(topicId: number) {
   const { data } = await api.post<Topic>(`/api/topics/${topicId}/score`)
+  return data
+}
+
+/** Cài đặt người dùng lưu bền qua restart — Phase 21 (số luồng tải mỗi
+ * video) + Phase 20 (số video tải cùng lúc). Trang đầu tiên của tool có cài
+ * đặt thật lưu được từ UI (các trang khác trong /settings vẫn là demo của
+ * template shadcn-admin). */
+export interface AppSettings {
+  download_connections: number
+  download_max_videos: number
+}
+
+export async function getAppSettings() {
+  const { data } = await api.get<AppSettings>('/api/settings')
+  return data
+}
+
+export async function updateAppSettings(patch: Partial<AppSettings>) {
+  const { data } = await api.put<AppSettings>('/api/settings', patch)
   return data
 }

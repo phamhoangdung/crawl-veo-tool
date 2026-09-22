@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatCompact, formatRelativeDate } from '@/lib/format'
 import { CoverImage } from '@/components/cover-image'
 import { VideoPreviewDialog } from '@/components/video-preview-dialog'
-import { formatCompact, formatRelativeDate } from './format'
 
 function youtubeVideoUrl(videoId: string) {
   return `https://www.youtube.com/watch?v=${videoId}`

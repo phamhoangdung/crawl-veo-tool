@@ -152,6 +152,7 @@ async def create_bilibili_crawl_job(
                 platform_video_id=bvid,
                 title=item.get("title", ""),
                 author_name=item.get("author"),
+                channel_id=str(item["mid"]) if item.get("mid") else None,
                 duration_seconds=_parse_duration_to_seconds(item.get("duration")),
                 cover_url=_normalize_cover_url(item.get("pic")),
                 source_url=f"https://www.bilibili.com/video/{bvid}",
@@ -200,10 +201,16 @@ async def create_bilibili_crawl_job(
 async def create_job_from_selection(
     db: Session, user_id: int, items: list[SelectedVideo]
 ) -> Job:
-    """Tạo job từ các video người dùng tự chọn ở trang Trending.
+    """Tạo job từ các video người dùng tự chọn ở màn Khám phá (Phase 20).
 
     Metadata đã có sẵn từ danh sách trending nên không cần gọi lại API Bilibili.
-    Video đã tồn tại trong DB thì bỏ qua, giống luồng crawl theo từ khoá.
+
+    Trước đây (Phase 1) video đã tồn tại trong DB bị `continue` bỏ qua hẳn —
+    hệ quả là kết quả trả về có thể thiếu video người dùng vừa tick chọn, và
+    không có cách nào biết video nào "đã có sẵn" để hiện đúng trạng thái. Giờ
+    trả về ĐỦ danh sách đã chọn theo đúng thứ tự (giống `create_bilibili_crawl_job`),
+    đánh dấu `already_in_library` cho video cũ — router dùng danh sách này để
+    quyết định video nào cần bắn tải nền.
     """
     job = Job(
         user_id=user_id,
@@ -214,15 +221,13 @@ async def create_job_from_selection(
     db.add(job)
     db.flush()
 
+    bvids = [item.bvid for item in items]
     # 1 query cho cả danh sách thay vì query từng item trong vòng lặp (N+1) —
     # cùng pattern đã dùng ở `create_bilibili_crawl_job`.
     existing_bvids = {
         row[0]
         for row in db.query(Video.platform_video_id)
-        .filter(
-            Video.platform == Platform.BILIBILI,
-            Video.platform_video_id.in_([item.bvid for item in items]),
-        )
+        .filter(Video.platform == Platform.BILIBILI, Video.platform_video_id.in_(bvids))
         .all()
     }
 
@@ -237,6 +242,7 @@ async def create_job_from_selection(
                 platform_video_id=item.bvid,
                 title=item.title,
                 author_name=item.author_name,
+                channel_id=item.channel_id,
                 duration_seconds=item.duration_seconds,
                 cover_url=_normalize_cover_url(item.cover_url),
                 source_url=f"https://www.bilibili.com/video/{item.bvid}",
@@ -247,6 +253,20 @@ async def create_job_from_selection(
     job.status = JobStatus.COMPLETED
     db.commit()
     db.refresh(job)
+
+    # KHÔNG gán vào `job.videos` — quan hệ SQLAlchemy, gán vào sẽ dời `job_id`
+    # của video cũ sang job này (đã thử ở `create_bilibili_crawl_job`, xem
+    # ghi chú ở đó). Dùng thuộc tính tạm `result_videos` như luồng search.
+    all_rows = {
+        v.platform_video_id: v
+        for v in db.query(Video)
+        .filter(Video.platform == Platform.BILIBILI, Video.platform_video_id.in_(bvids))
+        .all()
+    }
+    ordered = [all_rows[bvid] for bvid in bvids if bvid in all_rows]
+    for video in ordered:
+        video.already_in_library = video.platform_video_id in existing_bvids
+    job.result_videos = ordered
     return job
 
 
@@ -286,6 +306,7 @@ async def append_videos_to_job(
             platform_video_id=bvid,
             title=item.get("title", ""),
             author_name=item.get("author"),
+            channel_id=str(item["mid"]) if item.get("mid") else None,
             duration_seconds=_parse_duration_to_seconds(item.get("duration")),
             cover_url=_normalize_cover_url(item.get("pic")),
             source_url=f"https://www.bilibili.com/video/{bvid}",

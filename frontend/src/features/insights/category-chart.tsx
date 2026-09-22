@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 import { getCategoryHistory, getCategoryStats } from '@/lib/api'
+import { formatCompact } from '@/lib/format'
 import {
   Card,
   CardContent,
@@ -18,7 +19,6 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCompact } from './format'
 
 /** Màu đủ tương phản trong cả nền sáng lẫn tối. */
 const SERIES_COLORS = [

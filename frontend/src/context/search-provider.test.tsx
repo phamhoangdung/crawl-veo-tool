@@ -109,9 +109,9 @@ describe('SearchProvider and CommandMenu', () => {
 
     await openCommandPalette(screen)
 
-    await userEvent.click(screen.getByText('Xu hướng'))
+    await userEvent.click(screen.getByText('Khám phá video'))
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/trending' })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/discover' })
     await expect
       .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
       .not.toBeInTheDocument()

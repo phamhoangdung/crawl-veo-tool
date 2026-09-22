@@ -23,9 +23,15 @@ SubjectType = Literal["video", "project"]
 
 Stage = Literal[
     "pending",
-    # Tải video
+    # Phase 20 — tải hàng loạt qua màn Khám phá: video xếp hàng chờ tới lượt
+    # (đã set status=DOWNLOADING nhưng chưa lấy được slot semaphore).
+    "queued",
+    # Tải video — "video"/"audio" (2 chặng nối tiếp) không còn dùng kể từ
+    # Phase 21 (video+audio giờ tải song song), giữ lại trong Literal để không
+    # phá kiểu dữ liệu cũ, thay bằng 1 chặng "downloading" duy nhất.
     "video",
     "audio",
+    "downloading",
     "merging",
     # Các bước xử lý
     "separating",
@@ -45,8 +51,10 @@ Stage = Literal[
 
 _STAGE_LABELS: dict[str, str] = {
     "pending": "Đang chuẩn bị",
+    "queued": "Đang chờ lượt",
     "video": "Đang tải hình",
     "audio": "Đang tải tiếng",
+    "downloading": "Đang tải",
     "merging": "Đang ghép",
     "separating": "Đang tách nhạc nền",
     "transcribing": "Đang tách lời thoại",

@@ -2,16 +2,15 @@ import {
   LayoutDashboard,
   Monitor,
   Clapperboard,
-  Download,
   HelpCircle,
   KeyRound,
   LibraryBig,
-  Lightbulb,
   Palette,
   Settings,
   Sparkles,
   UserCog,
   TrendingUp,
+  BarChart3,
   Workflow,
 } from 'lucide-react'
 import { APP_OWNER } from '@/config/app'
@@ -34,19 +33,20 @@ export const sidebarData: SidebarData = {
           icon: LayoutDashboard,
         },
         {
-          title: 'Xu hướng',
-          url: '/trending',
+          // Phase 20: gộp "Xu hướng" + "Tìm & tải" — trước đây tách 2 trang
+          // khiến tick chọn ở Trending rồi "thêm vào hàng đợi" ở Crawl không
+          // còn màn hình nào hiển thị lại được (xem
+          // docs/phases/phase-20-discovery-workspace.md).
+          title: 'Khám phá video',
+          url: '/discover',
           icon: TrendingUp,
         },
         {
-          title: 'Chủ đề quan tâm',
-          url: '/topics',
-          icon: Lightbulb,
-        },
-        {
-          title: 'Tìm & tải',
-          url: '/crawl',
-          icon: Download,
+          // Trước đây "Chủ đề quan tâm" + biểu đồ chuyên mục (bên trong trang
+          // Xu hướng cũ) tách rời — giờ gộp thành 2 tab của 1 trang báo cáo.
+          title: 'Báo cáo xu hướng',
+          url: '/insights',
+          icon: BarChart3,
         },
         {
           title: 'Video của tôi',

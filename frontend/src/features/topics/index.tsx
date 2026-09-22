@@ -17,8 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { AppHeader } from '@/components/layout/app-header'
-import { Main } from '@/components/layout/main'
 
 /** Nhãn định tính cho điểm cơ hội (trung vị tỉ lệ view/sub kênh) — heuristic
  * tham khảo, không phải điểm số khoa học chính xác (xem docstring backend
@@ -143,7 +141,13 @@ function TopicCard({ topic }: { topic: Topic }) {
   )
 }
 
-export function Topics() {
+/**
+ * Nội dung tab "Chủ đề quan tâm" trong trang Báo cáo xu hướng (Phase 20 —
+ * trước đây là trang riêng `/topics`, gộp vào vì cùng bản chất "xem để quyết
+ * định làm gì" như biểu đồ chuyên mục). Không tự bọc `AppHeader`/`Main` —
+ * trang cha (`features/insights`) đã lo phần khung.
+ */
+export function TopicsPanel() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [query, setQuery] = useState('')
@@ -176,18 +180,12 @@ export function Topics() {
   })
 
   return (
-    <>
-      <AppHeader />
-
-      <Main>
-        <div className='mb-4'>
-          <h1 className='text-2xl font-bold tracking-tight'>Chủ đề quan tâm</h1>
-          <p className='text-muted-foreground'>
-            Lưu các chủ đề bạn muốn khai thác, tính điểm "dễ khai thác" bằng dữ
-            liệu YouTube thật (tỉ lệ view/lượt sub kênh) để ưu tiên chủ đề nào
-            nên tìm nguồn Trung Quốc để dịch trước.
-          </p>
-        </div>
+    <div>
+        <p className='mb-4 text-muted-foreground'>
+          Lưu các chủ đề bạn muốn khai thác, tính điểm "dễ khai thác" bằng dữ
+          liệu YouTube thật (tỉ lệ view/lượt sub kênh) để ưu tiên chủ đề nào
+          nên tìm nguồn Trung Quốc để dịch trước.
+        </p>
 
         {youtubeStatus.data && !youtubeStatus.data.configured && (
           <Alert className='mb-4'>
@@ -287,7 +285,6 @@ export function Topics() {
             <TopicCard key={topic.id} topic={topic} />
           ))}
         </div>
-      </Main>
-    </>
+    </div>
   )
 }

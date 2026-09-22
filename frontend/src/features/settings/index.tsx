@@ -1,5 +1,5 @@
 import { Outlet } from '@tanstack/react-router'
-import { Monitor, Bell, Palette, Wrench, UserCog } from 'lucide-react'
+import { Monitor, Bell, Download, Palette, Wrench, UserCog } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -30,6 +30,13 @@ const sidebarNavItems = [
     title: 'Display',
     href: '/settings/display',
     icon: <Monitor size={18} />,
+  },
+  {
+    // Phase 21 — trang cài đặt thật đầu tiên của dự án (các trang trên vẫn là
+    // demo của template shadcn-admin).
+    title: 'Tải xuống',
+    href: '/settings/downloads',
+    icon: <Download size={18} />,
   },
 ]
 

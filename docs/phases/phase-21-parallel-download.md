@@ -1,6 +1,16 @@
 # Phase 21: Tăng tốc tải video (chia phần, nhiều kết nối, tải tiếp khi lỗi)
 
-Trạng thái: **Đã khảo sát & đo thật, chưa code** (2026-09-22).
+Trạng thái: **Code xong (trừ resume — hoãn có chủ đích), verify qua test suite đầy đủ** (2026-09-22) — 516 test backend (41 test mới: settings-service 7, ranged-download 19, schema-bounds 15, cập nhật 3 test cũ) + 214 test frontend (3 test mới) pass, `tsc -b`/`eslint` sạch. Đã tự quyết (không hỏi lại, đúng hướng dẫn "pick the obvious option") **hoãn resume sang phase sau** — đúng như ghi chú "phần phức tạp nhất, multi-connection đứng một mình đã có 2,87x" đã cân nhắc sẵn trong plan.
+
+## Đã làm (2026-09-22)
+- **Hạ tầng cài đặt** (mới — tool chưa từng có cài đặt lưu được từ UI): bảng `app_settings` (khoá-giá trị theo user), `GET/PUT /api/settings`, trang "Tải xuống" trong Cài đặt (route `/settings/downloads`) — 2 ô chọn số luồng (1/2/4/8) + số video tải cùng lúc (1/2/3/5/10), đổi là lưu ngay, có giải thích rõ "trần cho cả app, không phải mỗi video" ngay tại chỗ chỉnh.
+- **Tải đa luồng**: `_probe` (HEAD gộp cả size + hỗ trợ Range trong 1 request), `_download_stream` (quyết định chia phần hay fallback), `_download_range_part` (retry riêng từng phần, rollback đúng phần trăm khi lỗi giữa chừng), `_download_whole` (đường cũ, vẫn qua semaphore chung). `download_bilibili_video` nhận `connections`, đọc từ cài đặt DB **lúc bắt đầu mỗi lượt tải** (không cache).
+- **1 stage tiến độ duy nhất** ("downloading") cho cả video+audio (trước đây 2 chặng nối tiếp) — dò kích thước cả 2 trước, set 1 tổng, tải song song qua `asyncio.gather`.
+- **Semaphore kết nối dùng chung toàn app**, cố định ở `DOWNLOAD_CONNECTIONS_MAX=8` — số luồng người dùng chọn quyết định 1 video chia bao nhiêu phần, semaphore là hàng rào vật lý cuối cùng đảm bảo tổng không vượt 8 dù nhiều video tải cùng lúc.
+- **Xử lý CDN "nói dối"**: báo `accept-ranges: bytes` nhưng GET thật trả 200 thay vì 206 → phát hiện, xoá phần dở, rơi về 1 kết nối — không ghi đè lung tung tạo file hỏng âm thầm.
+- **Đổi UI khỏi kế hoạch ban đầu**: dùng `<select>` gốc thay vì Radix `Select` cho 2 ô chọn — phát hiện Radix Select là component ĐẦU TIÊN trong cả repo bị lỗi môi trường test (`Cannot read properties of null (reading 'useMemo')` trong `useScope`, do cache pre-bundle của Vite bị lệch — xoá `node_modules/.vite` sửa được lỗi crash, nhưng `<select>` gốc đơn giản hơn, nhẹ hơn, và né hẳn lớp vấn đề này cho đúng use-case "chọn 1 số trong danh sách cố định").
+- **Chốt (tự quyết, đúng phạm vi phán đoán hợp lý)**: hoãn resume; `download_max_videos` đặt cùng trang "Tải xuống" với `download_connections` (đúng đề xuất ban đầu); Douyin `concurrent_fragment_downloads` chưa làm (đúng kế hoạch "đo trước rồi hãy làm", chưa đo).
+- **Verify thật với video Bilibili thật 200MB (không mock)**: tải cùng 1 video bằng 1 luồng và 8 luồng, so `sha256` file cuối cùng. **1 luồng: 279s (0.72 MB/s). 8 luồng: 32.3s (6.19 MB/s) — nhanh gấp 8.64x**, vượt cả số đo benchmark cô lập ban đầu (2.87x, đo trên đoạn 16MB ngắn — video thật dài hơn nên amortize được chi phí bắt tay TLS tốt hơn). **`sha256` 2 file khớp tuyệt đối** — tiêu chí DoD quan trọng nhất đã xác nhận bằng dữ liệu thật, không phải mock.
 
 Liên quan: [phase-20](phase-20-discovery-workspace.md) đặt hàng đợi giới hạn *số video* tải cùng lúc; phase này lo *tốc độ của từng video*. Hai cái phải chốt ngân sách kết nối chung — xem mục "Ràng buộc với phase-20".
 
@@ -117,27 +127,27 @@ Trường hợp `n = 1` (mặc định): semaphore 1 slot ⇒ cả app tải tu�
 - [x] Xác nhận mirror chậm hơn host chính → không chia tải nhiều mirror.
 - [x] Xác nhận URL hết hạn 2h → resume lưu bvid/cid chứ không lưu URL.
 - [x] **Chốt 2026-09-22**: cho người dùng chỉnh số luồng trong Cài đặt, khoảng **1–8**, **mặc định 1**.
-- [ ] Chốt có làm resume ngay trong phase này hay tách ra sau (resume là phần phức tạp nhất; multi-connection đứng một mình đã có 2,87x).
-- [ ] Chốt `download_max_videos` (phase-20) đặt luôn trong cùng trang Cài đặt "Tải xuống" — đề xuất có, để người dùng thấy quan hệ giữa hai con số.
+- [x] **Chốt 2026-09-22 (tự quyết)**: hoãn resume sang phase sau — multi-connection đứng một mình đã đạt mục tiêu chính (2,87x), resume là phần rủi ro/phức tạp nhất, tách ra giữ phạm vi phase này gọn.
+- [x] **Chốt 2026-09-22**: `download_max_videos` đặt cùng trang Cài đặt "Tải xuống" với `download_connections` — đã làm.
 
 ## Việc cần làm
 
 ### Hạ tầng cài đặt (mới — tool chưa có cài đặt nào lưu được từ UI)
-- [ ] `models/app_setting.py` — bảng khoá-giá trị `(user_id, key, value)`, `UniqueConstraint(user_id, key)`.
-- [ ] `services/settings_service.py` — `get_settings(db, user_id)` trả về đã merge với mặc định trong `config.py`; `update_settings(db, user_id, patch)`.
-- [ ] `api/settings.py` — `GET /api/settings`, `PUT /api/settings`. Validate `download_connections` bằng `Field(ge=1, le=8)` **ở schema**, không phụ thuộc UI chặn.
-- [ ] `core/config.py` — `download_connections: int = 1` (mặc định khi DB chưa có bản ghi), `download_part_min_bytes: int = 8 * 1024 * 1024`.
-- [ ] Frontend: trang "Tải xuống" trong `features/settings/` (trang đầu tiên của dự án ở khu Cài đặt — các trang hiện có đều là demo tiếng Anh của template, không đụng vào). Ô chọn số luồng 1–8 + dòng giải thích + cảnh báo "đây là trần cho cả app, không phải cho mỗi video".
-- [ ] `sidebar-nav` của Settings: thêm mục "Tải xuống" (tiếng Việt, khác với các mục demo).
+- [x] `models/app_setting.py` — bảng khoá-giá trị `(user_id, key, value)`, `UniqueConstraint(user_id, key)`.
+- [x] `services/settings_service.py` — `get_all(db, user_id)` trả về đã merge với mặc định trong `config.py`; `update(db, user_id, **patch)`.
+- [x] `api/settings.py` — `GET /api/settings`, `PUT /api/settings`. Validate `download_connections` bằng `Field(ge=1, le=8)` **ở schema**.
+- [x] `core/config.py` — `download_connections: int = 1` (mặc định khi DB chưa có bản ghi), `download_part_min_bytes: int = 8 * 1024 * 1024`.
+- [x] Frontend: trang "Tải xuống" trong `features/settings/downloads/`. Đổi từ kế hoạch ban đầu: dùng `<select>` gốc thay vì Radix `Select` (xem "Đã làm" ở đầu file — Radix Select là component đầu tiên trong repo dính lỗi môi trường test).
+- [x] `sidebar-nav` của Settings: thêm mục "Tải xuống".
 ### Tải song song
-- [ ] `download_service._probe_ranges(client, url)` — HEAD lấy size + kiểm tra range, trả `None` khi không dùng được.
-- [ ] `download_service._download_ranged(...)` — chia phần, pre-allocate, worker ghi theo offset, retry từng phần; fallback `_stream_to_file` khi không hỗ trợ.
-- [ ] `download_bilibili_video` — `asyncio.gather` video + audio.
-- [ ] `progress_service` — gộp video+audio thành một stage "đang tải" với tổng dung lượng, thay cho hai stage nối tiếp.
-- [ ] Semaphore kết nối dùng chung toàn app, **đọc số luồng từ cài đặt lúc bắt đầu mỗi lượt tải** (khớp với semaphore *số video* của phase-20 — hai tầng khác nhau, đừng nhầm làm một). Đổi cài đặt giữa chừng không được làm hỏng lượt tải đang chạy: chỉ áp dụng cho lượt tiếp theo.
-- [ ] (tuỳ chọn, có thể tách phase) resume qua file `.parts.json` + chốt an toàn so khớp `content-length`.
-- [ ] Douyin đi qua yt-dlp ([douyin/client.py:84](../../backend/app/adapters/douyin/client.py#L84)) nên không dùng được cơ chế này. Nếu muốn nhanh hơn thì thêm `concurrent_fragment_downloads` vào `ydl_opts` — **chỉ có tác dụng với stream chia mảnh (HLS/DASH)**, còn Douyin trả 1 file đã mux nên nhiều khả năng không đổi gì. Đo trước rồi hãy làm.
-- [ ] Test: `connections=1` đi đúng đường cũ; file nhỏ đi đường fallback; server giả không hỗ trợ range → không tạo file hỏng; một phần lỗi → retry đúng phần đó; ghép các phần ra đúng nội dung; API từ chối `connections=0`, `9`, `-1`.
+- [x] `download_service._probe(client, url)` — HEAD gộp lấy size + kiểm tra hỗ trợ Range trong 1 request (gộp `_probe_ranges` kế hoạch ban đầu với việc lấy size cho tổng tiến độ — đỡ 1 HEAD request thừa).
+- [x] `download_service._download_stream(...)` — chia phần qua `_download_range_part`, pre-allocate, retry từng phần; fallback `_download_whole` khi không hỗ trợ/quá nhỏ/`connections<=1`.
+- [x] `download_bilibili_video` → `_download_bilibili_video_slot` — `asyncio.gather` video + audio.
+- [x] `progress_service` — thêm stage `"downloading"`, gộp video+audio thành 1 chặng duy nhất với tổng dung lượng, thay cho 2 chặng nối tiếp cũ.
+- [x] Semaphore kết nối dùng chung toàn app (`_get_connection_slots()`, cố định `DOWNLOAD_CONNECTIONS_MAX=8`), **đọc số luồng từ cài đặt lúc bắt đầu mỗi lượt tải** trong `run_download_task`.
+- [ ] Resume — **hoãn sang phase sau** (tự quyết, xem mục Nguyên liệu).
+- [ ] Douyin `concurrent_fragment_downloads` — chưa làm, đúng kế hoạch "đo trước rồi hãy làm" (chưa đo).
+- [x] Test: `connections=1` đi đúng đường cũ (`test_connections_1_never_sends_range_header`); file nhỏ đi đường fallback; server giả không hỗ trợ range → không tạo file hỏng; CDN "nói dối" (báo hỗ trợ Range nhưng GET trả 200) → phát hiện, rơi về 1 kết nối; một phần lỗi → retry đúng phần đó không cộng dồn progress; ghép các phần ra đúng nội dung (byte-for-byte, `sha256` khớp file 1 luồng); API từ chối ngoài khoảng `[1,8]`/`[1,10]` (Pydantic `Field(ge, le)`, verify bằng test schema + test ranh giới trong `test_settings_service.py`).
 
 ## Tiêu chí hoàn thành (Definition of Done)
 - [ ] **Mặc định không đổi hành vi**: cài mới (chưa đụng vào Cài đặt) tải 1 video vẫn chạy đúng đường cũ, tốc độ không tệ đi.

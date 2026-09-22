@@ -1,5 +1,6 @@
 import pytest
 
+from app.schemas.job import SelectedVideo
 from app.services import crawl_service
 
 
@@ -266,3 +267,78 @@ class TestSearchReturnsFullResults:
         assert job.total_found == 0
         assert job.already_in_library == 0
         assert job.result_videos == []
+
+
+class TestCreateJobFromSelection:
+    """Phase 20 — tick chọn hàng loạt ở màn Khám phá. Trước đây video đã tồn
+    tại bị `continue` bỏ qua hẳn khỏi kết quả trả về; giờ phải trả ĐỦ danh
+    sách đã chọn (giống `create_bilibili_crawl_job`) để router biết chính xác
+    video nào cần bắn tải nền."""
+
+    @pytest.fixture
+    def db(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        import app.models  # noqa: F401
+        from app.core.db import Base
+        from app.models.job import Job, JobStatus, Platform
+        from app.models.user import User
+
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        session.add(User(id=1))
+        session.commit()
+        session.add(
+            Job(id=99, user_id=1, platform=Platform.BILIBILI, keyword="lần trước", status=JobStatus.COMPLETED)
+        )
+        session.commit()
+        yield session
+        session.close()
+
+    @staticmethod
+    def _selected(bvids: list[str]) -> list[SelectedVideo]:
+        return [
+            SelectedVideo(bvid=b, title=f"video {b}", author_name="tác giả", duration_seconds=60)
+            for b in bvids
+        ]
+
+    @pytest.mark.anyio
+    async def test_returns_new_and_existing_videos_in_order(self, db) -> None:
+        from app.models.job import Platform
+        from app.models.video import Video, VideoStatus
+
+        db.add(
+            Video(
+                user_id=1,
+                job_id=99,
+                platform=Platform.BILIBILI,
+                platform_video_id="BV1",
+                title="đã có",
+                source_url="https://e.com",
+                status=VideoStatus.DOWNLOADED,
+            )
+        )
+        db.commit()
+
+        job = await crawl_service.create_job_from_selection(
+            db, 1, self._selected(["BV1", "BV2", "BV3"])
+        )
+
+        # Cả 3 đều có mặt, kể cả BV1 đã tồn tại từ trước — trước đây bị bỏ qua.
+        assert [v.platform_video_id for v in job.result_videos] == ["BV1", "BV2", "BV3"]
+        assert job.result_videos[0].already_in_library is True
+        assert job.result_videos[1].already_in_library is False
+        assert job.result_videos[2].already_in_library is False
+        # Không tạo trùng video đã có (UniqueConstraint platform+platform_video_id).
+        assert db.query(Video).filter(Video.platform_video_id == "BV1").count() == 1
+
+    @pytest.mark.anyio
+    async def test_new_videos_start_as_queued(self, db) -> None:
+        from app.models.video import VideoStatus
+
+        job = await crawl_service.create_job_from_selection(db, 1, self._selected(["BV9"]))
+
+        assert job.result_videos[0].status == VideoStatus.QUEUED
+        assert job.result_videos[0].local_path is None

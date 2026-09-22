@@ -108,6 +108,25 @@ class Settings(BaseSettings):
     # gọi API rồi nhận lỗi khó hiểu.
     douyin_cookie: str = ""
 
+    # Phase 20 — màn Khám phá cho tải nhiều video cùng lúc (tick chọn hàng loạt
+    # ở lưới Trending). Giới hạn SỐ VIDEO tải song song, khác hẳn số kết nối
+    # cho MỖI video của Phase 21 (chưa code) — 2 tầng riêng, đừng gộp làm 1.
+    # Mặc định 3: đủ để không phải chờ tuần tự, không quá nhiều để tránh nghẽn
+    # băng thông cá nhân hay dính kiểm soát tốc độ phía Bilibili.
+    download_max_videos: int = 3
+
+    # Phase 21 — tăng tốc tải qua chia phần HTTP Range. Đo thật (2026-09-22):
+    # 8 luồng nhanh gấp ~2.9x 1 luồng, 16 luồng THÌ TỆ HƠN 8 (tranh chấp +
+    # overhead bắt tay TLS) — nên chặn cứng ở 8, không chỉ giới hạn UI. Mặc
+    # định 1 = đúng hành vi cũ (đi thẳng `_stream_to_file`, không qua nhánh
+    # chia phần) — người dùng tự bật khi biết máy/mạng chịu được, cùng triết
+    # lý với `cpu_worker_count` ở trên. Đây là giá trị dùng khi DB (bảng
+    # `app_settings`) chưa có bản ghi — xem `services/settings_service.py`.
+    download_connections: int = 1
+    # Ngưỡng bỏ qua chia phần: file nhỏ hơn mức này tải 1 luồng — chia nhỏ chỉ
+    # tốn thêm 1 request HEAD + bắt tay TLS không bù lại được gì.
+    download_part_min_bytes: int = 8 * 1024 * 1024
+
 
 @lru_cache
 def get_settings() -> Settings:

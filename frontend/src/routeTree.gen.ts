@@ -28,12 +28,15 @@ import { Route as AuthenticatedTopicsIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedLibraryIndexRouteImport } from './routes/_authenticated/library/index'
+import { Route as AuthenticatedInsightsIndexRouteImport } from './routes/_authenticated/insights/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedDiscoverIndexRouteImport } from './routes/_authenticated/discover/index'
 import { Route as AuthenticatedCrawlIndexRouteImport } from './routes/_authenticated/crawl/index'
 import { Route as AuthenticatedApiKeysIndexRouteImport } from './routes/_authenticated/api-keys/index'
 import { Route as AuthenticatedAiStudioIndexRouteImport } from './routes/_authenticated/ai-studio/index'
 import { Route as AuthenticatedVideosVideoIdRouteImport } from './routes/_authenticated/videos/$videoId'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedSettingsDownloadsRouteImport } from './routes/_authenticated/settings/downloads'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
@@ -140,10 +143,22 @@ const AuthenticatedLibraryIndexRoute =
     path: '/library/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedInsightsIndexRoute =
+  AuthenticatedInsightsIndexRouteImport.update({
+    id: '/insights/',
+    path: '/insights/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexRouteImport.update({
     id: '/help-center/',
     path: '/help-center/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDiscoverIndexRoute =
+  AuthenticatedDiscoverIndexRouteImport.update({
+    id: '/discover/',
+    path: '/discover/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedCrawlIndexRoute = AuthenticatedCrawlIndexRouteImport.update({
@@ -173,6 +188,12 @@ const AuthenticatedSettingsNotificationsRoute =
   AuthenticatedSettingsNotificationsRouteImport.update({
     id: '/notifications',
     path: '/notifications',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+const AuthenticatedSettingsDownloadsRoute =
+  AuthenticatedSettingsDownloadsRouteImport.update({
+    id: '/downloads',
+    path: '/downloads',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 const AuthenticatedSettingsDisplayRoute =
@@ -217,12 +238,15 @@ export interface FileRoutesByFullPath {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/downloads': typeof AuthenticatedSettingsDownloadsRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
   '/ai-studio/': typeof AuthenticatedAiStudioIndexRoute
   '/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/crawl/': typeof AuthenticatedCrawlIndexRoute
+  '/discover/': typeof AuthenticatedDiscoverIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/insights/': typeof AuthenticatedInsightsIndexRoute
   '/library/': typeof AuthenticatedLibraryIndexRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -246,12 +270,15 @@ export interface FileRoutesByTo {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/downloads': typeof AuthenticatedSettingsDownloadsRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
   '/ai-studio': typeof AuthenticatedAiStudioIndexRoute
   '/api-keys': typeof AuthenticatedApiKeysIndexRoute
   '/crawl': typeof AuthenticatedCrawlIndexRoute
+  '/discover': typeof AuthenticatedDiscoverIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/insights': typeof AuthenticatedInsightsIndexRoute
   '/library': typeof AuthenticatedLibraryIndexRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -278,12 +305,15 @@ export interface FileRoutesById {
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/_authenticated/settings/downloads': typeof AuthenticatedSettingsDownloadsRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
   '/_authenticated/ai-studio/': typeof AuthenticatedAiStudioIndexRoute
   '/_authenticated/api-keys/': typeof AuthenticatedApiKeysIndexRoute
   '/_authenticated/crawl/': typeof AuthenticatedCrawlIndexRoute
+  '/_authenticated/discover/': typeof AuthenticatedDiscoverIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/insights/': typeof AuthenticatedInsightsIndexRoute
   '/_authenticated/library/': typeof AuthenticatedLibraryIndexRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -310,12 +340,15 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
+    | '/settings/downloads'
     | '/settings/notifications'
     | '/videos/$videoId'
     | '/ai-studio/'
     | '/api-keys/'
     | '/crawl/'
+    | '/discover/'
     | '/help-center/'
+    | '/insights/'
     | '/library/'
     | '/projects/'
     | '/settings/'
@@ -339,12 +372,15 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
+    | '/settings/downloads'
     | '/settings/notifications'
     | '/videos/$videoId'
     | '/ai-studio'
     | '/api-keys'
     | '/crawl'
+    | '/discover'
     | '/help-center'
+    | '/insights'
     | '/library'
     | '/projects'
     | '/settings'
@@ -370,12 +406,15 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
+    | '/_authenticated/settings/downloads'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/videos/$videoId'
     | '/_authenticated/ai-studio/'
     | '/_authenticated/api-keys/'
     | '/_authenticated/crawl/'
+    | '/_authenticated/discover/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/insights/'
     | '/_authenticated/library/'
     | '/_authenticated/projects/'
     | '/_authenticated/settings/'
@@ -533,11 +572,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLibraryIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/insights/': {
+      id: '/_authenticated/insights/'
+      path: '/insights'
+      fullPath: '/insights/'
+      preLoaderRoute: typeof AuthenticatedInsightsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
       fullPath: '/help-center/'
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/discover/': {
+      id: '/_authenticated/discover/'
+      path: '/discover'
+      fullPath: '/discover/'
+      preLoaderRoute: typeof AuthenticatedDiscoverIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/crawl/': {
@@ -575,6 +628,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/downloads': {
+      id: '/_authenticated/settings/downloads'
+      path: '/downloads'
+      fullPath: '/settings/downloads'
+      preLoaderRoute: typeof AuthenticatedSettingsDownloadsRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/display': {
       id: '/_authenticated/settings/display'
       path: '/display'
@@ -610,6 +670,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
+  AuthenticatedSettingsDownloadsRoute: typeof AuthenticatedSettingsDownloadsRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -619,6 +680,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
+    AuthenticatedSettingsDownloadsRoute: AuthenticatedSettingsDownloadsRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
@@ -637,7 +699,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAiStudioIndexRoute: typeof AuthenticatedAiStudioIndexRoute
   AuthenticatedApiKeysIndexRoute: typeof AuthenticatedApiKeysIndexRoute
   AuthenticatedCrawlIndexRoute: typeof AuthenticatedCrawlIndexRoute
+  AuthenticatedDiscoverIndexRoute: typeof AuthenticatedDiscoverIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
+  AuthenticatedInsightsIndexRoute: typeof AuthenticatedInsightsIndexRoute
   AuthenticatedLibraryIndexRoute: typeof AuthenticatedLibraryIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedTopicsIndexRoute: typeof AuthenticatedTopicsIndexRoute
@@ -653,7 +717,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAiStudioIndexRoute: AuthenticatedAiStudioIndexRoute,
   AuthenticatedApiKeysIndexRoute: AuthenticatedApiKeysIndexRoute,
   AuthenticatedCrawlIndexRoute: AuthenticatedCrawlIndexRoute,
+  AuthenticatedDiscoverIndexRoute: AuthenticatedDiscoverIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
+  AuthenticatedInsightsIndexRoute: AuthenticatedInsightsIndexRoute,
   AuthenticatedLibraryIndexRoute: AuthenticatedLibraryIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedTopicsIndexRoute: AuthenticatedTopicsIndexRoute,
