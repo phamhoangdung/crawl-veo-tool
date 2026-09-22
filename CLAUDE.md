@@ -31,28 +31,32 @@ Dự án này chạy qua nhiều phiên làm việc riêng biệt, cần tiết 
 
 ## Bảng phase thực thi (đọc file phase hiện tại, không cần đọc hết)
 
+Chi tiết đầy đủ của mỗi trạng thái nằm ở dòng "Trạng thái" đầu file phase tương ứng + mục "Ghi chú phát sinh" — cột dưới đây **chỉ để chọn phase tiếp theo**, không lặp lại chi tiết.
+
 | Phase | File | Trạng thái |
 |---|---|---|
-| 0. Scaffolding (backend+frontend khung) | [docs/phases/phase-0-scaffolding.md](docs/phases/phase-0-scaffolding.md) | **Hoàn thành** |
-| 1. Crawl & Trend Discovery (Bilibili) | [docs/phases/phase-1-crawl-bilibili.md](docs/phases/phase-1-crawl-bilibili.md) | **Xong** (trừ batch queue concurrency, không cấp thiết) — 2026-09-16: cải thiện chất lượng trang Trending (chuyên mục dùng bảng phân khu chính thức thay vì đoán, video/chart dùng điểm `pts` thật của Bilibili) |
-| 2. AI Pipeline MVP (1 provider) | [docs/phases/phase-2-ai-pipeline-mvp.md](docs/phases/phase-2-ai-pipeline-mvp.md) | **Xong** — verify end-to-end video thật; UI chạy hàng loạt đã có (2026-09-12) |
-| 3. Multi-provider + Douyin | [docs/phases/phase-3-multiprovider-douyin.md](docs/phases/phase-3-multiprovider-douyin.md) | Một phần — cost estimate xong; tải video giao cho yt-dlp (viết xong, chờ cookie ẩn danh + URL mẫu để verify); tìm kiếm từ khoá đã vendor `a_bogus` nhưng **BLOCKED & tạm dừng** — cần tài khoản Douyin đăng nhập thật mà bạn hiện không có, đã chọn tạm dừng quyết định thay vì tạo tài khoản hoặc bỏ tính năng |
-| 4. Audio quality (tách nhạc nền) + video dài | [docs/phases/phase-4-audio-quality.md](docs/phases/phase-4-audio-quality.md) | **Xong & verify thật** — chunking video dài đã làm (audio mẫu tự sinh bằng ffmpeg); chưa chạy Demucs thật trên file dài |
-| 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | **Xong & verify thật** — thêm tuỳ chọn vị trí phụ đề trên/dưới (trừ cảnh báo hardsub) |
-| 6. Hardening & Ops | [docs/phases/phase-6-hardening-ops.md](docs/phases/phase-6-hardening-ops.md) | **Xong & verify thật** — dọn dẹp storage giờ chạy định kỳ trong app + nút bấm tay |
-| 7. Đóng gói để bán (tương lai) | [docs/phases/phase-7-productization.md](docs/phases/phase-7-productization.md) | Ý tưởng, chưa lên kế hoạch |
-| 8. AI Account Pool (nhiều key/provider, failover, n8n orchestrator) | [docs/phases/phase-8-ai-account-pool.md](docs/phases/phase-8-ai-account-pool.md) | **Phần lõi xong** & verify qua test suite (127 test) + DB thật — chưa verify qua HTTP thật (xem Ghi chú trong phase) |
-| 9. Compliance & value-add cho re-up | [docs/phases/phase-9-reup-compliance.md](docs/phases/phase-9-reup-compliance.md) | **Xong & verify thật** — logo/watermark/intro/outro/nhạc nền + kho asset + UI chọn file + metadata SEO; còn thiếu source ledger |
-| 10. Video kể chuyện (script + TTS + video nền) | [docs/phases/phase-10-story-videos.md](docs/phases/phase-10-story-videos.md) | Chưa bắt đầu — cần chốt hướng kịch bản; cần video nền mẫu (chưa có) |
-| 11. Clip ngắn TikTok + cross-post | [docs/phases/phase-11-shorts-crosspost.md](docs/phases/phase-11-shorts-crosspost.md) | **Phần cắt clip xong & verify thật** (ffmpeg thật) — cross-post qua API chưa làm (ngoài phạm vi, xem Ghi chú) |
-| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | **Đã ra installer thật** (.msi 249MB + .exe 180MB, 2026-09-12) — còn thiếu chạy thử trên máy Windows sạch |
-| 13. Trình chỉnh sửa timeline (AI gợi ý + kéo-thả) | [docs/phases/phase-13-timeline-editor.md](docs/phases/phase-13-timeline-editor.md) | **Xong & verify thật** (ffmpeg thật, DB thật, browser thật) — 9/10/11 giờ dùng chung editor này |
-| 14. Tạo video bằng AI generative (node-based đơn giản hoá) | [docs/phases/phase-14-ai-video-generation.md](docs/phases/phase-14-ai-video-generation.md) | **Phần lõi xong** — timeline cho dự án AI đã thông, job store chạy nền, adapter fal.ai thật đã viết (**chưa chạy với key thật**); cần key fal.ai + ảnh nhân vật mẫu để verify |
-| 15. Account Pool — pool-group cho provider quota-theo-project (Google Veo) | [docs/phases/phase-15-account-pool-groups.md](docs/phases/phase-15-account-pool-groups.md) | Chưa bắt đầu — chỉ cần khi Phase 14 dùng Google Veo trực tiếp, hiện có thể hoãn |
-| 16. Dựng video nhiều cảnh (node-canvas) | [docs/phases/phase-16-node-canvas.md](docs/phases/phase-16-node-canvas.md) | **Xong & verify thật trong browser**: dán kịch bản → canvas kéo-thả có đường nối → thấy ước tính chi phí → dựng ra 1 video → thêm vào kho cho Timeline Editor → kéo node nhân vật vào cảnh để tự chèn `@tên` vào prompt |
-| 17. Xu hướng YouTube (chỉ xem) + Chủ đề cơ hội | [docs/phases/phase-17-content-opportunity.md](docs/phases/phase-17-content-opportunity.md) | **Phần lõi xong** — tab YouTube trong Trending + trang "Chủ đề quan tâm" (tính điểm cơ hội tự động), verify UI thật qua Playwright, 17 test mock pass — **chưa verify gọi API YouTube thật**, cần bạn cung cấp API key YouTube Data API v3. TikTok hoãn có chủ đích (xem Ghi chú trong phase) |
-| 18. Đăng nhập, Admin, License theo gói & Host đa người dùng | [docs/phases/phase-18-auth-license-hosting.md](docs/phases/phase-18-auth-license-hosting.md) | Chưa bắt đầu — **tạm hoãn sau Phase 19** theo yêu cầu 2026-09-20 (không phụ thuộc kỹ thuật, chỉ đổi thứ tự ưu tiên) |
-| 19. Lồng tiếng nhiều giọng — phân vai người nói (speaker diarization, SpeechBrain — không dùng pyannote gated) | [docs/phases/phase-19-multi-speaker-dubbing.md](docs/phases/phase-19-multi-speaker-dubbing.md) | **Phần lõi code xong** (2026-09-20, 427 test backend + 190 test frontend pass) — chưa verify video thật (thiếu video mẫu ≥2 người nói) và GPU chưa thực sự chạy (torch cài là bản CPU-only) |
+| 0. Scaffolding (backend+frontend khung) | [docs/phases/phase-0-scaffolding.md](docs/phases/phase-0-scaffolding.md) | Hoàn thành |
+| 1. Crawl & Trend Discovery (Bilibili) | [docs/phases/phase-1-crawl-bilibili.md](docs/phases/phase-1-crawl-bilibili.md) | Xong (trừ batch queue concurrency, không cấp thiết) |
+| 2. AI Pipeline MVP (1 provider) | [docs/phases/phase-2-ai-pipeline-mvp.md](docs/phases/phase-2-ai-pipeline-mvp.md) | Xong & verify thật |
+| 3. Multi-provider + Douyin | [docs/phases/phase-3-multiprovider-douyin.md](docs/phases/phase-3-multiprovider-douyin.md) | Một phần — **blocked**, tạm dừng (thiếu tài khoản Douyin) |
+| 4. Audio quality (tách nhạc nền) + video dài | [docs/phases/phase-4-audio-quality.md](docs/phases/phase-4-audio-quality.md) | Xong & verify thật |
+| 5. Phụ đề song ngữ + Thư viện | [docs/phases/phase-5-subtitles-library.md](docs/phases/phase-5-subtitles-library.md) | Xong & verify thật |
+| 6. Hardening & Ops | [docs/phases/phase-6-hardening-ops.md](docs/phases/phase-6-hardening-ops.md) | Xong & verify thật |
+| 7. Đóng gói để bán (tương lai) | [docs/phases/phase-7-productization.md](docs/phases/phase-7-productization.md) | Ý tưởng — plan cụ thể chuyển sang Phase 18 |
+| 8. AI Account Pool (nhiều key/provider, failover, n8n orchestrator) | [docs/phases/phase-8-ai-account-pool.md](docs/phases/phase-8-ai-account-pool.md) | Lõi xong, verify test+DB thật — chưa verify HTTP thật |
+| 9. Compliance & value-add cho re-up | [docs/phases/phase-9-reup-compliance.md](docs/phases/phase-9-reup-compliance.md) | Xong & verify thật — thiếu source ledger |
+| 10. Video kể chuyện (script + TTS + video nền) | [docs/phases/phase-10-story-videos.md](docs/phases/phase-10-story-videos.md) | Chưa bắt đầu |
+| 11. Clip ngắn TikTok + cross-post | [docs/phases/phase-11-shorts-crosspost.md](docs/phases/phase-11-shorts-crosspost.md) | Cắt clip xong & verify thật — cross-post ngoài phạm vi |
+| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | Có installer thật — chưa test máy sạch |
+| 13. Trình chỉnh sửa timeline (AI gợi ý + kéo-thả) | [docs/phases/phase-13-timeline-editor.md](docs/phases/phase-13-timeline-editor.md) | Xong & verify thật — Phase 9/10/11 dùng chung |
+| 14. Tạo video bằng AI generative (node-based đơn giản hoá) | [docs/phases/phase-14-ai-video-generation.md](docs/phases/phase-14-ai-video-generation.md) | Lõi xong — chưa chạy với key fal.ai thật |
+| 15. Account Pool — pool-group cho provider quota-theo-project (Google Veo) | [docs/phases/phase-15-account-pool-groups.md](docs/phases/phase-15-account-pool-groups.md) | Chưa bắt đầu — có thể hoãn vô thời hạn |
+| 16. Dựng video nhiều cảnh (node-canvas) | [docs/phases/phase-16-node-canvas.md](docs/phases/phase-16-node-canvas.md) | Xong & verify thật trong browser |
+| 17. Xu hướng YouTube (chỉ xem) + Chủ đề cơ hội | [docs/phases/phase-17-content-opportunity.md](docs/phases/phase-17-content-opportunity.md) | Lõi xong — chưa verify API YouTube thật; TikTok hoãn có chủ đích |
+| 18. Đăng nhập, Admin, License theo gói & Host đa người dùng | [docs/phases/phase-18-auth-license-hosting.md](docs/phases/phase-18-auth-license-hosting.md) | Chưa bắt đầu — tạm hoãn sau Phase 19 |
+| 19. Lồng tiếng nhiều giọng — phân vai người nói (speaker diarization, SpeechBrain — không dùng pyannote gated) | [docs/phases/phase-19-multi-speaker-dubbing.md](docs/phases/phase-19-multi-speaker-dubbing.md) | Lõi code xong, test pass — chưa verify video/GPU thật |
+| 20. Gộp "Xu hướng" + "Tìm & tải" thành một màn Khám phá | [docs/phases/phase-20-discovery-workspace.md](docs/phases/phase-20-discovery-workspace.md) | Đã khảo sát & lên kế hoạch, chưa code |
+| 21. Tăng tốc tải video (chia phần, nhiều kết nối, resume) | [docs/phases/phase-21-parallel-download.md](docs/phases/phase-21-parallel-download.md) | Đã khảo sát & đo thật, chưa code |
 
 ## Quy ước tài liệu (module/nghiên cứu, khác với phase thực thi ở trên)
 Mỗi nhiệm vụ/module lớn có một thư mục riêng trong `docs/`, chứa `research.md`/`plan.md` của nhiệm vụ đó — dùng cho tài liệu tham khảo/kiến trúc, không phải checklist thực thi (đó là việc của `docs/phases/`). Khi cần thêm tài liệu module mới: tạo `docs/<ten-nhiem-vu>/`, thêm file, rồi thêm dòng vào bảng dưới.
