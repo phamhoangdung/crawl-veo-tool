@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
 import { Check, Copy, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createMcpToken,
+  getApiErrorMessage,
   getMcpScopes,
   getMcpTokens,
   revokeMcpToken,
@@ -144,10 +144,7 @@ export function McpTokenSection() {
       toast.success('Đã tạo token — copy ngay, sẽ không hiện lại.')
     },
     onError: (error) => {
-      const detail = axios.isAxiosError(error)
-        ? (error.response?.data as { detail?: string })?.detail
-        : null
-      toast.error(detail ?? 'Không tạo được token.')
+      toast.error(getApiErrorMessage(error, 'Không tạo được token.'))
     },
   })
 

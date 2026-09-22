@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import axios from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Flame, Gauge, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -7,6 +6,7 @@ import {
   computeTopicScore,
   createTopic,
   deleteTopic,
+  getApiErrorMessage,
   getTopics,
   getYoutubeStatus,
   type Topic,
@@ -17,19 +17,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
-
-function axiosDetail(error: unknown, fallback: string): string {
-  if (!axios.isAxiosError(error)) return fallback
-  const detail = (error.response?.data as { detail?: string })?.detail
-  return detail ?? fallback
-}
 
 /** Nhãn định tính cho điểm cơ hội (trung vị tỉ lệ view/sub kênh) — heuristic
  * tham khảo, không phải điểm số khoa học chính xác (xem docstring backend
@@ -59,7 +48,7 @@ function TopicCard({ topic }: { topic: Topic }) {
     mutationFn: () => computeTopicScore(topic.id),
     onSuccess: invalidate,
     onError: (error) =>
-      toast.error(axiosDetail(error, 'Không tính được điểm chủ đề.')),
+      toast.error(getApiErrorMessage(error, 'Không tính được điểm chủ đề.')),
   })
 
   const remove = useMutation({
@@ -188,15 +177,7 @@ export function Topics() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4'>

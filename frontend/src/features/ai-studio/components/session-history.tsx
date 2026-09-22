@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import axios from 'axios'
 import { toast } from 'sonner'
 import {
   exportGeneratedAssetToLibrary,
   generatedAssetFileUrl,
+  getApiErrorMessage,
   getGeneratedAssets,
 } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
@@ -19,10 +19,7 @@ function ExportButton({ assetId }: { assetId: number }) {
       )
     },
     onError: (error) => {
-      const detail = axios.isAxiosError(error)
-        ? (error.response?.data as { detail?: string })?.detail
-        : null
-      toast.error(detail ?? 'Không thêm được vào kho.')
+      toast.error(getApiErrorMessage(error, 'Không thêm được vào kho.'))
     },
   })
 

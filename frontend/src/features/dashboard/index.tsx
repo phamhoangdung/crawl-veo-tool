@@ -11,6 +11,7 @@ import {
   TriangleAlert,
 } from 'lucide-react'
 import { getDashboardStats, getVideoFiles } from '@/lib/api'
+import { formatBytes } from '@/lib/format'
 import { APP_NAME } from '@/config/app'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,21 +23,10 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { CoverImage } from '@/components/cover-image'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${bytes} B`
-}
 
 function StatCard({
   label,
@@ -88,15 +78,7 @@ export function Dashboard() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-6'>

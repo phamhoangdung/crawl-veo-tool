@@ -13,13 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 
 export function Library() {
   const { data: items } = useQuery({ queryKey: ['library'], queryFn: getLibrary })
@@ -30,15 +25,7 @@ export function Library() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4 flex items-center justify-between'>

@@ -1,21 +1,15 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
 import { ArrowLeft, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { createProject, deleteProject, getProjects } from '@/lib/api'
+import { createProject, deleteProject, getApiErrorMessage, getProjects } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { TimelineEditor } from '@/features/editor'
 import { ProjectCanvas } from './components/project-canvas'
 
@@ -27,15 +21,7 @@ export function ProjectFlow() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         {openProjectId === null ? (
@@ -112,10 +98,7 @@ function ProjectList({ onOpen }: { onOpen: (projectId: number) => void }) {
       onOpen(project.id)
     },
     onError: (error) => {
-      const detail = axios.isAxiosError(error)
-        ? (error.response?.data as { detail?: string })?.detail
-        : null
-      toast.error(detail ?? 'Không tạo được dự án.')
+      toast.error(getApiErrorMessage(error, 'Không tạo được dự án.'))
     },
   })
 

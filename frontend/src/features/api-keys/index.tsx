@@ -14,13 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { McpTokenSection } from './mcp-token-section'
 
 const PROVIDERS = [
@@ -212,15 +207,7 @@ function ProviderKeyPool({ providerId, label }: { providerId: string; label: str
 export function ApiKeys() {
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4'>

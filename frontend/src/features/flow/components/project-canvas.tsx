@@ -10,7 +10,6 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
 import { Plus, Redo2, Save, Undo2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -18,6 +17,7 @@ import {
   deleteScene,
   exportProjectToLibrary,
   generateProjectScene,
+  getApiErrorMessage,
   getCharacterReferences,
   getProject,
   getProjectCostEstimate,
@@ -51,12 +51,6 @@ import { SceneSettingsDialog, type ScenePatch } from './scene-settings-dialog'
 
 const OUTPUT_NODE_ID = 'output'
 const nodeTypes = { scene: SceneNode, output: OutputNode, character: CharacterNode }
-
-function apiDetail(error: unknown): string | null {
-  return axios.isAxiosError(error)
-    ? ((error.response?.data as { detail?: string })?.detail ?? null)
-    : null
-}
 
 /** Vị trí node nhân vật trên canvas chỉ là tiện ích hiển thị — nguồn sự thật
  *  của việc "nhân vật nào ở cảnh nào" là @mention trong text prompt (đã lưu ở
@@ -186,7 +180,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
       setSettingsSceneId(null)
       toast.success('Đã lưu tuỳ chọn cảnh.')
     },
-    onError: (error) => toast.error(apiDetail(error) ?? 'Không lưu được tuỳ chọn.'),
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Không lưu được tuỳ chọn.')),
   })
 
   const generate = useMutation({
@@ -197,7 +191,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
       invalidate()
       toast.success('Đã sinh xong cảnh.')
     },
-    onError: (error) => toast.error(apiDetail(error) ?? 'Không sinh được cảnh.'),
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Không sinh được cảnh.')),
   })
 
   const append = useMutation({
@@ -235,7 +229,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
       invalidate()
       toast.success(result.message)
     },
-    onError: (error) => toast.error(apiDetail(error) ?? 'Không dựng được video.'),
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Không dựng được video.')),
   })
 
   const exportToLibrary = useMutation({
@@ -245,7 +239,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
         `Đã thêm "${result.name}" vào kho — mở được trong Timeline Editor để thêm lồng tiếng/phụ đề.`
       )
     },
-    onError: (error) => toast.error(apiDetail(error) ?? 'Không thêm được vào kho.'),
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Không thêm được vào kho.')),
   })
 
   const { mutate: generateMutate } = generate

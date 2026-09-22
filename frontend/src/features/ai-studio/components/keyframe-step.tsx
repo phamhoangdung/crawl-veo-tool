@@ -7,6 +7,7 @@ import {
   generateKeyframeAsync,
   waitForGenerationJob,
   generatedAssetFileUrl,
+  getApiErrorMessage,
   getCharacterReferences,
   getGeneratedAssets,
   getGenerationCostEstimate,
@@ -101,8 +102,7 @@ export function KeyframeStep({ settings, selectedKeyframeId, onSelectKeyframe }:
         )
         return
       }
-      const detail = (error.response?.data as { detail?: string })?.detail
-      toast.error(detail ?? 'Không sinh được ảnh.')
+      toast.error(getApiErrorMessage(error, 'Không sinh được ảnh.'))
     },
   })
 

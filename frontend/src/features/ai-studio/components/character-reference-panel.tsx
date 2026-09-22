@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createCharacterReference,
   deleteCharacterReference,
+  getApiErrorMessage,
   getCharacterReferences,
 } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -53,10 +53,7 @@ function CreateReferenceDialog() {
       reset()
     },
     onError: (error) => {
-      const detail = axios.isAxiosError(error)
-        ? (error.response?.data as { detail?: string })?.detail
-        : null
-      toast.error(detail ?? 'Không tạo được bộ ảnh tham chiếu.')
+      toast.error(getApiErrorMessage(error, 'Không tạo được bộ ảnh tham chiếu.'))
     },
   })
 

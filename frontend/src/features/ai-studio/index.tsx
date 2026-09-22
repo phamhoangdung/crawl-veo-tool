@@ -3,13 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { getGenerationBudget, getGenerationMode } from '@/lib/api'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { CharacterReferencePanel } from './components/character-reference-panel'
 import { GenerationSettingsPanel } from './components/generation-settings-panel'
 import { KeyframeStep } from './components/keyframe-step'
@@ -40,15 +35,7 @@ export function AiStudio() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4 flex flex-wrap items-start justify-between gap-2'>

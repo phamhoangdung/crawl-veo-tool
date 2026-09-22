@@ -9,6 +9,7 @@ import {
   generateVideoClipAsync,
   waitForGenerationJob,
   generatedAssetFileUrl,
+  getApiErrorMessage,
   getGeneratedAssets,
   getGenerationCostEstimate,
 } from '@/lib/api'
@@ -85,13 +86,12 @@ export function VideoStep({ settings, selectedKeyframeId }: Props) {
       toast.error('Không tạo được video.')
       return
     }
-    const detail = (error.response?.data as { detail?: string })?.detail
     // 409 = vượt ngưỡng mỗi lần gọi, người dùng có thể xác nhận để tiếp tục.
     if (error.response?.status === 409) {
-      setPendingConfirm(detail ?? 'Lần sinh này vượt ngưỡng chi phí.')
+      setPendingConfirm(getApiErrorMessage(error, 'Lần sinh này vượt ngưỡng chi phí.'))
       return
     }
-    toast.error(detail ?? 'Không tạo được video.')
+    toast.error(getApiErrorMessage(error, 'Không tạo được video.'))
   }
 
   const kenBurns = useMutation({
