@@ -4,6 +4,7 @@ import { Loader2, Play, Square } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   cancelBatch,
+  getApiErrorMessage,
   getBatchStatus,
   getPendingVideoIds,
   startBatch,
@@ -80,12 +81,7 @@ export function BatchPanel() {
       toast.success(`Đã bắt đầu chạy ${job.total} video.`)
     },
     onError: (error) => {
-      const detail =
-        error && typeof error === 'object' && 'response' in error
-          ? ((error as { response?: { data?: { detail?: string } } }).response
-              ?.data?.detail ?? null)
-          : null
-      toast.error(detail ?? 'Không bắt đầu được batch.')
+      toast.error(getApiErrorMessage(error, 'Không bắt đầu được batch.'))
     },
   })
 

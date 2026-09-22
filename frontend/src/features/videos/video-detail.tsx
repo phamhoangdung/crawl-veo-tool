@@ -19,6 +19,7 @@ import {
   diarizeVideo,
   downloadVideo,
   dubVideo,
+  getApiErrorMessage,
   getDownloadUrl,
   getVideoDetail,
   getVideoFilesById,
@@ -27,6 +28,7 @@ import {
   translateVideo,
   type TaskKind,
 } from '@/lib/api'
+import { formatBytes, formatDuration } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTaskProgress } from '@/hooks/use-task-progress'
 import { Badge } from '@/components/ui/badge'
@@ -42,32 +44,13 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { CoverImage } from '@/components/cover-image'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { TimelineEditor } from '@/features/editor'
 import { SpeakerVoices } from './speaker-voices'
 import { SubtitleEditor } from './subtitle-editor'
 import { SubtitleReview } from './subtitle-review'
-
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${bytes} B`
-}
-
-function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return `${minutes}:${rest.toString().padStart(2, '0')}`
-}
 
 const VARIANT_LABELS: Record<string, string> = {
   original: 'Gốc',
@@ -102,6 +85,13 @@ type StepOption =
       hint?: string
       default: string
       choices: { value: string; label: string }[]
+    }
+  | {
+      key: string
+      type: 'color'
+      label: string
+      hint?: string
+      default: string
     }
 
 type StepOptionValues = Record<string, boolean | string>
@@ -174,7 +164,12 @@ const STEPS: StepDef[] = [
     icon: Captions,
     description: 'Chèn cứng phụ đề song ngữ vào khung hình.',
     run: (id, options) =>
-      burnSubtitles(id, options.position as 'bottom' | 'top'),
+      burnSubtitles(id, {
+        position: options.position as 'bottom' | 'top',
+        font_family: options.fontFamily as string,
+        font_color: (options.fontColor as string).replace('#', ''),
+        bold: options.bold as boolean,
+      }),
     requires: ({ hasTranslation }) => (hasTranslation ? null : 'Cần dịch phụ đề trước'),
     options: [
       {
@@ -187,6 +182,32 @@ const STEPS: StepDef[] = [
           { value: 'bottom', label: 'Dưới (mặc định)' },
           { value: 'top', label: 'Trên' },
         ],
+      },
+      {
+        key: 'fontFamily',
+        type: 'select',
+        label: 'Font chữ',
+        default: 'be-vietnam-pro',
+        // Khớp id trong backend `font_service.py` — cả 4 đều có subset
+        // "vietnamese" chính thức trên Google Fonts (đã kiểm tra glyph dấu).
+        choices: [
+          { value: 'be-vietnam-pro', label: 'Be Vietnam Pro' },
+          { value: 'barlow', label: 'Barlow' },
+          { value: 'fira-sans', label: 'Fira Sans' },
+          { value: 'anton', label: 'Anton (đậm sẵn, kiểu caption)' },
+        ],
+      },
+      {
+        key: 'fontColor',
+        type: 'color',
+        label: 'Màu chữ',
+        default: '#FFFFFF',
+      },
+      {
+        key: 'bold',
+        type: 'switch',
+        label: 'Chữ đậm',
+        default: false,
       },
     ],
   },
@@ -223,12 +244,7 @@ function StepCard({
       toast.success(`Đã bắt đầu: ${step.label}`)
     },
     onError: (error) => {
-      const detail =
-        error && typeof error === 'object' && 'response' in error
-          ? ((error as { response?: { data?: { detail?: string } } }).response?.data
-              ?.detail ?? null)
-          : null
-      toast.error(detail ?? `Không chạy được: ${step.label}`)
+      toast.error(getApiErrorMessage(error, `Không chạy được: ${step.label}`))
     },
   })
 
@@ -282,6 +298,28 @@ function StepCard({
                     >
                       {option.label}
                     </Label>
+                  </>
+                ) : option.type === 'color' ? (
+                  <>
+                    <Label
+                      htmlFor={`${step.kind}-${option.key}`}
+                      className='text-xs font-normal'
+                    >
+                      {option.label}
+                    </Label>
+                    <input
+                      id={`${step.kind}-${option.key}`}
+                      type='color'
+                      className='h-7 w-10 cursor-pointer rounded-md border bg-transparent p-0.5'
+                      value={optionValues[option.key] as string}
+                      disabled={isRunning || run.isPending}
+                      onChange={(e) =>
+                        setOptionValues((prev) => ({
+                          ...prev,
+                          [option.key]: e.target.value,
+                        }))
+                      }
+                    />
                   </>
                 ) : (
                   <>
@@ -370,6 +408,10 @@ export function VideoDetail() {
 
   const queryClient = useQueryClient()
   const [editorOpen, setEditorOpen] = useState(false)
+  // Theo dõi tab đang mở để ẩn khối ảnh bìa/tiêu đề/badge khi ở tab "Dựng
+  // video" — khung preview trong đó đã hiện video rồi, khối này chỉ chiếm
+  // thêm chỗ dọc mà không cần thiết lúc đang sửa.
+  const [activeTab, setActiveTab] = useState('pipeline')
 
   const { data: files, isLoading: filesLoading } = useQuery({
     queryKey: ['files', videoId],
@@ -408,15 +450,7 @@ export function VideoDetail() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <Button asChild variant='ghost' size='sm' className='mb-3 -ms-2 gap-1'>
@@ -436,32 +470,38 @@ export function VideoDetail() {
           </div>
         ) : (
           <>
-            <div className='mb-6 flex gap-4'>
-              <CoverImage
-                src={files?.cover_url ?? detail?.cover_url ?? null}
-                className='hidden w-40 shrink-0 rounded-lg sm:block'
-              />
-              <div className='min-w-0'>
-              <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
-              <div className='mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground'>
-                <Badge variant='outline'>{detail?.status ?? files?.status}</Badge>
-                {detail?.author_name && <span>{detail.author_name}</span>}
-                <span>{formatDuration(detail?.duration_seconds ?? null)}</span>
-                <span>{formatBytes(files?.total_bytes ?? 0)}</span>
-                {detail?.source_url && (
-                  <a
-                    href={detail.source_url}
-                    target='_blank'
-                    rel='noreferrer'
-                    className='inline-flex items-center gap-1 hover:underline'
-                  >
-                    Xem trên Bilibili
-                    <ExternalLink className='size-3' />
-                  </a>
-                )}
+            {activeTab === 'editor' ? (
+              <h1 className='mb-6 truncate text-xl font-semibold tracking-tight'>
+                {title}
+              </h1>
+            ) : (
+              <div className='mb-6 flex gap-4'>
+                <CoverImage
+                  src={files?.cover_url ?? detail?.cover_url ?? null}
+                  className='hidden w-40 shrink-0 rounded-lg sm:block'
+                />
+                <div className='min-w-0'>
+                  <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
+                  <div className='mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground'>
+                    <Badge variant='outline'>{detail?.status ?? files?.status}</Badge>
+                    {detail?.author_name && <span>{detail.author_name}</span>}
+                    <span>{formatDuration(detail?.duration_seconds ?? null)}</span>
+                    <span>{formatBytes(files?.total_bytes ?? 0)}</span>
+                    {detail?.source_url && (
+                      <a
+                        href={detail.source_url}
+                        target='_blank'
+                        rel='noreferrer'
+                        className='inline-flex items-center gap-1 hover:underline'
+                      >
+                        Xem trên Bilibili
+                        <ExternalLink className='size-3' />
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-              </div>
-            </div>
+            )}
 
             {detail?.error_message && (
               <p className='mb-6 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive'>
@@ -472,7 +512,7 @@ export function VideoDetail() {
             {/* 3 tab cho 3 việc khác nhau: chạy pipeline, soát phụ đề, dựng
                 video. Đổ hết lên 1 trang thì thành 7 card ngang hàng, không
                 thấy đâu là việc đang cần làm. */}
-            <Tabs defaultValue='pipeline' className='space-y-6'>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className='space-y-6'>
               <TabsList>
                 <TabsTrigger value='pipeline'>Xử lý</TabsTrigger>
                 <TabsTrigger value='subtitles' disabled={!hasTranscript}>

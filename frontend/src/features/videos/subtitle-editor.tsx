@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Play, RotateCcw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -7,6 +8,7 @@ import {
   updateTranscript,
   type TranscriptSegment,
 } from '@/lib/api'
+import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,13 +19,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-
-function formatTime(seconds: number) {
-  const total = Math.max(0, Math.floor(seconds))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
 
 /** Biến thể file nào có sẵn để xem trước — ưu tiên bản đã xử lý nhiều nhất. */
 function pickVariant(available: { burned: boolean; dubbed: boolean; original: boolean }) {
@@ -41,6 +36,74 @@ type EditorProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
+
+/** Tách riêng + bọc `memo`: gõ chữ ở 1 câu trước đây chạy lại hàm render của
+ * TOÀN BỘ danh sách (vì `.map` nội tuyến trong component cha) — giờ chỉ hàng
+ * đang gõ render lại, các hàng khác giữ nguyên vì props không đổi. */
+const SegmentRow = memo(function SegmentRow({
+  segment,
+  index,
+  isActive,
+  knownSpeakers,
+  onSeek,
+  onUpdate,
+}: {
+  segment: TranscriptSegment
+  index: number
+  isActive: boolean
+  knownSpeakers: string[]
+  onSeek: (seconds: number) => void
+  onUpdate: (index: number, patch: Partial<TranscriptSegment>) => void
+}) {
+  return (
+    <div
+      className={cn(
+        'space-y-1.5 rounded-lg border p-2',
+        isActive && 'border-primary bg-primary/5'
+      )}
+    >
+      <button
+        type='button'
+        onClick={() => onSeek(segment.start)}
+        className='flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground'
+        title='Nhảy tới câu này'
+      >
+        <Play className='size-3' />
+        {formatTime(segment.start)} → {formatTime(segment.end)}
+      </button>
+
+      <Textarea
+        value={segment.text}
+        onChange={(e) => onUpdate(index, { text: e.target.value })}
+        rows={1}
+        className='min-h-0 resize-none text-xs'
+        placeholder='Lời thoại gốc'
+      />
+      <Textarea
+        value={segment.translated_text}
+        onChange={(e) => onUpdate(index, { translated_text: e.target.value })}
+        rows={1}
+        className='min-h-0 resize-none text-xs text-primary'
+        placeholder='Bản dịch tiếng Việt'
+      />
+      {knownSpeakers.length > 0 && (
+        <select
+          value={segment.speaker}
+          onChange={(e) => onUpdate(index, { speaker: e.target.value })}
+          className='h-6 rounded-md border bg-transparent px-1.5 text-[11px]'
+          title='Vai người nói — sửa tay nếu nhận nhầm'
+        >
+          <option value=''>(chưa xác định)</option>
+          {knownSpeakers.map((speaker) => (
+            <option key={speaker} value={speaker}>
+              {speaker}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
+})
 
 /**
  * Bọc ngoài để reset bản nháp bằng `key` thay vì dùng effect đồng bộ state —
@@ -61,6 +124,7 @@ function SubtitleEditorContent({
 }: EditorProps) {
   const queryClient = useQueryClient()
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const listScrollRef = useRef<HTMLDivElement | null>(null)
   const [draft, setDraft] = useState<TranscriptSegment[]>(segments)
   const [currentTime, setCurrentTime] = useState(0)
 
@@ -88,11 +152,30 @@ function SubtitleEditorContent({
     return Array.from(set).sort()
   }, [segments])
 
-  // Câu đang phát — dùng để tô sáng và tự cuộn tới.
+  // Câu đang phát — dùng để tô sáng.
   const activeIndex = useMemo(
     () => draft.findIndex((s) => currentTime >= s.start && currentTime < s.end),
     [draft, currentTime]
   )
+
+  // Ảo hoá danh sách: video dài (faster-whisper ra ~1 segment/vài giây) có thể
+  // ra 500-1000+ câu — dựng hết cả list = 500-1000+ Textarea DOM node cùng lúc.
+  // `measureElement` đo chiều cao thật từng hàng (không cố định, tuỳ nội dung).
+  const rowVirtualizer = useVirtualizer({
+    count: draft.length,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize: () => 130,
+    overscan: 8,
+  })
+
+  // Bẫy đã tự đo được: `ResizeObserver` của virtualizer không nhận đúng kích
+  // thước container ở lần đo ĐẦU TIÊN khi nằm trong Radix Dialog (dialog vẫn
+  // đang định vị/animate lúc đó) — danh sách ra rỗng dù container đã có kích
+  // thước thật. Ép 1 lần re-render ngay sau mount để virtualizer đo lại đúng.
+  const [, forceRemeasure] = useState(0)
+  useEffect(() => {
+    forceRemeasure((n) => n + 1)
+  }, [])
 
   const save = useMutation({
     mutationFn: () => updateTranscript(videoId, draft),
@@ -103,18 +186,21 @@ function SubtitleEditorContent({
     onError: () => toast.error('Không lưu được phụ đề.'),
   })
 
-  function updateSegment(index: number, patch: Partial<TranscriptSegment>) {
+  // useCallback: giữ nguyên identity giữa các lần render để `SegmentRow`
+  // (bọc `memo`) không bị buộc render lại chỉ vì cha render lại — nếu không,
+  // gõ 1 ký tự ở câu này vẫn kéo theo tính lại hàm render của MỌI câu khác.
+  const updateSegment = useCallback((index: number, patch: Partial<TranscriptSegment>) => {
     setDraft((prev) =>
       prev.map((segment, i) => (i === index ? { ...segment, ...patch } : segment))
     )
-  }
+  }, [])
 
-  function seekTo(seconds: number) {
+  const seekTo = useCallback((seconds: number) => {
     const video = videoRef.current
     if (!video) return
     video.currentTime = seconds
     void video.play()
-  }
+  }, [])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -194,62 +280,37 @@ function SubtitleEditorContent({
               </Button>
             </div>
 
-            <div className='min-h-0 flex-1 overflow-y-auto p-3'>
-              <ul className='space-y-2'>
-                {draft.map((segment, index) => (
-                  <li
-                    key={index}
-                    className={cn(
-                      'space-y-1.5 rounded-lg border p-2',
-                      index === activeIndex && 'border-primary bg-primary/5'
-                    )}
+            <div ref={listScrollRef} className='min-h-0 flex-1 overflow-y-auto p-3'>
+              <div
+                role='list'
+                style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    role='listitem'
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                      paddingBottom: 8,
+                    }}
                   >
-                    <button
-                      type='button'
-                      onClick={() => seekTo(segment.start)}
-                      className='flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground'
-                      title='Nhảy tới câu này'
-                    >
-                      <Play className='size-3' />
-                      {formatTime(segment.start)} → {formatTime(segment.end)}
-                    </button>
-
-                    <Textarea
-                      value={segment.text}
-                      onChange={(e) => updateSegment(index, { text: e.target.value })}
-                      rows={1}
-                      className='min-h-0 resize-none text-xs'
-                      placeholder='Lời thoại gốc'
+                    <SegmentRow
+                      segment={draft[virtualRow.index]}
+                      index={virtualRow.index}
+                      isActive={virtualRow.index === activeIndex}
+                      knownSpeakers={knownSpeakers}
+                      onSeek={seekTo}
+                      onUpdate={updateSegment}
                     />
-                    <Textarea
-                      value={segment.translated_text}
-                      onChange={(e) =>
-                        updateSegment(index, { translated_text: e.target.value })
-                      }
-                      rows={1}
-                      className='min-h-0 resize-none text-xs text-primary'
-                      placeholder='Bản dịch tiếng Việt'
-                    />
-                    {knownSpeakers.length > 0 && (
-                      <select
-                        value={segment.speaker}
-                        onChange={(e) =>
-                          updateSegment(index, { speaker: e.target.value })
-                        }
-                        className='h-6 rounded-md border bg-transparent px-1.5 text-[11px]'
-                        title='Vai người nói — sửa tay nếu nhận nhầm'
-                      >
-                        <option value=''>(chưa xác định)</option>
-                        {knownSpeakers.map((speaker) => (
-                          <option key={speaker} value={speaker}>
-                            {speaker}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           </div>
         </div>

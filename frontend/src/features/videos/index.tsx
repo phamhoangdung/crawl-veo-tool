@@ -11,6 +11,7 @@ import {
   getVideoFiles,
   type VideoFiles,
 } from '@/lib/api'
+import { formatBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTaskProgress } from '@/hooks/use-task-progress'
 import { Badge } from '@/components/ui/badge'
@@ -23,23 +24,12 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { CoverImage } from '@/components/cover-image'
 import { TranslatedTitle } from '@/components/translated-title'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { BatchPanel } from './batch-panel'
 
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${bytes} B`
-}
 
 /** Nhãn tiếng Việt cho trạng thái — tên enum của backend không dành cho người đọc. */
 const STATUS_LABELS: Record<string, string> = {
@@ -232,15 +222,7 @@ export function Videos() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4'>

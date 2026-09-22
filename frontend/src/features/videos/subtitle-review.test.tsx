@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from 'vitest-browser-react'
 import '@/styles/index.css'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { TranscriptSegment } from '@/lib/api'
 import { SubtitleReview } from './subtitle-review'
 
@@ -64,5 +64,46 @@ describe('SubtitleReview — kích thước hiển thị', () => {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
       document.documentElement.clientWidth + 1
     )
+  })
+})
+
+describe('SubtitleReview — ảo hoá danh sách', () => {
+  it('danh sách thật sự render được câu (virtualizer đo đúng container)', async () => {
+    await renderReview()
+    // Bẫy đã gặp ở SubtitleEditor: virtualizer có thể đo ra 0 hàng nếu
+    // container chưa kịp có kích thước thật ở lần đo đầu — xác nhận không lặp
+    // lại ở đây bằng chờ có nội dung câu thật, không phải chỉ kiểm tra khung.
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain('Câu phụ đề tiếng Việt số 0')
+    })
+  })
+
+  it('danh sách lớn không dựng hết mọi hàng thành DOM node', async () => {
+    // 32 câu (fixture chuẩn ở trên) có thể vừa khít cửa sổ test cao — dùng
+    // hẳn 400 câu để chắc chắn overscan không thể phủ hết toàn bộ danh sách.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const manySegments: TranscriptSegment[] = Array.from({ length: 400 }, (_, i) => ({
+      start: i * 5,
+      end: i * 5 + 4,
+      text: `第${i}句`,
+      translated_text: `Câu ${i}`,
+      speaker: '',
+    }))
+    await render(
+      <QueryClientProvider client={client}>
+        <SubtitleReview
+          videoId={1}
+          segments={manySegments}
+          hasTranslation
+          variant='dubbed'
+          onEdit={() => {}}
+        />
+      </QueryClientProvider>
+    )
+
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll('ul li').length).toBeGreaterThan(0)
+    })
+    expect(document.querySelectorAll('ul li').length).toBeLessThan(400)
   })
 })

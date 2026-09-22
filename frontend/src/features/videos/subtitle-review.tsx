@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Pencil, Play } from 'lucide-react'
 import { API_BASE_URL, type TranscriptSegment } from '@/lib/api'
+import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,12 +13,40 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-function formatTime(seconds: number) {
-  const total = Math.max(0, Math.floor(seconds))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
+/** Tách riêng + bọc `memo`: `activeIndex` đổi mỗi lần video phát tiếp (nhiều
+ * lần/giây qua `onTimeUpdate`) — không tách thì MỌI hàng render lại theo, dù
+ * chỉ 1 hàng thật sự đổi trạng thái tô sáng. */
+const SegmentButton = memo(function SegmentButton({
+  segment,
+  isActive,
+  onSeek,
+}: {
+  segment: TranscriptSegment
+  isActive: boolean
+  onSeek: (seconds: number) => void
+}) {
+  return (
+    <button
+      type='button'
+      onClick={() => onSeek(segment.start)}
+      className={cn(
+        'flex w-full gap-2 rounded border px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent',
+        isActive && 'border-primary bg-primary/5'
+      )}
+    >
+      <span className='flex w-12 shrink-0 items-center gap-1 text-xs text-muted-foreground tabular-nums'>
+        <Play className='size-2.5' />
+        {formatTime(segment.start)}
+      </span>
+      <span className='min-w-0'>
+        <span className='block'>{segment.text}</span>
+        {segment.translated_text && (
+          <span className='block text-primary'>{segment.translated_text}</span>
+        )}
+      </span>
+    </button>
+  )
+})
 
 /**
  * Soát phụ đề theo ngữ cảnh: video chạy bên trái, danh sách câu bên phải tự cuộn
@@ -45,21 +75,41 @@ export function SubtitleReview({
     [segments, currentTime]
   )
 
+  // Ảo hoá: video dài ra hàng trăm câu, dựng hết cả list = hàng trăm node
+  // cùng lúc dù chỉ vài chục cái lọt trong khung nhìn thấy.
+  const rowVirtualizer = useVirtualizer({
+    count: segments.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 52,
+    overscan: 8,
+  })
+
+  // `ResizeObserver` của virtualizer có thể đo ra 0 hàng ở lần đo đầu tiên nếu
+  // container chưa kịp có kích thước cuối cùng lúc đó (xem SubtitleEditor —
+  // cùng bẫy, xảy ra rõ nhất với danh sách dài). Ép 1 lần re-render ngay sau
+  // mount để virtualizer đo lại đúng.
+  const [, forceRemeasure] = useState(0)
+  useEffect(() => {
+    forceRemeasure((n) => n + 1)
+  }, [])
+
   // Cuộn câu đang phát vào giữa khung. Tắt được vì người dùng có thể muốn đọc
-  // chỗ khác trong lúc video vẫn chạy.
+  // chỗ khác trong lúc video vẫn chạy. Dùng `scrollToIndex` của virtualizer
+  // (không phải `list.children[activeIndex]`) vì khi ảo hoá, con thật sự trong
+  // DOM không còn khớp 1-1 với index của mảng segments nữa.
   useEffect(() => {
     if (!autoScroll || activeIndex < 0) return
-    const list = listRef.current
-    const item = list?.children[activeIndex] as HTMLElement | undefined
-    item?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [activeIndex, autoScroll])
+    rowVirtualizer.scrollToIndex(activeIndex, { align: 'center', behavior: 'smooth' })
+  }, [activeIndex, autoScroll, rowVirtualizer])
 
-  function seekTo(seconds: number) {
+  // useCallback: giữ identity ổn định để `SegmentButton` (bọc `memo`) không bị
+  // buộc render lại mỗi khi cha render lại vì 1 prop hàm mới mỗi lần.
+  const seekTo = useCallback((seconds: number) => {
     const video = videoRef.current
     if (!video) return
     video.currentTime = seconds
     void video.play()
-  }
+  }, [])
 
   return (
     <Card>
@@ -121,30 +171,30 @@ export function SubtitleReview({
           </label>
         </div>
 
-        <ul ref={listRef} className='h-[min(70vh,40rem)] space-y-1.5 overflow-y-auto pe-1'>
-          {segments.map((segment, index) => (
-            <li key={index}>
-              <button
-                type='button'
-                onClick={() => seekTo(segment.start)}
-                className={cn(
-                  'flex w-full gap-2 rounded border px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent',
-                  index === activeIndex && 'border-primary bg-primary/5'
-                )}
+        <ul ref={listRef} className='h-[min(70vh,40rem)] overflow-y-auto pe-1'>
+          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+              <li
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                  paddingBottom: 6,
+                }}
               >
-                <span className='flex w-12 shrink-0 items-center gap-1 text-xs text-muted-foreground tabular-nums'>
-                  <Play className='size-2.5' />
-                  {formatTime(segment.start)}
-                </span>
-                <span className='min-w-0'>
-                  <span className='block'>{segment.text}</span>
-                  {segment.translated_text && (
-                    <span className='block text-primary'>{segment.translated_text}</span>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
+                <SegmentButton
+                  segment={segments[virtualRow.index]}
+                  isActive={virtualRow.index === activeIndex}
+                  onSeek={seekTo}
+                />
+              </li>
+            ))}
+          </div>
         </ul>
       </CardContent>
     </Card>
