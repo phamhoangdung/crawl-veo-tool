@@ -74,6 +74,10 @@ class TrendingPageRead(BaseModel):
     # lẫn cả video không liên quan, KHÔNG phải "đang xu hướng". Frontend hiển
     # thị khác nhau theo từng nguồn, không nối liền như cùng 1 danh sách.
     source: Literal["ranking", "popular", "search"] = "ranking"
+    # Chỉ có ý nghĩa khi source="search" và caller bật translate_keyword — báo
+    # dịch từ khoá thất bại (đã tự rơi về tìm nguyên văn) để UI cảnh báo, giống
+    # `translation_failed` của job crawl (xem crawl_service).
+    translation_failed: bool = False
 
 
 class CategoryStatsRead(BaseModel):

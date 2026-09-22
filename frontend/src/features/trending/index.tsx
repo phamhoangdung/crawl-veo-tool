@@ -1,19 +1,11 @@
-import { Fragment, type FormEvent, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import {
-  ExternalLink,
-  Flame,
-  Loader2,
-  MessageSquare,
-  PlayCircle,
-  SearchIcon,
-  X,
-} from 'lucide-react'
+import { ExternalLink, Flame, Loader2, MessageSquare, PlayCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createJobFromSelection,
@@ -27,28 +19,19 @@ import {
   type TrendingPage,
   type TrendingVideo,
 } from '@/lib/api'
+import { formatDuration } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { CoverImage } from '@/components/cover-image'
-import { Header } from '@/components/layout/header'
+import { KeywordSearchBox } from '@/components/keyword-search-box'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
+import { VideoPreviewDialog } from '@/components/video-preview-dialog'
 import { CategoryChart } from './category-chart'
 import { CategoryPicker } from './category-picker'
 import { formatCompact, formatRelativeDate } from './format'
@@ -60,13 +43,6 @@ function bilibiliVideoUrl(bvid: string) {
 
 function bilibiliEmbedUrl(bvid: string) {
   return `https://player.bilibili.com/player.html?bvid=${bvid}&page=1&high_quality=1&danmaku=0`
-}
-
-function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return `${minutes}:${rest.toString().padStart(2, '0')}`
 }
 
 /**
@@ -135,6 +111,17 @@ function VideoGridPanel({
     }
     return { videos: flat, firstSearchBvid }
   }, [data])
+
+  // Chỉ trang đầu của nguồn "search" có bật dịch mới có field này — ranking/
+  // popular luôn undefined, không hiện cảnh báo nhầm.
+  const translationFailed = data?.pages[0]?.translation_failed ?? false
+  useEffect(() => {
+    if (translationFailed) {
+      toast.warning(
+        'Dịch từ khoá thất bại, đã tìm bằng nguyên văn (dễ ra ít/không có kết quả). Kiểm tra lại API key dịch trong Cài đặt.'
+      )
+    }
+  }, [translationFailed])
 
   const sentinelRef = useInfiniteScroll({
     enabled: Boolean(hasNextPage) && !isFetchingNextPage,
@@ -334,43 +321,13 @@ function VideoGridPanel({
         </p>
       )}
 
-      <Dialog
-        open={previewVideo !== null}
-        onOpenChange={(open) => !open && setPreviewVideo(null)}
-      >
-        <DialogContent className='sm:max-w-3xl'>
-          <DialogHeader>
-            <DialogTitle className='line-clamp-2 pr-6'>
-              {previewVideo?.title}
-            </DialogTitle>
-          </DialogHeader>
-          {previewVideo && (
-            <>
-              {/* Nhúng player chính thức của Bilibili — không tự lấy/giải mã
-                  luồng DASH ở client, tránh phải xử lý referer/token phức tạp
-                  chỉ để xem nhanh. */}
-              <div className='aspect-video w-full overflow-hidden rounded-md bg-black'>
-                <iframe
-                  src={bilibiliEmbedUrl(previewVideo.bvid)}
-                  className='h-full w-full'
-                  allowFullScreen
-                  title={previewVideo.title}
-                />
-              </div>
-              <Button asChild variant='outline' size='sm' className='w-fit'>
-                <a
-                  href={bilibiliVideoUrl(previewVideo.bvid)}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  <ExternalLink className='size-4' />
-                  Mở trên Bilibili
-                </a>
-              </Button>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <VideoPreviewDialog
+        title={previewVideo?.title ?? null}
+        embedUrl={previewVideo ? bilibiliEmbedUrl(previewVideo.bvid) : null}
+        externalUrl={previewVideo ? bilibiliVideoUrl(previewVideo.bvid) : null}
+        externalLabel='Mở trên Bilibili'
+        onClose={() => setPreviewVideo(null)}
+      />
     </div>
   )
 }
@@ -380,6 +337,7 @@ export function Trending() {
   const [platform, setPlatform] = useState<'bilibili' | 'youtube'>('bilibili')
   const [searchInput, setSearchInput] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
+  const [translateKeyword, setTranslateKeyword] = useState(true)
 
   // Chuyên mục chưa dịch (name === name_zh, xem `CategoryRead` — name đã ưu
   // tiên name_vi) sẽ được backend tự dịch NỀN mỗi lần gọi GET /categories
@@ -423,22 +381,10 @@ export function Trending() {
   const activeCategories =
     categories?.filter((c) => selectedRids.includes(c.rid)) ?? []
 
-  function submitSearch(e: FormEvent) {
-    e.preventDefault()
-    setActiveSearch(searchInput.trim())
-  }
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4 flex flex-wrap items-start justify-between gap-3'>
@@ -499,35 +445,24 @@ export function Trending() {
           <YoutubePanel />
         ) : (
           <>
-            <form onSubmit={submitSearch} className='mb-4 flex gap-2'>
-              <Input
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder='Tìm video theo từ khoá bất kỳ, không giới hạn chuyên mục...'
-                className='max-w-md'
-              />
-              <Button
-                type='submit'
-                variant='secondary'
-                disabled={!searchInput.trim()}
-              >
-                <SearchIcon className='size-4' />
-                Tìm
-              </Button>
-              {activeSearch && (
-                <Button
-                  type='button'
-                  variant='ghost'
-                  onClick={() => {
-                    setActiveSearch('')
-                    setSearchInput('')
-                  }}
-                >
-                  <X className='size-4' />
-                  Xoá tìm kiếm
-                </Button>
-              )}
-            </form>
+            <KeywordSearchBox
+              className='mb-4'
+              inputClassName='max-w-md'
+              value={searchInput}
+              onChange={setSearchInput}
+              onSubmit={() => setActiveSearch(searchInput.trim())}
+              placeholder='Tìm video theo từ khoá bất kỳ, không giới hạn chuyên mục...'
+              translateKeyword={translateKeyword}
+              onTranslateKeywordChange={setTranslateKeyword}
+              onClear={
+                activeSearch
+                  ? () => {
+                      setActiveSearch('')
+                      setSearchInput('')
+                    }
+                  : undefined
+              }
+            />
 
             {activeSearch ? (
               <div className='space-y-4'>
@@ -536,8 +471,16 @@ export function Trending() {
                   bảng xếp hạng, có thể lẫn video không liên quan.
                 </p>
                 <VideoGridPanel
-                  queryKey={['trending', 'bilibili', 'search', activeSearch]}
-                  fetchPage={(page) => searchBilibili(activeSearch, page)}
+                  queryKey={[
+                    'trending',
+                    'bilibili',
+                    'search',
+                    activeSearch,
+                    translateKeyword,
+                  ]}
+                  fetchPage={(page) =>
+                    searchBilibili(activeSearch, page, { translateKeyword })
+                  }
                 />
               </div>
             ) : (

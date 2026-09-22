@@ -11,7 +11,7 @@ from app.schemas.trending import (
     TrendingPageRead,
     TrendingVideoRead,
 )
-from app.services import category_service
+from app.services import category_service, crawl_service
 
 logger = logging.getLogger(__name__)
 
@@ -143,12 +143,32 @@ async def get_bilibili_popular_page(page: int = 1, page_size: int = 20) -> Trend
     return TrendingPageRead(videos=videos, page=page, has_more=bool(videos), source="popular")
 
 
-async def search_bilibili(keyword: str, page: int = 1) -> TrendingPageRead:
+async def search_bilibili(
+    db: Session,
+    user_id: int,
+    keyword: str,
+    *,
+    page: int = 1,
+    translate_keyword: bool = False,
+) -> TrendingPageRead:
     """Tìm kiếm tự do theo từ khoá bất kỳ — không giới hạn trong 1 chuyên mục.
     Dùng chung `_from_search_item` với `get_category_page` (cùng nguồn dữ liệu,
-    cùng hạn chế: không có pts/coin, xem docstring `TrendingVideoRead`)."""
+    cùng hạn chế: không có pts/coin, xem docstring `TrendingVideoRead`).
+
+    `translate_keyword` tái dùng đúng logic dịch từ khoá của luồng crawl
+    (`crawl_service.translate_keyword_to_chinese`) — trước đây trang Trending
+    không có tuỳ chọn này dù trang Crawl có, khiến search tiếng Việt gần như
+    luôn ra 0 kết quả trên Bilibili."""
+    translation_failed = False
+    search_keyword = keyword
+    if translate_keyword:
+        search_keyword, translated_ok = await crawl_service.translate_keyword_to_chinese(
+            db, user_id, keyword
+        )
+        translation_failed = not translated_ok
+
     async with BilibiliClient() as client:
-        results = await client.search_videos(keyword, page=page)
+        results = await client.search_videos(search_keyword, page=page)
 
     seen: set[str] = set()
     videos: list[TrendingVideoRead] = []
@@ -159,7 +179,13 @@ async def search_bilibili(keyword: str, page: int = 1) -> TrendingPageRead:
         seen.add(bvid)
         videos.append(_from_search_item(item))
 
-    return TrendingPageRead(videos=videos, page=page, has_more=bool(videos), source="search")
+    return TrendingPageRead(
+        videos=videos,
+        page=page,
+        has_more=bool(videos),
+        source="search",
+        translation_failed=translation_failed,
+    )
 
 
 async def get_bilibili_ranking(rid: int, day: int = 3) -> list[TrendingVideoRead]:

@@ -11,14 +11,10 @@ import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CoverImage } from '@/components/cover-image'
+import { VideoPreviewDialog } from '@/components/video-preview-dialog'
 import { formatCompact, formatRelativeDate } from './format'
 
 function youtubeVideoUrl(videoId: string) {
@@ -88,15 +84,7 @@ function CategoryVideos({ categoryId }: { categoryId: string | null }) {
               className='relative gap-3 overflow-hidden pt-0'
             >
               <div className='group/cover relative'>
-                {video.thumbnail_url ? (
-                  <img
-                    src={video.thumbnail_url}
-                    alt=''
-                    className='aspect-video w-full object-cover'
-                  />
-                ) : (
-                  <div className='aspect-video w-full bg-muted' />
-                )}
+                <CoverImage src={video.thumbnail_url} className='w-full' />
                 <div className='absolute inset-0 flex items-center justify-center gap-2 bg-black/0 opacity-0 transition-all group-hover/cover:bg-black/30 group-hover/cover:opacity-100'>
                   <Button
                     type='button'
@@ -164,40 +152,13 @@ function CategoryVideos({ categoryId }: { categoryId: string | null }) {
         </p>
       )}
 
-      <Dialog
-        open={previewVideo !== null}
-        onOpenChange={(open) => !open && setPreviewVideo(null)}
-      >
-        <DialogContent className='sm:max-w-3xl'>
-          <DialogHeader>
-            <DialogTitle className='line-clamp-2 pr-6'>
-              {previewVideo?.title}
-            </DialogTitle>
-          </DialogHeader>
-          {previewVideo && (
-            <>
-              <div className='aspect-video w-full overflow-hidden rounded-md bg-black'>
-                <iframe
-                  src={youtubeEmbedUrl(previewVideo.video_id)}
-                  className='h-full w-full'
-                  allowFullScreen
-                  title={previewVideo.title}
-                />
-              </div>
-              <Button asChild variant='outline' size='sm' className='w-fit'>
-                <a
-                  href={youtubeVideoUrl(previewVideo.video_id)}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  <ExternalLink className='size-4' />
-                  Mở trên YouTube
-                </a>
-              </Button>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <VideoPreviewDialog
+        title={previewVideo?.title ?? null}
+        embedUrl={previewVideo ? youtubeEmbedUrl(previewVideo.video_id) : null}
+        externalUrl={previewVideo ? youtubeVideoUrl(previewVideo.video_id) : null}
+        externalLabel='Mở trên YouTube'
+        onClose={() => setPreviewVideo(null)}
+      />
     </div>
   )
 }

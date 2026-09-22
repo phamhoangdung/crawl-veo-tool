@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import axios from 'axios'
-import { getDouyinStatus, probeDouyinUrl } from '@/lib/api'
+import { getApiErrorMessage, getDouyinStatus, probeDouyinUrl } from '@/lib/api'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,12 +27,9 @@ export function DouyinPanel() {
 
   const configured = status.data?.configured ?? false
 
-  const errorMessage = (() => {
-    if (!probe.isError) return null
-    if (!axios.isAxiosError(probe.error)) return 'Thăm dò thất bại.'
-    const detail = (probe.error.response?.data as { detail?: string })?.detail
-    return detail ?? 'Thăm dò thất bại.'
-  })()
+  const errorMessage = probe.isError
+    ? getApiErrorMessage(probe.error, 'Thăm dò thất bại.')
+    : null
 
   return (
     <div className='space-y-3'>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import axios from 'axios'
 import { toast } from 'sonner'
 import {
   createCrawlJob,
@@ -10,6 +11,7 @@ import {
   type Platform,
   type VideoRead,
 } from '@/lib/api'
+import { formatDuration } from '@/lib/format'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
 import { useVideoTaskProgress } from '@/hooks/use-task-progress'
 import { Badge } from '@/components/ui/badge'
@@ -21,8 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -31,23 +31,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
+import { KeywordSearchBox } from '@/components/keyword-search-box'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { TaskMonitor } from '@/components/task-monitor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { ThumbPreview } from '@/components/thumb-preview'
 import { TranslatedTitle } from '@/components/translated-title'
 import { DouyinPanel } from './douyin-panel'
 
-function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return `${minutes}:${rest.toString().padStart(2, '0')}`
-}
 
 // Trang Crawl chỉ lo tìm và tải; các bước xử lý (tách lời, dịch, lồng tiếng)
 // nằm ở trang Quản lý file — nơi thấy được file thật.
@@ -91,9 +81,7 @@ export function VideoRow({
     },
     onError: (error) =>
       toast.error(
-        error instanceof Error && 'response' in error
-          ? 'Video này đang được tải.'
-          : 'Không bắt đầu tải được.'
+        axios.isAxiosError(error) ? 'Video này đang được tải.' : 'Không bắt đầu tải được.'
       ),
   })
 
@@ -229,15 +217,7 @@ export function Crawl() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <TaskMonitor />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+      <AppHeader />
 
       <Main>
         <div className='mb-4'>
@@ -279,38 +259,17 @@ export function Crawl() {
               <DouyinPanel />
             ) : (
             <>
-            <form
-              className='space-y-3'
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (keyword.trim()) mutation.mutate(keyword.trim())
-              }}
-            >
-              <div className='flex gap-2'>
-                <Input
-                  placeholder='Nhập từ khoá, vd: ẩm thực'
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  disabled={mutation.isPending}
-                />
-                <Button
-                  type='submit'
-                  disabled={mutation.isPending || !keyword.trim()}
-                >
-                  {mutation.isPending ? 'Đang tìm...' : 'Crawl'}
-                </Button>
-              </div>
-              <label className='flex items-center gap-2 text-sm text-muted-foreground'>
-                <Checkbox
-                  checked={translateKeyword}
-                  onCheckedChange={(checked) =>
-                    setTranslateKeyword(checked === true)
-                  }
-                  disabled={mutation.isPending}
-                />
-                Dịch từ khoá sang tiếng Trung giản thể trước khi tìm
-              </label>
-            </form>
+            <KeywordSearchBox
+              value={keyword}
+              onChange={setKeyword}
+              onSubmit={() => mutation.mutate(keyword.trim())}
+              placeholder='Nhập từ khoá, vd: ẩm thực'
+              submitLabel='Crawl'
+              pendingLabel='Đang tìm...'
+              isPending={mutation.isPending}
+              translateKeyword={translateKeyword}
+              onTranslateKeywordChange={setTranslateKeyword}
+            />
             {mutation.isError && (
               <p className='mt-2 text-sm text-destructive'>
                 Có lỗi khi crawl: {(mutation.error as Error).message}

@@ -90,9 +90,21 @@ async def popular(page: int = 1, page_size: int = 20) -> TrendingPageRead:
 
 
 @router.get("/search", response_model=TrendingPageRead)
-async def search(keyword: str, page: int = 1) -> TrendingPageRead:
-    """Tìm kiếm tự do theo từ khoá bất kỳ — không giới hạn trong 1 chuyên mục."""
-    return await trending_service.search_bilibili(keyword, page=page)
+async def search(
+    keyword: str,
+    page: int = 1,
+    translate_keyword: bool = False,
+    db: Session = Depends(get_db),
+) -> TrendingPageRead:
+    """Tìm kiếm tự do theo từ khoá bất kỳ — không giới hạn trong 1 chuyên mục.
+
+    `translate_keyword` giống hệt tuỳ chọn cùng tên ở trang Crawl (`POST
+    /api/jobs`) — trước đây trang Trending thiếu tuỳ chọn này dù dùng cùng
+    nguồn Bilibili, search tiếng Việt gần như luôn ra 0 kết quả.
+    """
+    return await trending_service.search_bilibili(
+        db, _DEFAULT_USER_ID, keyword, page=page, translate_keyword=translate_keyword
+    )
 
 
 @router.get("/ranking", response_model=list[TrendingVideoRead])

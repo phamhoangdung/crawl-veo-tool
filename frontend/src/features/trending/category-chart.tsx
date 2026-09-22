@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatCompact } from './format'
 
 /** Màu đủ tương phản trong cả nền sáng lẫn tối. */
 const SERIES_COLORS = [
@@ -30,12 +31,6 @@ const SERIES_COLORS = [
   '#5db8e8',
   '#b45de8',
 ]
-
-function formatCompact(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`
-  return String(value)
-}
 
 function formatTime(iso: string) {
   const date = new Date(iso)
