@@ -7,6 +7,20 @@ export const api = axios.create({
   baseURL: API_BASE_URL,
 })
 
+/**
+ * Bóc `detail` từ lỗi HTTP backend trả về (FastAPI `HTTPException` luôn có
+ * dạng `{"detail": "..."}`), rơi về `fallback` khi không phải lỗi axios hoặc
+ * response không có `detail`. Dùng chung thay vì mỗi nơi tự viết lại — trước
+ * đây có nơi dùng `axios.isAxiosError` (đúng), có nơi tự kiểm tra tay kiểu
+ * `'response' in error` (yếu hơn, không loại được lỗi non-HTTP có field
+ * `response` trùng tên tình cờ).
+ */
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (!axios.isAxiosError(error)) return fallback
+  const detail = (error.response?.data as { detail?: string } | undefined)?.detail
+  return detail || fallback
+}
+
 export type Platform = 'bilibili' | 'douyin'
 
 export type VideoStatus =
@@ -166,6 +180,9 @@ export interface TrendingPage {
    * khoá (tên chuyên mục khi lướt quá trang 1, hoặc ô tìm kiếm tự do) — rộng
    * hơn nhưng có thể lẫn video không liên quan. UI hiển thị khác nhau. */
   source: 'ranking' | 'popular' | 'search'
+  /** Chỉ có ý nghĩa khi `source==='search'` và đã bật dịch từ khoá — dịch thất
+   * bại thì đã tự rơi về tìm nguyên văn, báo để cảnh báo người dùng. */
+  translation_failed?: boolean
 }
 
 export interface CategoryStats {
@@ -446,9 +463,13 @@ export async function getPopularPage(page: number) {
 }
 
 /** Tìm kiếm tự do theo từ khoá bất kỳ, không giới hạn 1 chuyên mục. */
-export async function searchBilibili(keyword: string, page: number) {
+export async function searchBilibili(
+  keyword: string,
+  page: number,
+  options: { translateKeyword?: boolean } = {}
+) {
   const { data } = await api.get<TrendingPage>('/api/trending/bilibili/search', {
-    params: { keyword, page },
+    params: { keyword, page, translate_keyword: options.translateKeyword ?? false },
   })
   return data
 }
@@ -555,16 +576,25 @@ export async function dubVideo(videoId: number, keepBackground = true) {
   return data
 }
 
-/** `position='top'` khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc định thì
- * hai lớp chữ chồng lên nhau. */
+export interface BurnSubtitlesOptions {
+  /** `'top'` khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc định thì hai
+   * lớp chữ chồng lên nhau. */
+  position?: 'bottom' | 'top'
+  /** Id font trong `font_service.py` (backend) — bỏ trống dùng font mặc định. */
+  font_family?: string
+  /** Hex không có '#', vd 'FFFFFF'. */
+  font_color?: string
+  bold?: boolean
+}
+
 export async function burnSubtitles(
   videoId: number,
-  position: 'bottom' | 'top' = 'bottom'
+  options: BurnSubtitlesOptions = {}
 ) {
   const { data } = await api.post<VideoDetail>(
     `/api/videos/${videoId}/burn-subtitles`,
     null,
-    { params: { position } }
+    { params: { position: 'bottom', ...options } }
   )
   return data
 }
@@ -786,6 +816,12 @@ export interface TimelineClip {
   box_width?: number
   /** Track ảnh: độ mờ [0,1] — watermark thường để 0.3-0.6. */
   opacity?: number
+  /** Overlay text: id font trong `font_service.py` (backend) — bỏ trống dùng font mặc định. */
+  font_family?: string
+  /** Overlay text: màu chữ hex không có '#', vd 'FFCC00'. */
+  font_color?: string
+  /** Overlay text: chữ đậm. */
+  bold?: boolean
 }
 
 export interface TimelineTrack {
@@ -866,6 +902,24 @@ export async function deleteAsset(assetId: string) {
 /** URL xem trước (ảnh logo, nghe thử nhạc nền) — dùng trực tiếp trong <img>/<audio>. */
 export function assetFileUrl(assetId: string) {
   return `${API_BASE_URL}/api/assets/${assetId}/file`
+}
+
+// --- Font đóng gói sẵn cho phụ đề/watermark text (Phase 13) ---
+// Dùng chung cho Timeline Editor (track overlay) và burn_subtitles.
+
+export interface Font {
+  id: string
+  label: string
+}
+
+export async function getFonts() {
+  const { data } = await api.get<Font[]>('/api/fonts')
+  return data
+}
+
+/** URL file .ttf — dùng làm nguồn `@font-face` để xem trước font trước khi render. */
+export function fontFileUrl(fontId: string) {
+  return `${API_BASE_URL}/api/fonts/${fontId}/file`
 }
 
 export interface AudioStems {

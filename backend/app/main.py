@@ -16,6 +16,7 @@ from app.api import (
     crawl,
     downloads,
     files,
+    fonts,
     health,
     image_proxy,
     library,
@@ -59,6 +60,7 @@ app.include_router(library.router)
 app.include_router(image_proxy.router)
 app.include_router(downloads.router)
 app.include_router(files.router)
+app.include_router(fonts.router)
 app.include_router(batch.router)
 app.include_router(metadata.router)
 app.include_router(assets.router)

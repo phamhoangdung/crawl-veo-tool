@@ -5,7 +5,7 @@ a = Analysis(
     ['app/entrypoint.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('app/resources/fonts', 'app/resources/fonts')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

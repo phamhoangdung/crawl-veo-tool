@@ -225,6 +225,89 @@ class TestRenderTimelineOverlay:
         info = _probe(output)
         assert float(info["format"]["duration"]) == pytest.approx(2.0, abs=0.3)
 
+    @pytest.mark.parametrize("font_id", ["be-vietnam-pro", "barlow", "fira-sans", "anton"])
+    def test_font_family_and_bold_do_not_break_render(
+        self, tmp_path: Path, clip_a: Path, font_id: str
+    ) -> None:
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "overlay",
+                    "clips": [
+                        {
+                            "text": "Phu de mau tuy chinh",
+                            "start": 0,
+                            "end": 2,
+                            "x": 0.5,
+                            "y": 0.9,
+                            "font_family": font_id,
+                            "font_color": "FFCC00",
+                            "bold": True,
+                        }
+                    ],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+    def test_unknown_font_family_falls_back_instead_of_crashing(
+        self, tmp_path: Path, clip_a: Path
+    ) -> None:
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "overlay",
+                    "clips": [
+                        {
+                            "text": "Font la",
+                            "start": 0,
+                            "end": 2,
+                            "x": 0.5,
+                            "y": 0.9,
+                            "font_family": "khong-ton-tai",
+                        }
+                    ],
+                },
+            ]
+        }
+
+        ffmpeg.render_timeline(operations, output)
+
+        assert output.exists()
+
+    def test_invalid_font_color_is_rejected_before_touching_ffmpeg(
+        self, tmp_path: Path, clip_a: Path
+    ) -> None:
+        """`font_color` ghép thẳng vào chuỗi filter `-vf` — dấu ':' không được
+        validate sẽ phá cú pháp filter (delimiter option) thay vì báo lỗi rõ."""
+        output = tmp_path / "out.mp4"
+        operations = {
+            "tracks": [
+                {"type": "video", "clips": [{"source": str(clip_a), "start": 0, "end": 2}]},
+                {
+                    "type": "overlay",
+                    "clips": [
+                        {
+                            "text": "Mau la",
+                            "start": 0,
+                            "end": 2,
+                            "font_color": "0:0000",
+                        }
+                    ],
+                },
+            ]
+        }
+
+        with pytest.raises(ValueError, match="hex 6"):
+            ffmpeg.render_timeline(operations, output)
+
 
 class TestCropVertical:
     def test_crops_to_requested_dimensions(self, tmp_path: Path, clip_a: Path) -> None:
@@ -664,3 +747,98 @@ class TestBurnSubtitlePosition:
             ffmpeg.burn_subtitles(
                 source, srt, tmp_path / "x.mp4", font_size=28, position="middle"
             )
+
+    @staticmethod
+    def _saturation(path: Path) -> float:
+        """SATAVG (độ bão hoà màu trung bình) của khung hình tại giây thứ 1 — chữ
+        trắng/xám cho SATAVG ~0, chữ màu (đỏ...) kéo con số lên rõ rệt. Dùng để
+        verify `font_color` thật sự đổi màu chữ mà không cần OCR."""
+        result = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-nostats",
+                "-ss", "1", "-i", str(path),
+                "-vframes", "1",
+                "-vf", "signalstats,metadata=print",
+                "-f", "null", "-",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            errors="replace",
+        )
+        match = re.search(r"lavfi\.signalstats\.SATAVG=([\d.]+)", result.stderr)
+        assert match, "không đọc được SATAVG từ signalstats"
+        return float(match.group(1))
+
+    def test_font_color_changes_rendered_text_color(
+        self, tmp_path: Path, srt: Path
+    ) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        red_output = tmp_path / "red.mp4"
+        white_output = tmp_path / "white.mp4"
+
+        ffmpeg.burn_subtitles(
+            source, srt, red_output, font_size=48, font_color="FF0000"
+        )
+        ffmpeg.burn_subtitles(
+            source, srt, white_output, font_size=48, font_color="FFFFFF"
+        )
+
+        assert self._saturation(red_output) > self._saturation(white_output) + 2
+
+    def test_invalid_font_color_is_rejected(self, tmp_path: Path, srt: Path) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        with pytest.raises(ValueError, match="hex 6"):
+            ffmpeg.burn_subtitles(
+                source, srt, tmp_path / "x.mp4", font_size=28, font_color="0:0000"
+            )
+
+    @pytest.mark.parametrize("font_id", ["be-vietnam-pro", "barlow", "fira-sans", "anton"])
+    def test_each_bundled_font_renders_without_error(
+        self, tmp_path: Path, srt: Path, font_id: str
+    ) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        output = tmp_path / f"{font_id}.mp4"
+
+        ffmpeg.burn_subtitles(
+            source, srt, output, font_size=28, font_family=font_id, bold=True
+        )
+
+        assert output.exists()
+
+    def test_unknown_font_family_falls_back_instead_of_crashing(
+        self, tmp_path: Path, srt: Path
+    ) -> None:
+        source = tmp_path / "src.mp4"
+        self._make_black_video(source)
+        output = tmp_path / "fallback.mp4"
+
+        ffmpeg.burn_subtitles(source, srt, output, font_size=28, font_family="khong-ton-tai")
+
+        assert output.exists()
+
+
+class TestHexToAssColor:
+    def test_converts_rgb_order_to_ass_bgr_order(self) -> None:
+        # R=0x11 G=0x22 B=0x33 → ASS PrimaryColour đảo thứ tự thành BGR.
+        assert ffmpeg._hex_to_ass_color("112233") == "&H00332211&"
+
+    def test_strips_leading_hash(self) -> None:
+        assert ffmpeg._hex_to_ass_color("#FF0000") == "&H000000FF&"
+
+    def test_invalid_length_raises(self) -> None:
+        with pytest.raises(ValueError, match="hex 6"):
+            ffmpeg._hex_to_ass_color("FFF")
+
+    def test_non_hex_characters_raise(self) -> None:
+        """6 ký tự đúng độ dài nhưng không phải hex (vd chứa ':') — kiểm tra độ
+        dài thôi thì lọt qua rồi phá cú pháp filter ffmpeg khi ghép chuỗi."""
+        with pytest.raises(ValueError, match="hex 6"):
+            ffmpeg._hex_to_ass_color("0:0000")
+
+    def test_non_hex_letters_raise(self) -> None:
+        with pytest.raises(ValueError, match="hex 6"):
+            ffmpeg._hex_to_ass_color("GGZZQQ")

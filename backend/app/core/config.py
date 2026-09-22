@@ -36,6 +36,16 @@ def _storage_dir() -> Path:
     return (app_data_dir() / "storage") if is_frozen() else (BACKEND_DIR / "storage")
 
 
+def resource_dir() -> Path:
+    """Thư mục tài nguyên đóng gói CÙNG mã nguồn (vd font bundle), khác
+    `_storage_dir()` là dữ liệu người dùng tạo ra lúc chạy. PyInstaller giải nén
+    `datas` vào `sys._MEIPASS` lúc chạy — phải đọc từ đó khi đã đóng gói, đọc
+    thẳng `app/resources` cạnh mã nguồn khi chạy dev."""
+    if is_frozen():
+        return Path(getattr(sys, "_MEIPASS", BACKEND_DIR)) / "app" / "resources"
+    return BACKEND_DIR / "app" / "resources"
+
+
 DEFAULT_DB_PATH = (_storage_dir() / "app.db").as_posix()
 
 

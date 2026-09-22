@@ -1,5 +1,7 @@
 import { Eraser, Square, Type } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { getFonts } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -18,16 +20,30 @@ const DEFAULT_LOGO_REGION = { x: 0.72, y: 0.03, width: 0.25, height: 0.12 }
 const DEFAULT_SUBTITLE_REGION = { x: 0.1, y: 0.82, width: 0.8, height: 0.14 }
 
 export function SubtitleBoxPanel() {
-  const operations = useEditorStore((s) => s.operations)
+  // Chỉ subscribe đúng track "overlay" — trước đây lấy cả `s.operations` khiến
+  // panel này render lại mỗi khi bất kỳ track nào đổi (vd kéo watermark),
+  // dù chỉ cần biết mỗi track phụ đề.
+  const overlayIndex = useEditorStore((s) =>
+    s.operations.tracks.findIndex((t) => t.type === 'overlay')
+  )
+  const overlayTrack = useEditorStore(
+    (s) => s.operations.tracks.find((t) => t.type === 'overlay') ?? null
+  )
   const addClipToTrack = useEditorStore((s) => s.addClipToTrack)
-  const updateClip = useEditorStore((s) => s.updateClip)
+  const updateTrackClips = useEditorStore((s) => s.updateTrackClips)
 
-  const overlayIndex = operations.tracks.findIndex((t) => t.type === 'overlay')
-  const overlayTrack =
-    overlayIndex >= 0 ? operations.tracks[overlayIndex] : null
-  // Khung phụ đề áp cho CẢ track: từng câu một khung khác nhau thì phụ đề nhảy
-  // loạn giữa các câu.
+  // Font cố định (không đổi lúc chạy) — không cần refetch lại mỗi lần mở editor.
+  const { data: fonts } = useQuery({
+    queryKey: ['fonts'],
+    queryFn: getFonts,
+    staleTime: Infinity,
+  })
+  // Khung phụ đề + kiểu chữ áp cho CẢ track: từng câu một kiểu khác nhau thì
+  // phụ đề nhảy loạn giữa các câu.
   const currentBoxWidth = overlayTrack?.clips[0]?.box_width ?? 0
+  const currentFontFamily = overlayTrack?.clips[0]?.font_family ?? ''
+  const currentFontColor = overlayTrack?.clips[0]?.font_color ?? 'FFFFFF'
+  const currentBold = overlayTrack?.clips[0]?.bold ?? false
 
   function addBlurRegion(region: typeof DEFAULT_LOGO_REGION, label: string) {
     addClipToTrack('blur', { ...region, strength: 20, mode: 'blur' })
@@ -41,9 +57,15 @@ export function SubtitleBoxPanel() {
       toast.error('Chưa có phụ đề. Bấm "Dùng gợi ý AI" để nạp phụ đề đã dịch.')
       return
     }
-    overlayTrack.clips.forEach((_, clipIndex) => {
-      updateClip(overlayIndex, clipIndex, { box_width: width || undefined })
-    })
+    updateTrackClips(overlayIndex, { box_width: width || undefined })
+  }
+
+  function setStyle(patch: { font_family?: string; font_color?: string; bold?: boolean }) {
+    if (!overlayTrack) {
+      toast.error('Chưa có phụ đề. Bấm "Dùng gợi ý AI" để nạp phụ đề đã dịch.')
+      return
+    }
+    updateTrackClips(overlayIndex, patch)
   }
 
   return (
@@ -119,6 +141,41 @@ export function SubtitleBoxPanel() {
             <Type className='mt-0.5 size-3 shrink-0' />
             Câu dài sẽ tự chia dòng cho vừa khung. Không giới hạn thì câu dài bị
             cắt mất hai đầu.
+          </p>
+        </div>
+
+        <div className='space-y-2'>
+          <Label className='text-xs text-muted-foreground'>Kiểu chữ phụ đề</Label>
+          <div className='flex flex-wrap items-center gap-2'>
+            <select
+              className='h-8 rounded-md border bg-transparent px-2 text-xs'
+              value={currentFontFamily}
+              onChange={(e) => setStyle({ font_family: e.target.value || undefined })}
+            >
+              <option value=''>Mặc định (Be Vietnam Pro)</option>
+              {fonts?.map((font) => (
+                <option key={font.id} value={font.id}>
+                  {font.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type='color'
+              className='h-8 w-10 cursor-pointer rounded-md border bg-transparent p-0.5'
+              value={`#${currentFontColor}`}
+              onChange={(e) => setStyle({ font_color: e.target.value.replace('#', '') })}
+            />
+            <label className='flex items-center gap-1 text-xs'>
+              <input
+                type='checkbox'
+                checked={currentBold}
+                onChange={(e) => setStyle({ bold: e.target.checked })}
+              />
+              Đậm
+            </label>
+          </div>
+          <p className='text-xs text-muted-foreground'>
+            Áp cho toàn bộ câu phụ đề trong track — giữ đồng nhất giữa các câu.
           </p>
         </div>
       </CardContent>

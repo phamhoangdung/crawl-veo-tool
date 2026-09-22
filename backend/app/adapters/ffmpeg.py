@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from app.services import font_service
+
 logger = logging.getLogger(__name__)
 
 # Font mặc định cho drawtext (Phase 13 overlay) — chỉ định trực tiếp `fontfile`
@@ -193,6 +195,32 @@ def extract_last_frame(
 _SUBTITLE_ALIGNMENT = {"bottom": 2, "top": 6}
 
 
+_HEX_COLOR_RE = re.compile(r"^[0-9a-fA-F]{6}$")
+
+
+def _validate_hex_color(hex_color: str) -> str:
+    """`#RRGGBB`/`RRGGBB` → `RRGGBB` đã kiểm tra hợp lệ. Chỉ kiểm tra độ dài là
+    chưa đủ — chuỗi 6 ký tự nhưng không phải hex (vd chứa `:` hay `'`) vẫn lọt
+    qua rồi ghép thẳng vào filter ffmpeg, có thể phá cú pháp `-vf` (dấu `:` là
+    delimiter option của filter) thay vì báo lỗi rõ ràng ở đây."""
+    h = hex_color.lstrip("#")
+    if not _HEX_COLOR_RE.fullmatch(h):
+        raise ValueError(
+            f"Màu phải ở dạng hex 6 ký tự 0-9a-f (vd 'FFFFFF'), nhận: {hex_color!r}"
+        )
+    return h
+
+
+def _hex_to_ass_color(hex_color: str) -> str:
+    """`RRGGBB` (dạng color picker HTML) → `&H00BBGGRR&` (dạng `PrimaryColour`
+    của ASS/SSA — thứ tự BGR, byte đầu là alpha với 00=đục hoàn toàn). Đảo thứ
+    tự byte là lỗi dễ mắc và ffmpeg không báo gì, chỉ ra sai màu lặng lẽ — cùng
+    kiểu bẫy đã gặp với `Alignment` (xem ghi chú Phase 5)."""
+    h = _validate_hex_color(hex_color)
+    r, g, b = h[0:2], h[2:4], h[4:6]
+    return f"&H00{b}{g}{r}&"
+
+
 def burn_subtitles(
     video_path: Path,
     srt_path: Path,
@@ -200,6 +228,9 @@ def burn_subtitles(
     *,
     font_size: int,
     position: str = "bottom",
+    font_family: str | None = None,
+    font_color: str = "FFFFFF",
+    bold: bool = False,
 ) -> None:
     """Burn phụ đề vào video. `font_size` nên chọn theo tỉ lệ khung hình (video dọc 9:16
     cần chữ to hơn tương đối vì khung hẹp) — xem `subtitle_service.pick_font_size_for`.
@@ -207,6 +238,12 @@ def burn_subtitles(
     `position` = "bottom" (mặc định, chuẩn phụ đề thông thường) hoặc "top" — đặt
     lên trên khi video gốc đã có phụ đề cháy sẵn ở dưới, nếu không hai lớp chữ sẽ
     chồng lên nhau.
+
+    `font_family` là id trong `font_service` (None = font mặc định). Dùng
+    `fontsdir` trỏ vào thư mục font đã đóng gói để libass tìm đúng font mà
+    KHÔNG cần dò qua fontconfig hệ thống — cùng lý do `drawtext` phải chỉ định
+    `fontfile` trực tiếp (ghi chú Phase 13): máy thiếu file cấu hình fontconfig
+    thì lỗi lặng lẽ hoặc crash thay vì báo rõ.
 
     Đường dẫn srt phải escape dấu `:` và `\\` cho cú pháp filter của ffmpeg trên Windows.
     """
@@ -218,12 +255,17 @@ def burn_subtitles(
         )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     escaped_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
+    escaped_fontsdir = _escape_filter_path(str(font_service.fonts_dir()))
+    font = font_service.get_font_or_default(font_family)
+    ass_color = _hex_to_ass_color(font_color)
     subprocess.run(
         [
             "ffmpeg", "-y",
             "-i", str(video_path),
             "-vf",
-            f"subtitles='{escaped_srt}':force_style='FontSize={font_size},"
+            f"subtitles='{escaped_srt}':fontsdir='{escaped_fontsdir}':"
+            f"force_style='FontName={font.family_name},FontSize={font_size},"
+            f"PrimaryColour={ass_color},Bold={1 if bold else 0},"
             f"Outline=1,Alignment={alignment}'",
             "-c:a", "copy",
             str(output_path),
@@ -316,7 +358,8 @@ def render_timeline(operations: dict, output_path: Path) -> None:
              "track_start": 0, "volume": 1.0}, ...
         ]},
         {"type": "overlay", "clips": [
-            {"text": "...", "start": 0, "end": 5, "x": 0.5, "y": 0.9, "font_size": 32}, ...
+            {"text": "...", "start": 0, "end": 5, "x": 0.5, "y": 0.9, "font_size": 32,
+             "font_family": "be-vietnam-pro", "font_color": "FFFFFF", "bold": False}, ...  # font_* tuỳ chọn
         ]}
       ]
     }
@@ -450,10 +493,13 @@ def render_timeline(operations: dict, output_path: Path) -> None:
     # --- overlay: chồng drawtext lên track video đã ghép ---
     source_video_width: int | None = None
     if overlay_track and overlay_track.get("clips"):
-        fontfile = _escape_filter_path(_resolve_default_fontfile())
         for i, ov in enumerate(overlay_track["clips"]):
             out_label = f"ov{i}"
             font_size = ov.get("font_size", 32)
+            fontfile = _escape_filter_path(
+                str(font_service.resolve_fontfile(ov.get("font_family"), bold=bool(ov.get("bold"))))
+            )
+            font_color = _validate_hex_color(str(ov.get("font_color", "FFFFFF")))
 
             raw_text = ov["text"]
             # Khung giới hạn phụ đề (`box_width` theo tỉ lệ bề rộng khung hình):
@@ -478,7 +524,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             filter_parts.append(
                 f"[{final_video_label}]drawtext=fontfile='{fontfile}':text='{text}':"
                 f"x={x_expr}:y={y_expr}:"
-                f"fontsize={font_size}:fontcolor=white:box=1:boxcolor=black@0.5:"
+                f"fontsize={font_size}:fontcolor=0x{font_color}:box=1:boxcolor=black@0.5:"
                 f"enable='between(t,{ov['start']},{ov['end']})'[{out_label}]"
             )
             final_video_label = out_label

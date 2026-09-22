@@ -313,7 +313,13 @@ def get_subtitles(video_id: int, db: Session = Depends(get_db)) -> str:
     return subtitle_service.build_bilingual_srt(video.transcript_json or [])
 
 
-def _burn_subtitles_for(video: Video, position: str = "bottom") -> None:
+def _burn_subtitles_for(
+    video: Video,
+    position: str = "bottom",
+    font_family: str | None = None,
+    font_color: str = "FFFFFF",
+    bold: bool = False,
+) -> None:
     """Ghép phụ đề cứng vào bản đã lồng tiếng (ưu tiên) hoặc bản gốc nếu chưa dub."""
     source_path = Path(video.dubbed_path or video.local_path)
     video_dir = source_path.parent
@@ -326,12 +332,25 @@ def _burn_subtitles_for(video: Video, position: str = "bottom") -> None:
 
     output_path = video_dir / "burned.mp4"
     ffmpeg.burn_subtitles(
-        source_path, srt_path, output_path, font_size=font_size, position=position
+        source_path,
+        srt_path,
+        output_path,
+        font_size=font_size,
+        position=position,
+        font_family=font_family,
+        font_color=font_color,
+        bold=bold,
     )
     video.burned_path = str(output_path)
 
 
-def _run_burn(video_id: int, position: str) -> None:
+def _run_burn(
+    video_id: int,
+    position: str,
+    font_family: str | None = None,
+    font_color: str = "FFFFFF",
+    bold: bool = False,
+) -> None:
     """Chạy nền: ffmpeg re-encode để burn phụ đề có thể mất vài phút với video
     dài, không thể giữ request mở suốt thời gian đó (khác hành vi cũ)."""
     with SessionLocal() as db:
@@ -342,7 +361,7 @@ def _run_burn(video_id: int, position: str) -> None:
             )
             return
         try:
-            _burn_subtitles_for(video, position)
+            _burn_subtitles_for(video, position, font_family, font_color, bold)
             db.commit()
             progress_service.finish(video_id, kind="burn")
         except Exception as exc:
@@ -357,6 +376,9 @@ def burn_subtitles(
     video_id: int,
     background: BackgroundTasks,
     position: str = "bottom",
+    font_family: str | None = None,
+    font_color: str = "FFFFFF",
+    bold: bool = False,
     db: Session = Depends(get_db),
 ) -> VideoDetailRead:
     """Ghép phụ đề cứng vào video, chạy nền — trước đây chạy đồng bộ trong request,
@@ -375,7 +397,7 @@ def burn_subtitles(
         raise HTTPException(status_code=400, detail="Chưa có lời thoại để ghép phụ đề.")
 
     progress_service.start(video.id, video.title, kind="burn")
-    background.add_task(_run_burn, video.id, position)
+    background.add_task(_run_burn, video.id, position, font_family, font_color, bold)
     return _to_detail(video)
 
 
