@@ -153,6 +153,21 @@ Lưu ý khi làm: endpoint đang set `status=DOWNLOADING` + `progress_service.st
 - [x] Bắn N video cùng lúc → semaphore giới hạn đúng `download_max_videos` — verify qua test giả lập (xem mục Test ở trên), không lặp lại bằng tay vì cần ≥`download_max_videos+1` video CHƯA tải cùng lúc, cùng lý do trên.
 - [x] `tsc -b` + `eslint` sạch; test frontend/backend pass.
 
+## Cải tiến UX sau phản hồi người dùng thật (2026-09-23)
+
+Sau khi dùng thử thật, người dùng phản hồi 3 điểm:
+1. *"lúc mở popup lên xem video tôi muốn download luôn thì sao"* — popup xem trước trước đó chỉ có "Mở trên Bilibili", không tải được ngay.
+2. *"chọn các video thì phải có 1 cột bên tay trái hiện thị những video đã chọn chứ bắt đi cuộn lại tìm à?"* — chọn nhiều video trong lưới dài rồi phải cuộn lại đầu trang mới thấy đã chọn gì.
+3. *"bấm tải cũng đã tải được đâu"* — điều tra kỹ trước khi kết luận (xem dưới).
+
+**Đã sửa cả 2 điểm UX (1, 2)**:
+- `VideoPreviewDialog` thêm nút "Tải video" ngay trong popup (props mới: `videoId`/`onDownload`/`isDownloading`, tất cả optional — YouTube không đụng gì, giữ nguyên hành vi cũ). Tự đồng bộ %/link "Video của tôi" qua SSE giống hệt thẻ trong lưới. `VideoGridPanel.onSuccess` của mutation tải giờ cũng đồng bộ ngược vào `previewVideo` nếu popup đang mở đúng video đó, để %  hiện ngay trong popup không cần đóng ra mới thấy.
+- Thêm `SelectedVideosCart` — panel bên trái (đúng "cột bên tay trái" người dùng yêu cầu), `sticky` khi cuộn, chỉ hiện khi có video được chọn. Mỗi video có thumbnail + nút bỏ chọn riêng, nút tải hàng loạt nằm ngay trong panel (không cần tìm nút ở đầu trang nữa) — gỡ bỏ nút "Tải N video" cũ khỏi thanh công cụ trên vì giờ trùng chức năng với panel.
+
+**Về điểm 3 ("bấm tải không tải được")**: **không tái hiện được sau khi khởi động lại máy sạch** — tự tay bấm tải qua Playwright (cả nút đơn lẻ trong popup lẫn nút hàng loạt trong panel) đều tải thành công thật, xác nhận qua network request `POST /api/jobs/from-selection` trả 200 + video thật chuyển sang "Đang tải · N%" rồi "Đã có trong thư viện". Nguyên nhân nhiều khả năng là sự cố 2 tiến trình chiếm cổng 8000 đã ghi ở mục dưới — bản build CŨ (trước Phase 20) của `/api/jobs/from-selection` chỉ tạo job KHÔNG tự tải (đúng gốc của toàn bộ Phase 20), nên nếu request khi đó bị tiến trình "ma" trả lời thay vì server mới, sẽ tạo đúng triệu chứng "bấm tải nhưng không thấy gì tải" mà không có lỗi hiện ra (request vẫn 200, chỉ là logic cũ không tự tải). Máy đã khởi động lại sạch, không còn tiến trình ma (`netstat` xác nhận chỉ 1 tiến trình LISTEN cổng 8000) — nếu còn gặp lại triệu chứng này ở phiên sau, nghi ngờ đầu tiên nên là "server có đang chạy đúng bản mới không" trước khi nghi code.
+
+**Verify thật (2026-09-23, sau khi khởi động lại máy — môi trường sạch, không còn tiến trình ma)**: 538 test backend + 228 test frontend pass (9 test mới: 4 nút tải trong popup, 5 `SelectedVideosCart`), `tsc -b`/`eslint` sạch. Playwright xác nhận sống với dữ liệu Bilibili thật: tải hàng loạt từ panel, tải đơn lẻ từ popup, popup tự cập nhật trạng thái sau khi tải xong — tất cả đều hoạt động đúng, có ảnh chụp màn hình đối chiếu.
+
 ## Ghi chú phát sinh khác
 
 ### Windows: `Get-NetTCPConnection`/`Get-Process`/WMI cho PID không nhất quán với Python App Execution Alias (2026-09-22)

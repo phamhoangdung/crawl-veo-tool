@@ -13,6 +13,7 @@ import {
   Loader2,
   MessageSquare,
   PlayCircle,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -217,6 +218,64 @@ export function VideoCard({
 }
 
 /**
+ * Panel "đã chọn" bên trái — phản hồi người dùng: chọn nhiều video trong 1
+ * lưới dài rồi phải cuộn lại từ đầu mới thấy đã chọn những gì. Chỉ hiện khi
+ * có ít nhất 1 video được chọn (không chiếm chỗ lúc không dùng), đứng yên khi
+ * cuộn (`sticky`) để luôn thấy được danh sách + nút tải mà không cần tìm lại.
+ */
+// Export để test riêng (không phải dựng cả VideoGridPanel + mock infinite query).
+export function SelectedVideosCart({
+  videos,
+  onRemove,
+  onClear,
+  onDownload,
+  isDownloading,
+}: {
+  videos: TrendingVideo[]
+  onRemove: (bvid: string) => void
+  onClear: () => void
+  onDownload: () => void
+  isDownloading: boolean
+}) {
+  return (
+    <aside className='sticky top-4 w-full shrink-0 space-y-3 self-start rounded-lg border bg-card p-3 sm:w-64'>
+      <div className='flex items-center justify-between'>
+        <span className='text-sm font-medium'>Đã chọn {videos.length}</span>
+        <button
+          type='button'
+          onClick={onClear}
+          className='text-xs text-muted-foreground hover:underline'
+        >
+          Bỏ chọn tất cả
+        </button>
+      </div>
+
+      <div className='max-h-[50vh] space-y-2 overflow-y-auto pr-1'>
+        {videos.map((v) => (
+          <div key={v.bvid} className='flex items-center gap-2'>
+            <CoverImage src={v.cover_url} className='w-14 shrink-0 rounded' />
+            <p className='line-clamp-2 flex-1 text-xs'>{v.title}</p>
+            <button
+              type='button'
+              title='Bỏ chọn'
+              onClick={() => onRemove(v.bvid)}
+              className='shrink-0 text-muted-foreground hover:text-destructive'
+            >
+              <X className='size-3.5' />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <Button size='sm' className='w-full' disabled={isDownloading} onClick={onDownload}>
+        {isDownloading && <Loader2 className='size-3.5 animate-spin' />}
+        {isDownloading ? 'Đang thêm...' : `Tải ${videos.length} video đã chọn`}
+      </Button>
+    </aside>
+  )
+}
+
+/**
  * Lưới video dùng chung cho 3 nguồn dữ liệu: xếp hạng theo chuyên mục, danh
  * sách phổ biến toàn trang ("Tất cả"), và tìm kiếm tự do — chỉ khác nhau ở
  * hàm tải trang, còn lại (chọn video, xem trước, tải, ngăn cách nguồn) dùng chung.
@@ -305,6 +364,14 @@ export function VideoGridPanel({
         job.videos.map((v) => ({ bvid: v.platform_video_id, video_id: v.id })),
         queryClient
       )
+      // Popup xem trước (nếu đang mở đúng video vừa tải) không đọc từ cache
+      // lưới — đồng bộ tay để thanh % hiện ngay trong popup, không phải đóng
+      // popup ra mới thấy đang tải.
+      setPreviewVideo((prev) => {
+        if (!prev) return prev
+        const match = job.videos.find((v) => v.platform_video_id === prev.bvid)
+        return match ? { ...prev, video_id: match.id, already_in_library: true } : prev
+      })
       setSelected(new Set())
       setDownloadingBvids((prev) => {
         const next = new Set(prev)
@@ -339,6 +406,15 @@ export function VideoGridPanel({
     createJob.mutate([video])
   }
 
+  function downloadMany(picked: TrendingVideo[]) {
+    setDownloadingBvids((prev) => {
+      const next = new Set(prev)
+      for (const v of picked) next.add(v.bvid)
+      return next
+    })
+    createJob.mutate(picked)
+  }
+
   if (isLoading) {
     return (
       <p className='flex items-center gap-2 text-muted-foreground'>
@@ -356,23 +432,6 @@ export function VideoGridPanel({
       <div className='flex flex-wrap items-center gap-3'>
         <Button
           size='sm'
-          disabled={pickedVideos.length === 0 || createJob.isPending}
-          onClick={() => {
-            setDownloadingBvids((prev) => {
-              const next = new Set(prev)
-              for (const v of pickedVideos) next.add(v.bvid)
-              return next
-            })
-            createJob.mutate(pickedVideos)
-          }}
-        >
-          {createJob.isPending && <Loader2 className='size-3.5 animate-spin' />}
-          {createJob.isPending
-            ? 'Đang thêm...'
-            : `Tải ${pickedVideos.length || ''} video đã chọn`.trim()}
-        </Button>
-        <Button
-          size='sm'
           variant='outline'
           onClick={() =>
             setSelected(allSelected ? new Set() : new Set(videos?.map((v) => v.bvid)))
@@ -385,47 +444,64 @@ export function VideoGridPanel({
         )}
       </div>
 
-      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-        {videos?.map((video) => (
-          <Fragment key={video.bvid}>
-            {video.bvid === firstSearchBvid && (
-              <div className='col-span-full -mb-1 flex items-center gap-2 pt-2 text-xs text-muted-foreground'>
-                <div className='h-px flex-1 bg-border' />
-                <span>
-                  Duyệt thêm theo chuyên mục — không phải bảng xếp hạng, có thể lẫn
-                  video không liên quan
-                </span>
-                <div className='h-px flex-1 bg-border' />
-              </div>
-            )}
-            <VideoCard
-              video={video}
-              isPicked={selected.has(video.bvid)}
-              onToggle={() => toggle(video.bvid)}
-              onPreview={() => setPreviewVideo(video)}
-              onDownloadOne={() => downloadOne(video)}
-              downloadingOne={downloadingBvids.has(video.bvid)}
-            />
-          </Fragment>
-        ))}
-      </div>
+      {/* Panel "đã chọn" đứng yên bên trái khi cuộn — phản hồi người dùng:
+          trước đây chọn nhiều video trong lưới dài rồi phải cuộn lại từ đầu
+          mới thấy đã chọn gì, nút tải cũng chỉ nằm trên đầu trang. */}
+      <div className='flex flex-col items-start gap-4 sm:flex-row'>
+        {selected.size > 0 && (
+          <SelectedVideosCart
+            videos={pickedVideos}
+            onRemove={toggle}
+            onClear={() => setSelected(new Set())}
+            onDownload={() => downloadMany(pickedVideos)}
+            isDownloading={createJob.isPending}
+          />
+        )}
 
-      {/* Sentinel: lọt vào tầm nhìn thì tải trang tiếp theo. */}
-      <div ref={sentinelRef} className='h-px' />
+        <div className='min-w-0 flex-1 space-y-4'>
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+            {videos?.map((video) => (
+              <Fragment key={video.bvid}>
+                {video.bvid === firstSearchBvid && (
+                  <div className='col-span-full -mb-1 flex items-center gap-2 pt-2 text-xs text-muted-foreground'>
+                    <div className='h-px flex-1 bg-border' />
+                    <span>
+                      Duyệt thêm theo chuyên mục — không phải bảng xếp hạng, có thể lẫn
+                      video không liên quan
+                    </span>
+                    <div className='h-px flex-1 bg-border' />
+                  </div>
+                )}
+                <VideoCard
+                  video={video}
+                  isPicked={selected.has(video.bvid)}
+                  onToggle={() => toggle(video.bvid)}
+                  onPreview={() => setPreviewVideo(video)}
+                  onDownloadOne={() => downloadOne(video)}
+                  downloadingOne={downloadingBvids.has(video.bvid)}
+                />
+              </Fragment>
+            ))}
+          </div>
 
-      {isFetchingNextPage && (
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className='h-64 w-full rounded-xl' />
-          ))}
+          {/* Sentinel: lọt vào tầm nhìn thì tải trang tiếp theo. */}
+          <div ref={sentinelRef} className='h-px' />
+
+          {isFetchingNextPage && (
+            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} className='h-64 w-full rounded-xl' />
+              ))}
+            </div>
+          )}
+
+          {!hasNextPage && videos.length > 0 && (
+            <p className='py-2 text-center text-sm text-muted-foreground'>
+              Đã hết video trong chuyên mục này.
+            </p>
+          )}
         </div>
-      )}
-
-      {!hasNextPage && videos.length > 0 && (
-        <p className='py-2 text-center text-sm text-muted-foreground'>
-          Đã hết video trong chuyên mục này.
-        </p>
-      )}
+      </div>
 
       <VideoPreviewDialog
         title={previewVideo?.title ?? null}
@@ -438,6 +514,9 @@ export function VideoGridPanel({
         channelName={previewVideo?.author_name ?? null}
         channelIsFollowed={previewVideo?.channel_is_followed ?? false}
         onSelectVideo={setPreviewVideo}
+        videoId={previewVideo?.video_id ?? null}
+        onDownload={() => previewVideo && downloadOne(previewVideo)}
+        isDownloading={previewVideo ? downloadingBvids.has(previewVideo.bvid) : false}
       />
     </div>
   )

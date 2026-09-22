@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { ExternalLink, Loader2, UserCheck, UserPlus } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { Download, ExternalLink, Loader2, UserCheck, UserPlus } from 'lucide-react'
 import { getChannelVideos, getRelatedVideos, type TrendingVideo } from '@/lib/api'
 import { useChannelFollow } from '@/hooks/use-channel-follow'
+import { useVideoTaskProgress } from '@/hooks/use-task-progress'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -79,6 +81,11 @@ function SuggestionRow({
  * ("Video tương tự"/"Video khác trong kênh"). Dải "khác trong kênh" có thể
  * suy giảm (`degraded`) do Bilibili risk-control — hiện đúng thông báo thay vì
  * danh sách rỗng im lặng.
+ *
+ * Phản hồi người dùng: xem xong trong popup mà muốn tải thì phải đóng popup,
+ * tìm lại đúng thẻ trong lưới (có khi đã cuộn mất) mới bấm tải được — quá vòng
+ * vèo. Thêm nút "Tải video" ngay trong popup (`onDownload`), tự đồng bộ %
+ * qua SSE giống hệt thẻ trong lưới nếu `videoId` đã có.
  */
 export function VideoPreviewDialog({
   title,
@@ -91,6 +98,9 @@ export function VideoPreviewDialog({
   channelName = null,
   channelIsFollowed = false,
   onSelectVideo,
+  videoId = null,
+  onDownload,
+  isDownloading = false,
 }: {
   /** `null` = đóng popup. */
   title: string | null
@@ -104,9 +114,16 @@ export function VideoPreviewDialog({
   channelIsFollowed?: boolean
   /** Bấm vào 1 thẻ gợi ý — cha chỉ cần đổi state video đang xem. */
   onSelectVideo?: (video: TrendingVideo) => void
+  /** Id thật trong DB của video ĐANG XEM — `null` = chưa từng tải. Có giá trị
+   * thì tự hiện %/link "Video của tôi" thay vì nút tải (xem `VideoCard`, cùng
+   * pattern). Không truyền (YouTube) = không hiện khối tải trong popup. */
+  videoId?: number | null
+  onDownload?: () => void
+  isDownloading?: boolean
 }) {
   const open = title !== null
   const follow = useChannelFollow('bilibili')
+  const task = useVideoTaskProgress(videoId ?? -1, 'download')
 
   const related = useQuery({
     queryKey: ['trending', 'bilibili', 'related', bvid],
@@ -146,6 +163,28 @@ export function VideoPreviewDialog({
                   {externalLabel}
                 </a>
               </Button>
+
+              {onDownload &&
+                (videoId === null ? (
+                  <Button size='sm' disabled={isDownloading} onClick={onDownload}>
+                    {isDownloading ? (
+                      <Loader2 className='size-3.5 animate-spin' />
+                    ) : (
+                      <Download className='size-3.5' />
+                    )}
+                    Tải video
+                  </Button>
+                ) : task?.is_running ? (
+                  <span className='text-sm tabular-nums text-muted-foreground'>
+                    {task.stage_label} · {Math.round(task.percent)}%
+                  </span>
+                ) : (
+                  <Button asChild size='sm' variant='secondary'>
+                    <Link to='/videos/$videoId' params={{ videoId: String(videoId) }}>
+                      Đã có trong thư viện → Video của tôi
+                    </Link>
+                  </Button>
+                ))}
 
               {bvid && channelId && channelName && (
                 <>

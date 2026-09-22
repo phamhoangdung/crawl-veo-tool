@@ -2,8 +2,36 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from 'vitest-browser-react'
 import { describe, expect, it, vi } from 'vitest'
 import '@/styles/index.css'
-import { getChannelVideos, getRelatedVideos, setChannelFollowed, type TrendingVideo } from '@/lib/api'
+import {
+  getChannelVideos,
+  getRelatedVideos,
+  setChannelFollowed,
+  type TaskProgress,
+  type TrendingVideo,
+} from '@/lib/api'
+import { TASKS_QUERY_KEY } from '@/hooks/use-task-progress'
 import { VideoPreviewDialog } from './video-preview-dialog'
+
+// Mock router: dialog dùng <Link to='/videos/$videoId' params={...}> khi video
+// đã có sẵn — nội suy `$param` giống hành vi thật để href assert được chính xác.
+vi.mock('@tanstack/react-router', async (orig) => ({
+  ...(await orig<typeof import('@tanstack/react-router')>()),
+  Link: ({
+    children,
+    to,
+    params,
+  }: {
+    children?: React.ReactNode
+    to?: string
+    params?: Record<string, string>
+  }) => {
+    const href = Object.entries(params ?? {}).reduce(
+      (path, [key, value]) => path.replace(`$${key}`, value),
+      to ?? ''
+    )
+    return <a href={href}>{children}</a>
+  },
+}))
 
 // ESM không cho spy vào export trong browser mode — phải mock ở tầng module.
 vi.mock('@/lib/api', async (orig) => ({
@@ -249,6 +277,103 @@ describe('VideoPreviewDialog', () => {
       expect(onSelectVideo).toHaveBeenCalledWith(related[0])
       // Vẫn chỉ đúng 1 dialog — không có dialog thứ 2 nào được mở thêm.
       expect(document.querySelectorAll('[role=dialog]').length).toBe(1)
+    })
+  })
+
+  describe('Tải video ngay trong popup', () => {
+    it('videoId=null: hiện nút "Tải video", bấm gọi đúng onDownload', async () => {
+      const onDownload = vi.fn()
+      const screen = await wrap(
+        <VideoPreviewDialog
+          title='Video test'
+          embedUrl='https://player.bilibili.com/player.html?bvid=BV1'
+          externalUrl='https://www.bilibili.com/video/BV1'
+          externalLabel='Mở trên Bilibili'
+          onClose={() => {}}
+          videoId={null}
+          onDownload={onDownload}
+        />
+      )
+
+      await screen.getByRole('button', { name: 'Tải video' }).click()
+      expect(onDownload).toHaveBeenCalledOnce()
+    })
+
+    it('không truyền onDownload: không hiện khối tải nào (YouTube giữ nguyên hành vi cũ)', async () => {
+      await wrap(
+        <VideoPreviewDialog
+          title='Video YouTube'
+          embedUrl='https://www.youtube.com/embed/abc'
+          externalUrl='https://www.youtube.com/watch?v=abc'
+          externalLabel='Mở trên YouTube'
+          onClose={() => {}}
+        />
+      )
+
+      expect(document.body.textContent).not.toContain('Tải video')
+    })
+
+    it('có videoId, task đang chạy: hiện % thay vì nút tải', async () => {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const task: TaskProgress = {
+        video_id: 7,
+        subject_type: 'video',
+        title: 'v',
+        kind: 'download',
+        kind_label: 'Tải video',
+        stage: 'downloading',
+        stage_label: 'Đang tải',
+        percent: 33,
+        current: 33,
+        total: 100,
+        is_running: true,
+        speed_per_sec: 0,
+        error: null,
+      }
+      client.setQueryData(TASKS_QUERY_KEY, [task])
+      client.setQueryData(['tasks', 'stream-connected'], true)
+
+      const screen = await render(
+        <QueryClientProvider client={client}>
+          <VideoPreviewDialog
+            title='Video test'
+            embedUrl='https://player.bilibili.com/player.html?bvid=BV1'
+            externalUrl='https://www.bilibili.com/video/BV1'
+            externalLabel='Mở trên Bilibili'
+            onClose={() => {}}
+            videoId={7}
+            onDownload={() => {}}
+          />
+        </QueryClientProvider>
+      )
+
+      await expect.element(screen.getByText(/Đang tải · 33%/)).toBeInTheDocument()
+      expect(document.querySelectorAll('button').length).toBeGreaterThan(0)
+      // Không còn nút "Tải video" nữa khi đã đang tải.
+      expect(
+        [...document.querySelectorAll('button')].some((b) => b.textContent === 'Tải video')
+      ).toBe(false)
+    })
+
+    it('có videoId, không còn task chạy: hiện link "Video của tôi" đúng id', async () => {
+      await wrap(
+        <VideoPreviewDialog
+          title='Video test'
+          embedUrl='https://player.bilibili.com/player.html?bvid=BV1'
+          externalUrl='https://www.bilibili.com/video/BV1'
+          externalLabel='Mở trên Bilibili'
+          onClose={() => {}}
+          videoId={7}
+          onDownload={() => {}}
+        />
+      )
+
+      const link = document.querySelector('a[href="/videos/7"]')
+      expect(link).not.toBeNull()
+      expect(link!.textContent).toContain('Video của tôi')
+      expect(
+        [...document.querySelectorAll('button')].some((b) => b.textContent === 'Tải video')
+      ).toBe(false)
     })
   })
 })

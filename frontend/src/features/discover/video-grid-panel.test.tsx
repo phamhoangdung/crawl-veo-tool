@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import '@/styles/index.css'
 import type { TaskProgress, TrendingVideo } from '@/lib/api'
 import { TASKS_QUERY_KEY } from '@/hooks/use-task-progress'
-import { VideoCard } from './video-grid-panel'
+import { SelectedVideosCart, VideoCard } from './video-grid-panel'
 
 // Mock router: VideoCard dùng <Link to='/videos/$videoId' params={...}> —
 // nội suy `$param` giống hành vi thật để href assert được chính xác.
@@ -122,5 +122,77 @@ describe('VideoCard — trạng thái tải (Phase 20)', () => {
     const link = document.querySelector('a[href="/videos/7"]')
     expect(link).not.toBeNull()
     expect(link!.textContent).toContain('Đã có trong thư viện')
+  })
+})
+
+describe('SelectedVideosCart — phản hồi người dùng: chọn nhiều video trong lưới dài không phải cuộn lại tìm', () => {
+  async function renderCart(overrides: {
+    videos?: TrendingVideo[]
+    onRemove?: (bvid: string) => void
+    onClear?: () => void
+    onDownload?: () => void
+    isDownloading?: boolean
+  } = {}) {
+    return render(
+      <SelectedVideosCart
+        videos={overrides.videos ?? [video({ bvid: 'BV1' }), video({ bvid: 'BV2' })]}
+        onRemove={overrides.onRemove ?? (() => {})}
+        onClear={overrides.onClear ?? (() => {})}
+        onDownload={overrides.onDownload ?? (() => {})}
+        isDownloading={overrides.isDownloading ?? false}
+      />
+    )
+  }
+
+  it('hiện đúng số lượng + tiêu đề từng video đã chọn', async () => {
+    await renderCart({
+      videos: [video({ bvid: 'BV1', title: 'video một' }), video({ bvid: 'BV2', title: 'video hai' })],
+    })
+
+    expect(document.body.textContent).toContain('Đã chọn 2')
+    expect(document.body.textContent).toContain('video một')
+    expect(document.body.textContent).toContain('video hai')
+  })
+
+  it('bấm nút X ở 1 video gọi onRemove đúng bvid, không đụng video khác', async () => {
+    const onRemove = vi.fn()
+    const screen = await renderCart({
+      videos: [video({ bvid: 'BV1', title: 'video một' }), video({ bvid: 'BV2', title: 'video hai' })],
+      onRemove,
+    })
+
+    await screen.getByTitle('Bỏ chọn').first().click()
+
+    expect(onRemove).toHaveBeenCalledOnce()
+    expect(onRemove).toHaveBeenCalledWith('BV1')
+  })
+
+  it('bấm "Bỏ chọn tất cả" gọi onClear', async () => {
+    const onClear = vi.fn()
+    const screen = await renderCart({ onClear })
+
+    await screen.getByText('Bỏ chọn tất cả').click()
+    expect(onClear).toHaveBeenCalledOnce()
+  })
+
+  it('bấm nút tải gọi onDownload, hiện đúng số lượng trong nhãn nút', async () => {
+    const onDownload = vi.fn()
+    const screen = await renderCart({
+      videos: [video({ bvid: 'BV1' }), video({ bvid: 'BV2' }), video({ bvid: 'BV3' })],
+      onDownload,
+    })
+
+    const btn = screen.getByRole('button', { name: /Tải 3 video đã chọn/ })
+    await expect.element(btn).toBeInTheDocument()
+    await btn.click()
+    expect(onDownload).toHaveBeenCalledOnce()
+  })
+
+  it('isDownloading=true: nút tải bị disable, không gọi được onDownload', async () => {
+    const onDownload = vi.fn()
+    const screen = await renderCart({ isDownloading: true, onDownload })
+
+    const btn = screen.getByRole('button', { name: /Đang thêm/ })
+    await expect.element(btn).toBeDisabled()
   })
 })
