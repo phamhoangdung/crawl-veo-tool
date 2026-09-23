@@ -25,11 +25,11 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CoverImage } from '@/components/cover-image'
-import { TranslatedTitle } from '@/components/translated-title'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { TranslatedTitle } from '@/components/translated-title'
 import { BatchPanel } from './batch-panel'
-
+import { ImportPanel } from './import-panel'
 
 /** Nhãn tiếng Việt cho trạng thái — tên enum của backend không dành cho người đọc. */
 const STATUS_LABELS: Record<string, string> = {
@@ -121,15 +121,21 @@ function VideoCard({ item }: { item: VideoFiles }) {
                 <div key={task.kind} className='space-y-0.5'>
                   <p className='text-[11px] text-muted-foreground'>
                     {task.kind_label}
-                    {task.total ? ` · ${task.percent}%` : ` · ${task.stage_label}`}
+                    {task.total
+                      ? ` · ${task.percent}%`
+                      : ` · ${task.stage_label}`}
                   </p>
                   <div className='h-1 overflow-hidden rounded-full bg-muted'>
                     <div
                       className={cn(
                         'h-full rounded-full bg-primary',
-                        task.total ? 'transition-[width] duration-300' : 'animate-pulse'
+                        task.total
+                          ? 'transition-[width] duration-300'
+                          : 'animate-pulse'
                       )}
-                      style={{ width: task.total ? `${task.percent}%` : '100%' }}
+                      style={{
+                        width: task.total ? `${task.percent}%` : '100%',
+                      }}
                     />
                   </div>
                 </div>
@@ -139,7 +145,10 @@ function VideoCard({ item }: { item: VideoFiles }) {
 
           <div className='flex items-center gap-2'>
             <Button asChild size='sm' variant='outline' className='h-7 text-xs'>
-              <Link to='/videos/$videoId' params={{ videoId: String(item.video_id) }}>
+              <Link
+                to='/videos/$videoId'
+                params={{ videoId: String(item.video_id) }}
+              >
                 Chi tiết & xử lý
               </Link>
             </Button>
@@ -228,59 +237,69 @@ export function Videos() {
         <div className='mb-4'>
           <h1 className='text-2xl font-bold tracking-tight'>Video của tôi</h1>
           <p className='text-muted-foreground'>
-            Video đã tải về máy. Bấm vào từng video để tách lời, dịch và lồng tiếng.
+            Video đã tải về máy. Bấm vào từng video để tách lời, dịch và lồng
+            tiếng.
           </p>
         </div>
 
-        {summary && (
-          <Card className='mb-6'>
-            <CardHeader>
-              <CardTitle className='text-base'>Dung lượng</CardTitle>
-              <CardDescription>
-                <code className='rounded bg-muted px-1.5 py-0.5 text-xs'>
-                  {summary.storage_root}
-                </code>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-wrap items-center gap-6'>
-              <div>
-                <p className='text-2xl font-semibold'>{formatBytes(summary.total_bytes)}</p>
-                <p className='text-xs text-muted-foreground'>
-                  {summary.video_count} video đã tải
-                </p>
-              </div>
-              {summary.orphan_bytes > 0 && (
-                <div>
-                  <p className='text-2xl font-semibold text-amber-600'>
-                    {formatBytes(summary.orphan_bytes)}
-                  </p>
-                  <p className='text-xs text-muted-foreground'>File rác không dùng tới</p>
-                </div>
-              )}
-              <div className='ms-auto flex gap-2'>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={cleanupJobs.isPending}
-                  title='Xoá hẳn thư mục của các job cũ hơn 30 ngày (video gốc, audio, bản dubbed...)'
-                  onClick={() => cleanupJobs.mutate()}
-                >
-                  {cleanupJobs.isPending ? 'Đang dọn...' : 'Dọn job cũ'}
-                </Button>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={cleanup.isPending}
-                  onClick={() => cleanup.mutate()}
-                >
-                  {cleanup.isPending ? 'Đang dọn...' : 'Dọn file rác'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <div className='mb-6 grid items-start gap-4 lg:grid-cols-2'>
+          <div className='space-y-4'>
+            {summary && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className='text-base'>Dung lượng</CardTitle>
+                  <CardDescription>
+                    <code className='rounded bg-muted px-1.5 py-0.5 text-xs'>
+                      {summary.storage_root}
+                    </code>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className='flex flex-wrap items-center gap-6'>
+                  <div>
+                    <p className='text-2xl font-semibold'>
+                      {formatBytes(summary.total_bytes)}
+                    </p>
+                    <p className='text-xs text-muted-foreground'>
+                      {summary.video_count} video đã tải
+                    </p>
+                  </div>
+                  {summary.orphan_bytes > 0 && (
+                    <div>
+                      <p className='text-2xl font-semibold text-amber-600'>
+                        {formatBytes(summary.orphan_bytes)}
+                      </p>
+                      <p className='text-xs text-muted-foreground'>
+                        File rác không dùng tới
+                      </p>
+                    </div>
+                  )}
+                  <div className='ms-auto flex gap-2'>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={cleanupJobs.isPending}
+                      title='Xoá hẳn thư mục của các job cũ hơn 30 ngày (video gốc, audio, bản dubbed...)'
+                      onClick={() => cleanupJobs.mutate()}
+                    >
+                      {cleanupJobs.isPending ? 'Đang dọn...' : 'Dọn job cũ'}
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={cleanup.isPending}
+                      onClick={() => cleanup.mutate()}
+                    >
+                      {cleanup.isPending ? 'Đang dọn...' : 'Dọn file rác'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-        <BatchPanel />
+            <BatchPanel />
+          </div>
+          <ImportPanel />
+        </div>
 
         {isLoading && (
           <div className='grid gap-4 lg:grid-cols-2'>
@@ -292,11 +311,12 @@ export function Videos() {
 
         {items && items.length === 0 && (
           <p className='text-muted-foreground'>
-            Chưa có video nào. Sang trang Crawl hoặc Trending để tải về.
+            Chưa có video nào. Nhập video từ máy ở trên, hoặc sang màn Khám phá
+            để tải về.
           </p>
         )}
 
-        <div className='grid gap-4 lg:grid-cols-2'>
+        <div className='grid gap-4 lg:grid-cols-2 2xl:grid-cols-3'>
           {items?.map((item) => (
             <VideoCard key={item.video_id} item={item} />
           ))}

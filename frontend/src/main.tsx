@@ -7,18 +7,20 @@ import {
   QueryClientProvider,
 } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
+// Styles
+// CSS của React Flow phải nạp toàn cục — thiếu nó thì canvas mất bố cục
+// (node chồng nhau, không thấy đường nối) mà không báo lỗi gì.
+import '@xyflow/react/dist/style.css'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
+import { BootGate } from '@/components/boot-gate'
+import { PageLoader } from '@/components/brand-loader'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
-// Styles
-// CSS của React Flow phải nạp toàn cục — thiếu nó thì canvas mất bố cục
-// (node chồng nhau, không thấy đường nối) mà không báo lỗi gì.
-import '@xyflow/react/dist/style.css'
 import './styles/index.css'
 
 const queryClient = new QueryClient({
@@ -81,6 +83,7 @@ const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+  defaultPendingComponent: PageLoader,
 })
 
 // Register the router instance for type safety
@@ -100,7 +103,9 @@ if (!rootElement.innerHTML) {
         <ThemeProvider>
           <FontProvider>
             <DirectionProvider>
-              <RouterProvider router={router} />
+              <BootGate>
+                <RouterProvider router={router} />
+              </BootGate>
             </DirectionProvider>
           </FontProvider>
         </ThemeProvider>

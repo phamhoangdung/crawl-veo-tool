@@ -17,11 +17,12 @@ export const api = axios.create({
  */
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (!axios.isAxiosError(error)) return fallback
-  const detail = (error.response?.data as { detail?: string } | undefined)?.detail
+  const detail = (error.response?.data as { detail?: string } | undefined)
+    ?.detail
   return detail || fallback
 }
 
-export type Platform = 'bilibili' | 'douyin'
+export type Platform = 'bilibili' | 'douyin' | 'local'
 
 export type VideoStatus =
   | 'queued'
@@ -469,9 +470,12 @@ export async function getCategoryPage(rid: number, page: number) {
 
 /** Danh sách phổ biến toàn trang Bilibili (tab "Tất cả") — có phân trang thật. */
 export async function getPopularPage(page: number) {
-  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/popular', {
-    params: { page },
-  })
+  const { data } = await api.get<TrendingPage>(
+    '/api/trending/bilibili/popular',
+    {
+      params: { page },
+    }
+  )
   return data
 }
 
@@ -481,17 +485,27 @@ export async function searchBilibili(
   page: number,
   options: { translateKeyword?: boolean } = {}
 ) {
-  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/search', {
-    params: { keyword, page, translate_keyword: options.translateKeyword ?? false },
-  })
+  const { data } = await api.get<TrendingPage>(
+    '/api/trending/bilibili/search',
+    {
+      params: {
+        keyword,
+        page,
+        translate_keyword: options.translateKeyword ?? false,
+      },
+    }
+  )
   return data
 }
 
 /** Video liên quan (Phase 22) — dùng cho dải "Video tương tự" trong popup xem trước. */
 export async function getRelatedVideos(bvid: string) {
-  const { data } = await api.get<TrendingPage>('/api/trending/bilibili/related', {
-    params: { bvid },
-  })
+  const { data } = await api.get<TrendingPage>(
+    '/api/trending/bilibili/related',
+    {
+      params: { bvid },
+    }
+  )
   return data
 }
 
@@ -603,9 +617,7 @@ export async function updateTranscript(
 /** Nhận diện có bao nhiêu người nói khác nhau, gắn nhãn cho từng đoạn thoại —
  * không bắt buộc, bỏ qua thì `dubVideo` vẫn chạy bằng 1 giọng chung. */
 export async function diarizeVideo(videoId: number) {
-  const { data } = await api.post<VideoDetail>(
-    `/api/videos/${videoId}/diarize`
-  )
+  const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/diarize`)
   return data
 }
 
@@ -1200,9 +1212,12 @@ export async function deleteCharacterReference(referenceId: number) {
 }
 
 export async function getGeneratedAssets(assetType?: GeneratedAssetType) {
-  const { data } = await api.get<GeneratedAssetRead[]>('/api/ai-studio/assets', {
-    params: assetType ? { asset_type: assetType } : undefined,
-  })
+  const { data } = await api.get<GeneratedAssetRead[]>(
+    '/api/ai-studio/assets',
+    {
+      params: assetType ? { asset_type: assetType } : undefined,
+    }
+  )
   return data
 }
 
@@ -1310,7 +1325,9 @@ export async function getGenerationJob(jobId: string) {
 }
 
 export async function listGenerationJobs() {
-  const { data } = await api.get<GenerationJob[]>('/api/ai-studio/generate/jobs')
+  const { data } = await api.get<GenerationJob[]>(
+    '/api/ai-studio/generate/jobs'
+  )
   return data
 }
 
@@ -1332,9 +1349,11 @@ export async function waitForGenerationJob(
 
 /** Đưa clip/ảnh đã sinh vào kho file dùng chung để ghép trong Timeline Editor. */
 export async function exportGeneratedAssetToLibrary(assetId: number) {
-  const { data } = await api.post<{ asset_id: string; name: string; kind: string }>(
-    `/api/ai-studio/assets/${assetId}/export-to-library`
-  )
+  const { data } = await api.post<{
+    asset_id: string
+    name: string
+    kind: string
+  }>(`/api/ai-studio/assets/${assetId}/export-to-library`)
   return data
 }
 
@@ -1371,9 +1390,7 @@ export interface McpTokenCreated {
 }
 
 export async function getMcpScopes() {
-  const { data } = await api.get<{ scopes: string[] }>(
-    '/api/mcp-tokens/scopes'
-  )
+  const { data } = await api.get<{ scopes: string[] }>('/api/mcp-tokens/scopes')
   return data.scopes
 }
 
@@ -1462,7 +1479,10 @@ export async function addScene(
 ) {
   const { data } = await api.post<SceneRead>(
     `/api/projects/${projectId}/scenes`,
-    { prompt: payload.prompt ?? '', after_scene_id: payload.after_scene_id ?? null }
+    {
+      prompt: payload.prompt ?? '',
+      after_scene_id: payload.after_scene_id ?? null,
+    }
   )
   return data
 }
@@ -1479,7 +1499,10 @@ export async function updateScene(
     ken_burns_motion?: string
   }
 ) {
-  const { data } = await api.patch<SceneRead>(`/api/projects/scenes/${sceneId}`, patch)
+  const { data } = await api.patch<SceneRead>(
+    `/api/projects/scenes/${sceneId}`,
+    patch
+  )
   return data
 }
 
@@ -1488,9 +1511,12 @@ export async function deleteScene(sceneId: number) {
 }
 
 export async function reorderScenes(projectId: number, sceneIds: number[]) {
-  const { data } = await api.post<SceneRead[]>(`/api/projects/${projectId}/reorder`, {
-    scene_ids: sceneIds,
-  })
+  const { data } = await api.post<SceneRead[]>(
+    `/api/projects/${projectId}/reorder`,
+    {
+      scene_ids: sceneIds,
+    }
+  )
   return data
 }
 
@@ -1499,10 +1525,16 @@ export async function saveProjectCanvas(
   positions: { scene_id: number; x: number; y: number }[],
   viewport?: Record<string, number> | null
 ) {
-  await api.put(`/api/projects/${projectId}/canvas`, { positions, viewport: viewport ?? null })
+  await api.put(`/api/projects/${projectId}/canvas`, {
+    positions,
+    viewport: viewport ?? null,
+  })
 }
 
-export async function generateProjectScene(sceneId: number, confirmExpensive = false) {
+export async function generateProjectScene(
+  sceneId: number,
+  confirmExpensive = false
+) {
   const { data } = await api.post<SceneRead>(
     `/api/projects/scenes/${sceneId}/generate`,
     null,
@@ -1539,9 +1571,11 @@ export async function startProjectRender(projectId: number) {
 
 /** Đưa video đã dựng vào kho dùng chung để mở trong Timeline Editor. */
 export async function exportProjectToLibrary(projectId: number) {
-  const { data } = await api.post<{ asset_id: string; name: string; kind: string }>(
-    `/api/projects/${projectId}/export-to-library`
-  )
+  const { data } = await api.post<{
+    asset_id: string
+    name: string
+    kind: string
+  }>(`/api/projects/${projectId}/export-to-library`)
   return data
 }
 
@@ -1622,5 +1656,39 @@ export async function getAppSettings() {
 
 export async function updateAppSettings(patch: Partial<AppSettings>) {
   const { data } = await api.put<AppSettings>('/api/settings', patch)
+  return data
+}
+
+export type ImportedVideo = {
+  id: number
+  title: string
+  status: string
+  duration_seconds: number | null
+  cover_url: string | null
+}
+
+/** Nhập 1 file video có sẵn trên máy. `onProgress` nhận 0-100 theo số byte đã gửi. */
+export async function importLocalVideo(
+  file: File,
+  onProgress?: (percent: number) => void
+) {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await api.post<ImportedVideo>('/api/videos/import', form, {
+    // File lớn có thể mất nhiều phút — không để axios tự cắt bằng timeout mặc định.
+    timeout: 0,
+    onUploadProgress: (e) => {
+      if (e.total) onProgress?.((e.loaded / e.total) * 100)
+    },
+  })
+  return data
+}
+
+export type SystemLogs = { path: string; exists: boolean; lines: string[] }
+
+export async function getSystemLogs(lines = 500) {
+  const { data } = await api.get<SystemLogs>('/api/system/logs', {
+    params: { lines },
+  })
   return data
 }

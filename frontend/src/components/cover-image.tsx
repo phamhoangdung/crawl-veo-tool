@@ -7,7 +7,9 @@ import { cn } from '@/lib/utils'
  * mixed-content khi trang chạy qua HTTPS; CDN của họ phục vụ cả hai.
  */
 function toHttps(url: string) {
-  return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url
+  return url.startsWith('http://')
+    ? `https://${url.slice('http://'.length)}`
+    : url
 }
 
 /**
@@ -26,6 +28,18 @@ export function CoverImage({
 
   if (!src) {
     return <div className={cn('aspect-video bg-muted', className)} />
+  }
+
+  // Ảnh bìa của video nhập từ máy do backend phục vụ (đường dẫn tương đối).
+  if (src.startsWith('/')) {
+    return (
+      <img
+        src={`${API_BASE_URL}${src}`}
+        alt=''
+        loading='lazy'
+        className={cn('aspect-video bg-muted object-cover', className)}
+      />
+    )
   }
 
   const directUrl = toHttps(src)

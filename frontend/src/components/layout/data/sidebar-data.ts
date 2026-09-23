@@ -8,7 +8,6 @@ import {
   Palette,
   Settings,
   Sparkles,
-  UserCog,
   TrendingUp,
   BarChart3,
   Workflow,
@@ -82,11 +81,6 @@ export const sidebarData: SidebarData = {
           title: 'Cài đặt',
           icon: Settings,
           items: [
-            {
-              title: 'Tài khoản',
-              url: '/settings/account',
-              icon: UserCog,
-            },
             {
               title: 'Giao diện',
               url: '/settings/appearance',

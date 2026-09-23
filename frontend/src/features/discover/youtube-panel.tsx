@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ExternalLink, Loader2, PlayCircle } from 'lucide-react'
+import { ExternalLink, PlayCircle } from 'lucide-react'
 import {
   getYoutubeCategories,
   getYoutubeStatus,
@@ -9,6 +9,7 @@ import {
 } from '@/lib/api'
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { BrandLoader } from '@/components/brand-loader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -57,12 +58,7 @@ function CategoryVideos({ categoryId }: { categoryId: string | null }) {
   })
 
   if (isLoading) {
-    return (
-      <p className='flex items-center gap-2 text-muted-foreground'>
-        <Loader2 className='size-4 animate-spin' />
-        Đang tải...
-      </p>
-    )
+    return <BrandLoader size='sm' />
   }
 
   if (isError) {
@@ -177,12 +173,7 @@ export function YoutubePanel() {
   })
 
   if (status.isLoading) {
-    return (
-      <p className='flex items-center gap-2 text-muted-foreground'>
-        <Loader2 className='size-4 animate-spin' />
-        Đang tải...
-      </p>
-    )
+    return <BrandLoader size='sm' />
   }
 
   if (!status.data?.configured) {

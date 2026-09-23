@@ -1,21 +1,11 @@
 import { Outlet } from '@tanstack/react-router'
-import { Monitor, Bell, Download, Palette, Wrench, UserCog } from 'lucide-react'
+import { Monitor, Bell, Download, Palette } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { SidebarNav } from './components/sidebar-nav'
 
 const sidebarNavItems = [
-  {
-    title: 'Profile',
-    href: '/settings',
-    icon: <UserCog size={18} />,
-  },
-  {
-    title: 'Account',
-    href: '/settings/account',
-    icon: <Wrench size={18} />,
-  },
   {
     title: 'Appearance',
     href: '/settings/appearance',

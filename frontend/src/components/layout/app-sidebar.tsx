@@ -6,10 +6,10 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { AppBrand } from './app-brand'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
-import { NavUser } from './nav-user'
-import { AppBrand } from './app-brand'
+import { SidebarCredit } from './sidebar-credit'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
@@ -24,7 +24,8 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={sidebarData.user} />
+        {/* Khối tài khoản (NavUser) tạm ẩn — bản local 1 người dùng. */}
+        <SidebarCredit />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

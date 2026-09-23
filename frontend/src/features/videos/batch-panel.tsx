@@ -112,7 +112,7 @@ export function BatchPanel() {
       : 0
 
   return (
-    <Card className='mb-6'>
+    <Card>
       <CardHeader>
         <CardTitle className='text-base'>Chạy hàng loạt</CardTitle>
         <CardDescription>

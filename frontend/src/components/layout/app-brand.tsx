@@ -17,8 +17,8 @@ export function AppBrand() {
       <SidebarMenuItem>
         <SidebarMenuButton size='lg' asChild>
           <Link to='/'>
-            <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground'>
-              <Logo className='size-4' />
+            <div className='flex aspect-square size-8 items-center justify-center'>
+              <Logo className='size-8' />
             </div>
             <div className='grid flex-1 text-start text-sm leading-tight'>
               <span className='truncate font-semibold'>{APP_NAME}</span>

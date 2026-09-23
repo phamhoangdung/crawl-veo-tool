@@ -12,6 +12,10 @@ import {
   searchBilibili,
   setFollowedCategories,
 } from '@/lib/api'
+import {
+  CATEGORIES_QUERY_KEY,
+  FOLLOWED_CATEGORIES_QUERY_KEY,
+} from '@/lib/query-keys'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { KeywordSearchBox } from '@/components/keyword-search-box'
@@ -35,7 +39,9 @@ import { YoutubePanel } from './youtube-panel'
  */
 export function Discover() {
   const queryClient = useQueryClient()
-  const [platform, setPlatform] = useState<'bilibili' | 'youtube' | 'douyin'>('bilibili')
+  const [platform, setPlatform] = useState<'bilibili' | 'youtube' | 'douyin'>(
+    'bilibili'
+  )
   const [searchInput, setSearchInput] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
   const [translateKeyword, setTranslateKeyword] = useState(true)
@@ -44,10 +50,11 @@ export function Discover() {
   // gọi GET /categories — poll nhẹ trong lúc còn mục chưa dịch để tên tiếng
   // Việt tự hiện ra dần, không cần bấm lại "Quét chuyên mục".
   const { data: categories } = useQuery({
-    queryKey: ['trending', 'bilibili', 'categories'],
+    queryKey: CATEGORIES_QUERY_KEY,
     queryFn: getTrendingCategories,
     refetchInterval: (query) => {
-      const pending = query.state.data?.some((c) => c.name === c.name_zh) ?? false
+      const pending =
+        query.state.data?.some((c) => c.name === c.name_zh) ?? false
       return pending ? 8000 : false
     },
   })
@@ -55,14 +62,14 @@ export function Discover() {
   // Lựa chọn lưu ở DB (không phải localStorage) để giữ nguyên khi đóng gói
   // thành app desktop và khi mở từ máy khác.
   const { data: followedRids } = useQuery({
-    queryKey: ['trending', 'bilibili', 'followed'],
+    queryKey: FOLLOWED_CATEGORIES_QUERY_KEY,
     queryFn: getFollowedCategories,
   })
 
   const saveFollowed = useMutation({
     mutationFn: setFollowedCategories,
     onSuccess: (rids) => {
-      queryClient.setQueryData(['trending', 'bilibili', 'followed'], rids)
+      queryClient.setQueryData(FOLLOWED_CATEGORIES_QUERY_KEY, rids)
     },
     onError: () => toast.error('Không lưu được lựa chọn chuyên mục.'),
   })
@@ -70,14 +77,15 @@ export function Discover() {
   const refresh = useMutation({
     mutationFn: refreshCategories,
     onSuccess: (all) => {
-      queryClient.setQueryData(['trending', 'bilibili', 'categories'], all)
+      queryClient.setQueryData(CATEGORIES_QUERY_KEY, all)
       toast.success(`Đã cập nhật ${all.length} chuyên mục từ Bilibili.`)
     },
     onError: () => toast.error('Không quét được chuyên mục mới.'),
   })
 
   const selectedRids = followedRids ?? []
-  const activeCategories = categories?.filter((c) => selectedRids.includes(c.rid)) ?? []
+  const activeCategories =
+    categories?.filter((c) => selectedRids.includes(c.rid)) ?? []
 
   return (
     <>
@@ -86,9 +94,12 @@ export function Discover() {
       <Main>
         <div className='mb-4 flex flex-wrap items-start justify-between gap-3'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Khám phá video</h1>
+            <h1 className='text-2xl font-bold tracking-tight'>
+              Khám phá video
+            </h1>
             <p className='text-muted-foreground'>
-              Xem xu hướng, tìm theo từ khoá và tải video — tất cả trong 1 màn hình.
+              Xem xu hướng, tìm theo từ khoá và tải video — tất cả trong 1 màn
+              hình.
             </p>
           </div>
           <div className='flex items-center gap-2'>
@@ -100,7 +111,9 @@ export function Discover() {
                   disabled={refresh.isPending}
                   onClick={() => refresh.mutate()}
                 >
-                  {refresh.isPending && <Loader2 className='size-3.5 animate-spin' />}
+                  {refresh.isPending && (
+                    <Loader2 className='size-3.5 animate-spin' />
+                  )}
                   {refresh.isPending ? 'Đang quét...' : 'Quét chuyên mục mới'}
                 </Button>
                 {categories && (
@@ -179,11 +192,17 @@ export function Discover() {
             {activeSearch ? (
               <div className='space-y-4'>
                 <p className='text-sm text-muted-foreground'>
-                  Kết quả tìm kiếm cho &quot;{activeSearch}&quot; — không phải bảng
-                  xếp hạng, có thể lẫn video không liên quan.
+                  Kết quả tìm kiếm cho &quot;{activeSearch}&quot; — không phải
+                  bảng xếp hạng, có thể lẫn video không liên quan.
                 </p>
                 <VideoGridPanel
-                  queryKey={['trending', 'bilibili', 'search', activeSearch, translateKeyword]}
+                  queryKey={[
+                    'trending',
+                    'bilibili',
+                    'search',
+                    activeSearch,
+                    translateKeyword,
+                  ]}
                   fetchPage={(page) =>
                     searchBilibili(activeSearch, page, { translateKeyword })
                   }
@@ -195,13 +214,18 @@ export function Discover() {
                   <TabsList>
                     <TabsTrigger value='all'>Tất cả</TabsTrigger>
                     {activeCategories.map((category) => (
-                      <TabsTrigger key={category.rid} value={String(category.rid)}>
+                      <TabsTrigger
+                        key={category.rid}
+                        value={String(category.rid)}
+                      >
                         {category.name}
                       </TabsTrigger>
                     ))}
                     {/* Phase 22 — quyết định đã chốt: 1 chip lọc trong hàng chip
                         chuyên mục, không thêm mục điều hướng riêng. */}
-                    <TabsTrigger value='followed-channels'>Kênh đã theo dõi</TabsTrigger>
+                    <TabsTrigger value='followed-channels'>
+                      Kênh đã theo dõi
+                    </TabsTrigger>
                   </TabsList>
                 </div>
                 <TabsContent value='all' className='mt-4'>
@@ -211,9 +235,18 @@ export function Discover() {
                   />
                 </TabsContent>
                 {activeCategories.map((category) => (
-                  <TabsContent key={category.rid} value={String(category.rid)} className='mt-4'>
+                  <TabsContent
+                    key={category.rid}
+                    value={String(category.rid)}
+                    className='mt-4'
+                  >
                     <VideoGridPanel
-                      queryKey={['trending', 'bilibili', 'category-page', category.rid]}
+                      queryKey={[
+                        'trending',
+                        'bilibili',
+                        'category-page',
+                        category.rid,
+                      ]}
                       fetchPage={(page) => getCategoryPage(category.rid, page)}
                     />
                   </TabsContent>

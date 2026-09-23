@@ -1,6 +1,6 @@
 import { ConfigDrawer } from '@/components/config-drawer'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SystemLogsButton } from '@/components/system-logs-button'
 import { TaskMonitor } from '@/components/task-monitor'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Header } from './header'
@@ -18,7 +18,7 @@ export function AppHeader() {
         <TaskMonitor />
         <ThemeSwitch />
         <ConfigDrawer />
-        <ProfileDropdown />
+        <SystemLogsButton />
       </div>
     </Header>
   )

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getFollowedCategories } from '@/lib/api'
+import { FOLLOWED_CATEGORIES_QUERY_KEY } from '@/lib/query-keys'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -15,7 +16,7 @@ import { CategoryChart } from './category-chart'
  */
 export function Insights() {
   const { data: followedRids } = useQuery({
-    queryKey: ['trending', 'bilibili', 'followed'],
+    queryKey: FOLLOWED_CATEGORIES_QUERY_KEY,
     queryFn: getFollowedCategories,
   })
 
@@ -25,7 +26,9 @@ export function Insights() {
 
       <Main>
         <div className='mb-4'>
-          <h1 className='text-2xl font-bold tracking-tight'>Báo cáo xu hướng</h1>
+          <h1 className='text-2xl font-bold tracking-tight'>
+            Báo cáo xu hướng
+          </h1>
           <p className='text-muted-foreground'>
             Chuyên mục nào đang lên, chủ đề nào đáng khai thác — dữ liệu để
             quyết định tìm gì tiếp theo, không phải để lướt liên tục.

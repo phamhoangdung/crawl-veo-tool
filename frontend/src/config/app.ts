@@ -16,3 +16,6 @@ export const APP_OWNER = {
   /** Chữ cái đầu dùng cho avatar khi không có ảnh. */
   initials: 'DP',
 } as const
+
+/** Dấu ấn tác giả hiển thị ở chân sidebar. */
+export const APP_CREDIT = 'Deoz'

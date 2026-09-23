@@ -85,3 +85,40 @@
     height: 0;
   }
 }
+
+/* Loading có thương hiệu (components/brand-loader.tsx) */
+@keyframes brand-logo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgb(59 130 246 / 0));
+  }
+  50% {
+    transform: scale(1.08);
+    filter: drop-shadow(0 4px 14px rgb(59 130 246 / 0.45));
+  }
+}
+
+@keyframes brand-bar-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.brand-logo-pulse {
+  animation: brand-logo-pulse 1.6s ease-in-out infinite;
+}
+
+.brand-bar-sweep {
+  animation: brand-bar-sweep 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo-pulse,
+  .brand-bar-sweep {
+    animation: none;
+  }
+}

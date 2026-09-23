@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import useDialogState from '@/hooks/use-dialog-state'
 import { APP_OWNER } from '@/config/app'
+import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,7 +31,9 @@ export function ProfileDropdown() {
         <DropdownMenuContent className='w-56' align='end' forceMount>
           <DropdownMenuLabel className='font-normal'>
             <div className='flex flex-col gap-1.5'>
-              <p className='text-sm leading-none font-medium'>{APP_OWNER.name}</p>
+              <p className='text-sm leading-none font-medium'>
+                {APP_OWNER.name}
+              </p>
               <p className='text-xs leading-none text-muted-foreground'>
                 {APP_OWNER.email}
               </p>

@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BrandLoader } from '@/components/brand-loader'
 import { CoverImage } from '@/components/cover-image'
 import { VideoPreviewDialog } from '@/components/video-preview-dialog'
 
@@ -136,7 +137,11 @@ export function VideoCard({
             title='Mở trên Bilibili'
             onClick={(e) => {
               e.stopPropagation()
-              window.open(bilibiliVideoUrl(video.bvid), '_blank', 'noopener,noreferrer')
+              window.open(
+                bilibiliVideoUrl(video.bvid),
+                '_blank',
+                'noopener,noreferrer'
+              )
             }}
           >
             <ExternalLink className='size-4' />
@@ -149,7 +154,9 @@ export function VideoCard({
       <CardContent className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
         <div className='flex items-center justify-between'>
           <span className='truncate'>{video.author_name ?? '—'}</span>
-          <span className='shrink-0'>{formatDuration(video.duration_seconds)}</span>
+          <span className='shrink-0'>
+            {formatDuration(video.duration_seconds)}
+          </span>
         </div>
         <div className='flex items-center justify-between'>
           <span className='flex items-center gap-2'>
@@ -159,7 +166,9 @@ export function VideoCard({
                 {formatCompact(video.comment_count)}
               </span>
             )}
-            {video.coin_count !== null && <span>{formatCompact(video.coin_count)} xu</span>}
+            {video.coin_count !== null && (
+              <span>{formatCompact(video.coin_count)} xu</span>
+            )}
           </span>
           {relativeDate && <span className='shrink-0'>{relativeDate}</span>}
         </div>
@@ -189,12 +198,17 @@ export function VideoCard({
           </Button>
         )}
         {video.video_id !== null && task?.is_running && (
-          <div className='mt-1 space-y-0.5' onClick={(e) => e.stopPropagation()}>
+          <div
+            className='mt-1 space-y-0.5'
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className='h-1 overflow-hidden rounded-full bg-muted'>
               <div
                 data-testid='discover-download-progress-bar'
                 className='h-full rounded-full bg-primary transition-[width] duration-300'
-                style={{ width: `${Math.min(100, Math.max(0, task.percent))}%` }}
+                style={{
+                  width: `${Math.min(100, Math.max(0, task.percent))}%`,
+                }}
               />
             </div>
             <span className='text-[10px] tabular-nums'>
@@ -267,7 +281,12 @@ export function SelectedVideosCart({
         ))}
       </div>
 
-      <Button size='sm' className='w-full' disabled={isDownloading} onClick={onDownload}>
+      <Button
+        size='sm'
+        className='w-full'
+        disabled={isDownloading}
+        onClick={onDownload}
+      >
         {isDownloading && <Loader2 className='size-3.5 animate-spin' />}
         {isDownloading ? 'Đang thêm...' : `Tải ${videos.length} video đã chọn`}
       </Button>
@@ -290,7 +309,9 @@ export function VideoGridPanel({
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [previewVideo, setPreviewVideo] = useState<TrendingVideo | null>(null)
-  const [downloadingBvids, setDownloadingBvids] = useState<Set<string>>(new Set())
+  const [downloadingBvids, setDownloadingBvids] = useState<Set<string>>(
+    new Set()
+  )
 
   const {
     data,
@@ -331,7 +352,11 @@ export function VideoGridPanel({
         if (seen.has(v.bvid)) continue
         seen.add(v.bvid)
         flat.push(v)
-        if (page.source === 'search' && sawNonSearch && firstSearchBvid === null) {
+        if (
+          page.source === 'search' &&
+          sawNonSearch &&
+          firstSearchBvid === null
+        ) {
           firstSearchBvid = v.bvid
         }
       }
@@ -370,7 +395,9 @@ export function VideoGridPanel({
       setPreviewVideo((prev) => {
         if (!prev) return prev
         const match = job.videos.find((v) => v.platform_video_id === prev.bvid)
-        return match ? { ...prev, video_id: match.id, already_in_library: true } : prev
+        return match
+          ? { ...prev, video_id: match.id, already_in_library: true }
+          : prev
       })
       setSelected(new Set())
       setDownloadingBvids((prev) => {
@@ -416,16 +443,12 @@ export function VideoGridPanel({
   }
 
   if (isLoading) {
-    return (
-      <p className='flex items-center gap-2 text-muted-foreground'>
-        <Loader2 className='size-4 animate-spin' />
-        Đang tải...
-      </p>
-    )
+    return <BrandLoader size='sm' />
   }
 
   const pickedVideos = videos?.filter((v) => selected.has(v.bvid)) ?? []
-  const allSelected = Boolean(videos?.length) && selected.size === videos?.length
+  const allSelected =
+    Boolean(videos?.length) && selected.size === videos?.length
 
   return (
     <div className='space-y-4'>
@@ -434,13 +457,17 @@ export function VideoGridPanel({
           size='sm'
           variant='outline'
           onClick={() =>
-            setSelected(allSelected ? new Set() : new Set(videos?.map((v) => v.bvid)))
+            setSelected(
+              allSelected ? new Set() : new Set(videos?.map((v) => v.bvid))
+            )
           }
         >
           {allSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
         </Button>
         {selected.size > 0 && (
-          <span className='text-sm text-muted-foreground'>Đã chọn {selected.size}</span>
+          <span className='text-sm text-muted-foreground'>
+            Đã chọn {selected.size}
+          </span>
         )}
       </div>
 
@@ -459,15 +486,15 @@ export function VideoGridPanel({
         )}
 
         <div className='min-w-0 flex-1 space-y-4'>
-          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
             {videos?.map((video) => (
               <Fragment key={video.bvid}>
                 {video.bvid === firstSearchBvid && (
                   <div className='col-span-full -mb-1 flex items-center gap-2 pt-2 text-xs text-muted-foreground'>
                     <div className='h-px flex-1 bg-border' />
                     <span>
-                      Duyệt thêm theo chuyên mục — không phải bảng xếp hạng, có thể lẫn
-                      video không liên quan
+                      Duyệt thêm theo chuyên mục — không phải bảng xếp hạng, có
+                      thể lẫn video không liên quan
                     </span>
                     <div className='h-px flex-1 bg-border' />
                   </div>
@@ -488,7 +515,7 @@ export function VideoGridPanel({
           <div ref={sentinelRef} className='h-px' />
 
           {isFetchingNextPage && (
-            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
               {Array.from({ length: 4 }, (_, i) => (
                 <Skeleton key={i} className='h-64 w-full rounded-xl' />
               ))}
@@ -516,7 +543,9 @@ export function VideoGridPanel({
         onSelectVideo={setPreviewVideo}
         videoId={previewVideo?.video_id ?? null}
         onDownload={() => previewVideo && downloadOne(previewVideo)}
-        isDownloading={previewVideo ? downloadingBvids.has(previewVideo.bvid) : false}
+        isDownloading={
+          previewVideo ? downloadingBvids.has(previewVideo.bvid) : false
+        }
       />
     </div>
   )
