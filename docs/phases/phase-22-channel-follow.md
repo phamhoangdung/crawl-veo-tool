@@ -1,6 +1,6 @@
 # Phase 22: Theo dõi kênh + gợi ý video liên quan/cùng kênh
 
-Trạng thái: **Code xong (backend + frontend), verify qua test suite** (2026-09-22) — 538 test backend (+22 test mới: channel_service 12, bilibili_client 5, trending_service 4, schema 1) + 219 test frontend (+5, `video-preview-dialog.test.tsx`) pass, `tsc -b`/`eslint` sạch. Chưa verify qua browser thật — máy dev đang có sự cố 2 tiến trình chiếm cổng 8000 không kill được (xem "Ghi chú phát sinh" ở phase-20), cần verify lại sau khi khởi động lại máy.
+Trạng thái: **Xong & verify thật qua browser** (2026-09-23) — 538 test backend + 219 test frontend pass, `tsc -b`/`eslint` sạch (2026-09-22); sự cố cổng 8000 (phase-20) đã hết sau khi khởi động lại máy, verify được toàn bộ qua browser thật ngày 2026-09-23 (chi tiết ở mục "Verify thật qua browser (2026-09-23)" bên dưới).
 
 ## Đã làm (2026-09-22)
 - **Backend**: `models/channel.py` (mirror `Category`, follow-toggle từng cái), cột `Video.channel_id` (song song `author_name`). `adapters/bilibili/client.py` thêm `get_related` (công khai, không WBI) + `get_space_videos` (cần WBI, bọc lỗi risk-control thành `BilibiliRiskControlError`). `services/channel_service.py` — `upsert_seen_batch` (1 query, dedup, không N+1), `follow`/`unfollow` (đối xứng, tự tạo kênh nếu chưa từng thấy), `list_channel_videos` (suy giảm nhẹ nhàng khi risk-control). `trending_service.py` — mọi `_from_*_item` đọc thêm `mid`/`owner.mid`; `_attach_channel_info` (ghi nhận kênh + gắn `channel_is_followed`, cùng pattern chống N+1 với `_attach_library_status`); `get_related`, `get_channel_videos`. Route: `GET/PUT` follow ở `api/channels.py` (mới), `related`/`channel/{id}/videos` ở `api/trending.py`.
@@ -9,7 +9,22 @@ Trạng thái: **Code xong (backend + frontend), verify qua test suite** (2026-0
 - **Hệ quả của phát hiện trên**: **field mapping của `_from_space_video_item` (converter cho `x/space/wbi/arc/search`) chưa verify được bằng response thật** — 100% request thử đều bị chặn trước khi nhận được payload để đối chiếu. Converter dựa theo tài liệu cộng đồng (SocialSisterYi/bilibili-API-collect), đã ghi rõ trong docstring, cần verify lại khi có cookie hoặc may mắn né được risk-control.
 - **Quyết định phát sinh (tự quyết trong lúc code)**: `channel_service.unfollow` đổi chữ ký nhận thêm `name` (đối xứng với `follow`) — tạo kênh mới nếu bỏ theo dõi 1 kênh backend chưa từng ghi nhận, tránh bug tôi tự phát hiện lúc viết endpoint (composed `follow()` rồi `unfollow()` rồi gán tay `is_followed=False` không commit — inconsistent state, đã sửa trước khi viết test).
 
-## Mục tiêu
+## Verify thật qua browser (2026-09-23)
+Sự cố cổng 8000 (ghi ở phase-20) đã hết sau khi khởi động lại máy — `netstat` xác nhận cổng trống trước khi chạy `npm run dev`. Verify bằng Playwright MCP trên `http://localhost:5174/discover` (backend thật `:8000`, dữ liệu Bilibili thật, không mock):
+- Xác nhận backend serve đúng code mới trước khi tin kết quả: response `GET /api/trending/bilibili/popular` có `channel_id`/`channel_is_followed` (field Phase 22 thêm) — không phải build cũ.
+- Mở popup xem trước video thật (`BV1yvhW6sEzi`) → thấy đúng tên kênh "崩坏星穹铁道", nút theo dõi hoạt động (test qua `curl PUT .../followed` trước, popup hiện đúng "Đang theo dõi").
+- Dải "Video tương tự" (`GET .../related`) trả 40 video thật, hiện đúng trong popup.
+- Dải "Video khác trong kênh" (`GET .../channel/{id}/videos`) — gọi kênh thật `mid=1340190821` bị risk-control chặn ngay (`degraded:true`, khớp đúng con số đo thật 10/10 ở lần khảo sát trước) → popup hiện đúng dòng "Bilibili đang giới hạn truy cập kênh này, thử lại sau." thay vì crash hay danh sách trống im lặng.
+- Bấm vào 1 thẻ gợi ý trong dải "Video tương tự" → tiêu đề dialog đổi ngay sang video mới, `document.querySelectorAll('[role=dialog]').length === 1` (đo bằng `browser_evaluate`) — xác nhận không mở dialog chồng dialog.
+- Theo dõi 1 kênh qua API thật → tải lại trang → tab "Kênh đã theo dõi" ở `/discover` hiện đúng kênh vừa theo dõi (persist DB thật, không phải state FE tạm).
+- Console browser chỉ có lỗi từ script nội bộ iframe player Bilibili (`bili-user-fingerprint`), không có lỗi nào từ code của tool.
+
+## Bàn giao cho phiên sau (2026-09-23) — đọc mục này thay vì đọc lại code
+- **Phase 22 đã xong, không còn việc dở.** Chỉ còn 1 điểm mở: converter `_from_space_video_item` (`x/space/wbi/arc/search`) chưa đối chiếu được payload thật vì 100% request bị risk-control; chỉ làm tiếp khi quyết định thêm `bilibili_cookie` (v1 cố ý không thêm).
+- **Phase 20/21/22 đều đã commit** (`b024bcf`, `b1e0ebd`) — working tree sạch ngoài docs.
+- **Ứng viên phase tiếp theo** (chọn 1, không gộp): Phase 19 (đa giọng — lõi xong, cần verify video/GPU thật), Phase 10 (video kể chuyện, chưa bắt đầu), Phase 18 (auth/license, đang hoãn sau 19).
+- **Mẹo verify browser**: `npm run dev` ở root; nếu 5173 bận, Vite tự chuyển 5174 (đã gặp). Chạy background bằng `run_in_background` KHÔNG kèm `&`. Trước khi tin kết quả browser, curl 1 field mới (vd `channel_id` ở `/api/trending/bilibili/popular`) để chắc backend không phải build cũ. Route follow: `PUT /api/channels/bilibili/{mid}/followed?name=<tên>` body `{"followed": true}` (`name` là query, không phải body). Popup dài hơn viewport nhỏ nên click Playwright vào thẻ gợi ý có thể timeout — dùng `browser_evaluate` gọi `.click()`.
+- **File chính đã chạm**: backend `models/channel.py`, `services/channel_service.py`, `api/channels.py`, `adapters/bilibili/client.py` (`get_related`, `get_space_videos`); frontend `components/video-preview-dialog.tsx`, `hooks/use-channel-follow.ts`, `features/discover/followed-channels-panel.tsx`.
 
 ## Mục tiêu
 Video hay đi theo seri/kênh đăng tải — hiện tool chỉ biết `author_name` (chuỗi text), không có gì để "xem thêm video của người này" hay "theo dõi kênh". Phase này thêm:
@@ -126,7 +141,7 @@ class Channel(Base):
 - [x] Test: `video-preview-dialog.test.tsx` +5 case (không có bvid → không gọi API kênh; có bvid → hiện tên kênh + gọi đúng 2 API; bấm Theo dõi gọi đúng tham số; `degraded=true` hiện thông báo suy giảm không phải danh sách rỗng; bấm gợi ý gọi `onSelectVideo` và KHÔNG mở dialog thứ 2).
 
 ## Tiêu chí hoàn thành (Definition of Done)
-- [~] Mở popup xem trước 1 video Bilibili thật → thấy tên kênh, nút Theo dõi bấm được, dải "Video tương tự" có kết quả thật — **chưa verify qua browser** (sự cố cổng 8000, xem "Ghi chú phát sinh" phase-20); logic đã verify qua test (mock đúng field response thật của `archive/related`).
+- [x] Mở popup xem trước 1 video Bilibili thật → thấy tên kênh, nút Theo dõi bấm được, dải "Video tương tự" có kết quả thật — verify qua test (mock) **và** qua browser thật 2026-09-23 (xem "Verify thật qua browser" ở trên).
 - [x] Dải "Video khác trong kênh" bị risk-control thì hiện đúng thông báo suy giảm, không crash popup — verify qua test (`degraded=true` render đúng, không phải danh sách rỗng im lặng) **và** verify gián tiếp qua đo thật (10/10 request risk-control thật không làm crash backend, `BilibiliRiskControlError` được bắt đúng).
 - [x] Bấm vào 1 thẻ gợi ý → dialog đổi sang video đó ngay tại chỗ, không mở dialog chồng dialog — verify qua test (`onSelectVideo` gọi đúng video, `document.querySelectorAll('[role=dialog]').length === 1`).
 - [x] Theo dõi 1 kênh → tải lại app → trạng thái theo dõi vẫn còn (persist DB thật) — verify qua test service layer với DB SQLite thật (không mock), không phải state FE.
