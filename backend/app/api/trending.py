@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
@@ -127,14 +128,21 @@ async def channel_videos(
     return await trending_service.get_channel_videos(db, channel_id, page=page)
 
 
+# Bilibili chỉ có bảng xếp hạng 3 ngày và 7 ngày — đã đo thật: day=1/30/90/365
+# đều trả lỗi -400. Chặn ở đây để trả 422 rõ ràng thay vì 500 khó hiểu.
+RankingDays = Literal[3, 7]
+
+
 @router.get("/ranking", response_model=list[TrendingVideoRead])
-async def ranking(rid: int = 1, day: int = 3) -> list[TrendingVideoRead]:
+async def ranking(
+    rid: int = 1, day: RankingDays = 3
+) -> list[TrendingVideoRead]:
     return await trending_service.get_bilibili_ranking(rid=rid, day=day)
 
 
 @router.get("/category-page", response_model=TrendingPageRead)
 async def category_page(
-    rid: int, page: int = 1, day: int = 3, db: Session = Depends(get_db)
+    rid: int, page: int = 1, day: RankingDays = 3, db: Session = Depends(get_db)
 ) -> TrendingPageRead:
     """1 trang video của chuyên mục — dùng cho infinite scroll ở trang Trending."""
     return await trending_service.get_category_page(db, rid=rid, page=page, day=day)

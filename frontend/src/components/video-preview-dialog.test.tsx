@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render } from 'vitest-browser-react'
-import { describe, expect, it, vi } from 'vitest'
 import '@/styles/index.css'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
 import {
   getChannelVideos,
   getRelatedVideos,
@@ -44,7 +45,10 @@ const mockRelated = vi.mocked(getRelatedVideos)
 const mockChannelVideos = vi.mocked(getChannelVideos)
 const mockSetFollowed = vi.mocked(setChannelFollowed)
 
-function suggestion(bvid: string, overrides: Partial<TrendingVideo> = {}): TrendingVideo {
+function suggestion(
+  bvid: string,
+  overrides: Partial<TrendingVideo> = {}
+): TrendingVideo {
   return {
     bvid,
     title: `video ${bvid}`,
@@ -67,11 +71,17 @@ function suggestion(bvid: string, overrides: Partial<TrendingVideo> = {}): Trend
 }
 
 async function wrap(ui: React.ReactElement) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
 }
 
 describe('VideoPreviewDialog', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('đóng khi title=null — không hiện iframe/link', async () => {
     await wrap(
       <VideoPreviewDialog
@@ -98,12 +108,58 @@ describe('VideoPreviewDialog', () => {
     )
 
     const iframe = document.querySelector('iframe') as HTMLIFrameElement
-    expect(iframe.src).toBe('https://player.bilibili.com/player.html?bvid=BV123')
+    expect(iframe.src).toBe(
+      'https://player.bilibili.com/player.html?bvid=BV123'
+    )
 
-    const link = document.querySelector('a[href*="bilibili.com"]') as HTMLAnchorElement
+    const link = document.querySelector(
+      'a[href*="bilibili.com"]'
+    ) as HTMLAnchorElement
     expect(link.href).toBe('https://www.bilibili.com/video/BV123')
     expect(link.textContent).toContain('Mở trên Bilibili')
     expect(document.body.textContent).toContain('Video test')
+  })
+
+  it('video nằm gọn trong popup và popup không cao quá màn hình (không tràn che hết màn)', async () => {
+    mockRelated.mockResolvedValue({
+      videos: Array.from({ length: 40 }, (_, i) => suggestion('BV' + i)),
+      page: 1,
+      has_more: false,
+      source: 'popular',
+    })
+    mockChannelVideos.mockResolvedValue({
+      videos: Array.from({ length: 40 }, (_, i) => suggestion('BV' + i)),
+      page: 1,
+      has_more: false,
+      source: 'popular',
+    })
+    // Màn lớn như máy thật (2556x1393) — lỗi tràn chỉ lộ ra khi 50vh*16/9 vượt bề rộng popup.
+    await page.viewport(2556, 1393)
+    await wrap(
+      <VideoPreviewDialog
+        title='Video test'
+        embedUrl='https://player.bilibili.com/player.html?bvid=BV123'
+        externalUrl='https://www.bilibili.com/video/BV123'
+        externalLabel='Mở trên Bilibili'
+        bvid='BV123'
+        channelId='1'
+        channelName='kênh'
+        onSelectVideo={() => {}}
+        onClose={() => {}}
+      />
+    )
+    await new Promise((r) => setTimeout(r, 300))
+
+    const dialog = document.querySelector('[role=dialog]') as HTMLElement
+    const iframe = document.querySelector('iframe') as HTMLIFrameElement
+    const d = dialog.getBoundingClientRect()
+    const f = iframe.getBoundingClientRect()
+
+    // Lỗi từng gặp: khung video rộng hơn cả popup (tràn ra ngoài, che hết màn).
+    expect(f.left).toBeGreaterThanOrEqual(d.left - 1)
+    expect(f.right).toBeLessThanOrEqual(d.right + 1)
+    expect(d.top).toBeGreaterThanOrEqual(0)
+    expect(d.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
   })
 
   it('gọi onClose khi đóng dialog', async () => {
@@ -141,7 +197,12 @@ describe('VideoPreviewDialog', () => {
     })
 
     it('có bvid: hiện tên kênh + nút Theo dõi, gọi đúng 2 API gợi ý', async () => {
-      mockRelated.mockResolvedValue({ videos: [], page: 1, has_more: false, source: 'popular' })
+      mockRelated.mockResolvedValue({
+        videos: [],
+        page: 1,
+        has_more: false,
+        source: 'popular',
+      })
       mockChannelVideos.mockResolvedValue({
         videos: [],
         page: 1,
@@ -176,7 +237,12 @@ describe('VideoPreviewDialog', () => {
     })
 
     it('bấm nút Theo dõi gọi đúng API với channelId/tên/followed=true', async () => {
-      mockRelated.mockResolvedValue({ videos: [], page: 1, has_more: false, source: 'popular' })
+      mockRelated.mockResolvedValue({
+        videos: [],
+        page: 1,
+        has_more: false,
+        source: 'popular',
+      })
       mockChannelVideos.mockResolvedValue({
         videos: [],
         page: 1,
@@ -209,12 +275,22 @@ describe('VideoPreviewDialog', () => {
       await screen.getByRole('button', { name: /theo dõi/i }).click()
 
       await vi.waitFor(() =>
-        expect(mockSetFollowed).toHaveBeenCalledWith('bilibili', '42', 'Kênh test', true)
+        expect(mockSetFollowed).toHaveBeenCalledWith(
+          'bilibili',
+          '42',
+          'Kênh test',
+          true
+        )
       )
     })
 
     it('dải "Video khác trong kênh" bị degraded: hiện thông báo suy giảm, không phải danh sách rỗng im lặng', async () => {
-      mockRelated.mockResolvedValue({ videos: [], page: 1, has_more: false, source: 'popular' })
+      mockRelated.mockResolvedValue({
+        videos: [],
+        page: 1,
+        has_more: false,
+        source: 'popular',
+      })
       mockChannelVideos.mockResolvedValue({
         videos: [],
         page: 1,
@@ -314,7 +390,9 @@ describe('VideoPreviewDialog', () => {
     })
 
     it('có videoId, task đang chạy: hiện % thay vì nút tải', async () => {
-      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
       const task: TaskProgress = {
         video_id: 7,
         subject_type: 'video',
@@ -347,11 +425,15 @@ describe('VideoPreviewDialog', () => {
         </QueryClientProvider>
       )
 
-      await expect.element(screen.getByText(/Đang tải · 33%/)).toBeInTheDocument()
+      await expect
+        .element(screen.getByText(/Đang tải · 33%/))
+        .toBeInTheDocument()
       expect(document.querySelectorAll('button').length).toBeGreaterThan(0)
       // Không còn nút "Tải video" nữa khi đã đang tải.
       expect(
-        [...document.querySelectorAll('button')].some((b) => b.textContent === 'Tải video')
+        [...document.querySelectorAll('button')].some(
+          (b) => b.textContent === 'Tải video'
+        )
       ).toBe(false)
     })
 
@@ -372,7 +454,9 @@ describe('VideoPreviewDialog', () => {
       expect(link).not.toBeNull()
       expect(link!.textContent).toContain('Video của tôi')
       expect(
-        [...document.querySelectorAll('button')].some((b) => b.textContent === 'Tải video')
+        [...document.querySelectorAll('button')].some(
+          (b) => b.textContent === 'Tải video'
+        )
       ).toBe(false)
     })
   })

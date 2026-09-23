@@ -458,11 +458,18 @@ export async function revealInFileManager(videoId?: number) {
 }
 
 /** 1 trang video của category — trang 1 từ bảng xếp hạng, trang sau từ search. */
-export async function getCategoryPage(rid: number, page: number) {
+/** Bilibili chỉ có bảng xếp hạng 3 ngày và 7 ngày (đã đo thật, mốc khác bị từ chối). */
+export type RankingDays = 3 | 7
+
+export async function getCategoryPage(
+  rid: number,
+  page: number,
+  day: RankingDays = 3
+) {
   const { data } = await api.get<TrendingPage>(
     '/api/trending/bilibili/category-page',
     {
-      params: { rid, page },
+      params: { rid, page, day },
     }
   )
   return data

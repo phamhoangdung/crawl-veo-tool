@@ -8,6 +8,7 @@ import {
   getFollowedCategories,
   getPopularPage,
   getTrendingCategories,
+  type RankingDays,
   refreshCategories,
   searchBilibili,
   setFollowedCategories,
@@ -45,6 +46,8 @@ export function Discover() {
   const [searchInput, setSearchInput] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
   const [translateKeyword, setTranslateKeyword] = useState(true)
+  const [tab, setTab] = useState('all')
+  const [rankingDays, setRankingDays] = useState<RankingDays>(3)
 
   // Chuyên mục chưa dịch (name === name_zh) được backend tự dịch NỀN mỗi lần
   // gọi GET /categories — poll nhẹ trong lúc còn mục chưa dịch để tên tiếng
@@ -86,6 +89,14 @@ export function Discover() {
   const selectedRids = followedRids ?? []
   const activeCategories =
     categories?.filter((c) => selectedRids.includes(c.rid)) ?? []
+  // Tab đang chọn có thể biến mất (bỏ theo dõi chuyên mục) — rơi về "Tất cả".
+  const activeTab =
+    tab === 'all' ||
+    tab === 'followed-channels' ||
+    activeCategories.some((c) => String(c.rid) === tab)
+      ? tab
+      : 'all'
+  const isCategoryTab = activeTab !== 'all' && activeTab !== 'followed-channels'
 
   return (
     <>
@@ -209,24 +220,46 @@ export function Discover() {
                 />
               </div>
             ) : (
-              <Tabs defaultValue='all'>
-                <div className='overflow-x-auto'>
-                  <TabsList>
-                    <TabsTrigger value='all'>Tất cả</TabsTrigger>
-                    {activeCategories.map((category) => (
-                      <TabsTrigger
-                        key={category.rid}
-                        value={String(category.rid)}
-                      >
-                        {category.name}
-                      </TabsTrigger>
-                    ))}
-                    {/* Phase 22 — quyết định đã chốt: 1 chip lọc trong hàng chip
+              <Tabs value={activeTab} onValueChange={setTab}>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <div className='overflow-x-auto'>
+                    <TabsList>
+                      <TabsTrigger value='all'>Tất cả</TabsTrigger>
+                      {activeCategories.map((category) => (
+                        <TabsTrigger
+                          key={category.rid}
+                          value={String(category.rid)}
+                        >
+                          {category.name}
+                        </TabsTrigger>
+                      ))}
+                      {/* Phase 22 — quyết định đã chốt: 1 chip lọc trong hàng chip
                         chuyên mục, không thêm mục điều hướng riêng. */}
-                    <TabsTrigger value='followed-channels'>
-                      Kênh đã theo dõi
-                    </TabsTrigger>
-                  </TabsList>
+                      <TabsTrigger value='followed-channels'>
+                        Kênh đã theo dõi
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+                  {isCategoryTab && (
+                    <div className='flex items-center gap-2 text-sm'>
+                      <span className='text-muted-foreground'>
+                        Bảng xếp hạng:
+                      </span>
+                      <div className='flex gap-1 rounded-lg border bg-muted/50 p-1'>
+                        {([3, 7] as const).map((d) => (
+                          <Button
+                            key={d}
+                            type='button'
+                            size='sm'
+                            variant={rankingDays === d ? 'default' : 'ghost'}
+                            onClick={() => setRankingDays(d)}
+                          >
+                            {d} ngày
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <TabsContent value='all' className='mt-4'>
                   <VideoGridPanel
@@ -246,8 +279,11 @@ export function Discover() {
                         'bilibili',
                         'category-page',
                         category.rid,
+                        rankingDays,
                       ]}
-                      fetchPage={(page) => getCategoryPage(category.rid, page)}
+                      fetchPage={(page) =>
+                        getCategoryPage(category.rid, page, rankingDays)
+                      }
                     />
                   </TabsContent>
                 ))}

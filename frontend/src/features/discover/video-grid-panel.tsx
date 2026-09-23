@@ -12,6 +12,8 @@ import {
   Flame,
   Loader2,
   MessageSquare,
+  PanelRightClose,
+  PanelRightOpen,
   PlayCircle,
   X,
 } from 'lucide-react'
@@ -32,6 +34,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BrandLoader } from '@/components/brand-loader'
 import { CoverImage } from '@/components/cover-image'
 import { VideoPreviewDialog } from '@/components/video-preview-dialog'
+
+const CART_VISIBLE_KEY = 'discover.selectedCartVisible'
 
 function bilibiliVideoUrl(bvid: string) {
   return `https://www.bilibili.com/video/${bvid}`
@@ -232,7 +236,7 @@ export function VideoCard({
 }
 
 /**
- * Panel "đã chọn" bên trái — phản hồi người dùng: chọn nhiều video trong 1
+ * Panel "đã chọn" bên phải (ẩn/hiện được) — phản hồi người dùng: chọn nhiều video trong 1
  * lưới dài rồi phải cuộn lại từ đầu mới thấy đã chọn những gì. Chỉ hiện khi
  * có ít nhất 1 video được chọn (không chiếm chỗ lúc không dùng), đứng yên khi
  * cuộn (`sticky`) để luôn thấy được danh sách + nút tải mà không cần tìm lại.
@@ -244,24 +248,40 @@ export function SelectedVideosCart({
   onClear,
   onDownload,
   isDownloading,
+  onHide,
 }: {
   videos: TrendingVideo[]
   onRemove: (bvid: string) => void
   onClear: () => void
   onDownload: () => void
   isDownloading: boolean
+  /** Có thì hiện nút thu gọn panel (danh sách vẫn giữ nguyên, chỉ ẩn khỏi màn). */
+  onHide?: () => void
 }) {
   return (
     <aside className='sticky top-4 w-full shrink-0 space-y-3 self-start rounded-lg border bg-card p-3 sm:w-64'>
       <div className='flex items-center justify-between'>
         <span className='text-sm font-medium'>Đã chọn {videos.length}</span>
-        <button
-          type='button'
-          onClick={onClear}
-          className='text-xs text-muted-foreground hover:underline'
-        >
-          Bỏ chọn tất cả
-        </button>
+        <div className='flex items-center gap-2'>
+          <button
+            type='button'
+            onClick={onClear}
+            className='text-xs text-muted-foreground hover:underline'
+          >
+            Bỏ chọn tất cả
+          </button>
+          {onHide && (
+            <button
+              type='button'
+              title='Ẩn danh sách đã chọn'
+              aria-label='Ẩn danh sách đã chọn'
+              onClick={onHide}
+              className='text-muted-foreground hover:text-foreground'
+            >
+              <PanelRightClose className='size-4' />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className='max-h-[50vh] space-y-2 overflow-y-auto pr-1'>
@@ -308,6 +328,22 @@ export function VideoGridPanel({
 }) {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Nhớ lựa chọn ẩn/hiện panel "đã chọn" giữa các lần mở app.
+  const [showCart, setShowCart] = useState(() => {
+    try {
+      return localStorage.getItem(CART_VISIBLE_KEY) !== '0'
+    } catch {
+      return true
+    }
+  })
+  const setCartVisible = (visible: boolean) => {
+    setShowCart(visible)
+    try {
+      localStorage.setItem(CART_VISIBLE_KEY, visible ? '1' : '0')
+    } catch {
+      // localStorage không dùng được (chế độ riêng tư...) — chỉ mất phần ghi nhớ.
+    }
+  }
   const [previewVideo, setPreviewVideo] = useState<TrendingVideo | null>(null)
   const [downloadingBvids, setDownloadingBvids] = useState<Set<string>>(
     new Set()
@@ -469,22 +505,27 @@ export function VideoGridPanel({
             Đã chọn {selected.size}
           </span>
         )}
+        {selected.size > 0 && (
+          <Button
+            size='sm'
+            variant='ghost'
+            className='ms-auto'
+            onClick={() => setCartVisible(!showCart)}
+          >
+            {showCart ? (
+              <PanelRightClose className='size-4' />
+            ) : (
+              <PanelRightOpen className='size-4' />
+            )}
+            {showCart ? 'Ẩn danh sách đã chọn' : 'Hiện danh sách đã chọn'}
+          </Button>
+        )}
       </div>
 
-      {/* Panel "đã chọn" đứng yên bên trái khi cuộn — phản hồi người dùng:
+      {/* Panel "đã chọn" đứng yên bên phải khi cuộn — phản hồi người dùng:
           trước đây chọn nhiều video trong lưới dài rồi phải cuộn lại từ đầu
           mới thấy đã chọn gì, nút tải cũng chỉ nằm trên đầu trang. */}
       <div className='flex flex-col items-start gap-4 sm:flex-row'>
-        {selected.size > 0 && (
-          <SelectedVideosCart
-            videos={pickedVideos}
-            onRemove={toggle}
-            onClear={() => setSelected(new Set())}
-            onDownload={() => downloadMany(pickedVideos)}
-            isDownloading={createJob.isPending}
-          />
-        )}
-
         <div className='min-w-0 flex-1 space-y-4'>
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
             {videos?.map((video) => (
@@ -528,6 +569,17 @@ export function VideoGridPanel({
             </p>
           )}
         </div>
+
+        {selected.size > 0 && showCart && (
+          <SelectedVideosCart
+            videos={pickedVideos}
+            onRemove={toggle}
+            onClear={() => setSelected(new Set())}
+            onDownload={() => downloadMany(pickedVideos)}
+            isDownloading={createJob.isPending}
+            onHide={() => setCartVisible(false)}
+          />
+        )}
       </div>
 
       <VideoPreviewDialog

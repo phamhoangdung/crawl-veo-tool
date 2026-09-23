@@ -1,7 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Download, ExternalLink, Loader2, UserCheck, UserPlus } from 'lucide-react'
-import { getChannelVideos, getRelatedVideos, type TrendingVideo } from '@/lib/api'
+import {
+  Download,
+  ExternalLink,
+  Loader2,
+  UserCheck,
+  UserPlus,
+} from 'lucide-react'
+import {
+  getChannelVideos,
+  getRelatedVideos,
+  type TrendingVideo,
+} from '@/lib/api'
 import { useChannelFollow } from '@/hooks/use-channel-follow'
 import { useVideoTaskProgress } from '@/hooks/use-task-progress'
 import { Button } from '@/components/ui/button'
@@ -27,7 +37,7 @@ function SuggestionCard({
     <button
       type='button'
       onClick={onSelect}
-      className='w-36 shrink-0 text-left'
+      className='w-32 shrink-0 text-left'
       title={video.title}
     >
       <CoverImage src={video.cover_url} className='w-full rounded-md' />
@@ -55,15 +65,24 @@ function SuggestionRow({
       {isLoading ? (
         <div className='flex gap-2 overflow-hidden'>
           {Array.from({ length: 4 }, (_, i) => (
-            <div key={i} className='h-24 w-36 shrink-0 animate-pulse rounded-md bg-muted' />
+            <div
+              key={i}
+              className='h-20 w-32 shrink-0 animate-pulse rounded-md bg-muted'
+            />
           ))}
         </div>
       ) : videos.length === 0 ? (
-        emptyMessage && <p className='text-xs text-muted-foreground'>{emptyMessage}</p>
+        emptyMessage && (
+          <p className='text-xs text-muted-foreground'>{emptyMessage}</p>
+        )
       ) : (
         <div className='flex gap-2 overflow-x-auto pb-1'>
           {videos.map((v) => (
-            <SuggestionCard key={v.bvid} video={v} onSelect={() => onSelect(v)} />
+            <SuggestionCard
+              key={v.bvid}
+              video={v}
+              onSelect={() => onSelect(v)}
+            />
           ))}
         </div>
       )}
@@ -141,13 +160,15 @@ export function VideoPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className='sm:max-w-3xl'>
+      {/* Giới hạn theo chiều cao màn hình + cho cuộn: popup dài hơn màn hình thì nút Đóng/tiêu đề bị đẩy ra ngoài và không với tới được. */}
+      <DialogContent className='max-h-[92vh] gap-3 overflow-y-auto sm:max-w-2xl'>
         <DialogHeader>
           <DialogTitle className='line-clamp-2 pr-6'>{title}</DialogTitle>
         </DialogHeader>
         {embedUrl && externalUrl && (
-          <div className='space-y-4'>
-            <div className='aspect-video w-full overflow-hidden rounded-md bg-black'>
+          <div className='min-w-0 space-y-3'>
+            {/* Rộng tối đa theo 16:9 của 50% chiều cao màn hình — video không bao giờ chiếm hết màn. */}
+            <div className='mx-auto aspect-video w-full max-w-[calc(50vh*16/9)] overflow-hidden rounded-md bg-black'>
               <iframe
                 src={embedUrl}
                 className='h-full w-full'
@@ -166,7 +187,11 @@ export function VideoPreviewDialog({
 
               {onDownload &&
                 (videoId === null ? (
-                  <Button size='sm' disabled={isDownloading} onClick={onDownload}>
+                  <Button
+                    size='sm'
+                    disabled={isDownloading}
+                    onClick={onDownload}
+                  >
                     {isDownloading ? (
                       <Loader2 className='size-3.5 animate-spin' />
                     ) : (
@@ -175,12 +200,15 @@ export function VideoPreviewDialog({
                     Tải video
                   </Button>
                 ) : task?.is_running ? (
-                  <span className='text-sm tabular-nums text-muted-foreground'>
+                  <span className='text-sm text-muted-foreground tabular-nums'>
                     {task.stage_label} · {Math.round(task.percent)}%
                   </span>
                 ) : (
                   <Button asChild size='sm' variant='secondary'>
-                    <Link to='/videos/$videoId' params={{ videoId: String(videoId) }}>
+                    <Link
+                      to='/videos/$videoId'
+                      params={{ videoId: String(videoId) }}
+                    >
                       Đã có trong thư viện → Video của tôi
                     </Link>
                   </Button>
@@ -188,7 +216,9 @@ export function VideoPreviewDialog({
 
               {bvid && channelId && channelName && (
                 <>
-                  <span className='text-sm text-muted-foreground'>{channelName}</span>
+                  <span className='text-sm text-muted-foreground'>
+                    {channelName}
+                  </span>
                   <Button
                     size='sm'
                     variant={channelIsFollowed ? 'secondary' : 'outline'}
