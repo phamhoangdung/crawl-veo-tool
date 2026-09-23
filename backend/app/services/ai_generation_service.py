@@ -21,7 +21,7 @@ from app.adapters import ffmpeg
 from app.adapters.falai import client as real_adapter
 from app.adapters.falai import fake as fake_adapter
 from app.adapters.provider_errors import ProviderQuotaExceededError
-from app.core.config import _storage_dir, get_settings
+from app.core.config import storage_dir, get_settings
 from app.models.generated_asset import GeneratedAsset, GeneratedAssetType
 from app.services import (
     api_key_service,
@@ -73,7 +73,7 @@ def is_fake_mode() -> bool:
 
 
 def output_dir() -> Path:
-    path = _storage_dir() / "generated"
+    path = storage_dir() / "generated"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

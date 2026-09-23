@@ -270,7 +270,7 @@ class TestProjectTimeline:
     def project_db(self, tmp_path: Path, monkeypatch) -> Session:
         from app.models.generation_project import GenerationProject
 
-        monkeypatch.setattr(timeline_service, "_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr(timeline_service, "storage_dir", lambda: tmp_path)
         engine = create_engine("sqlite://")
         Base.metadata.create_all(engine)
         session = sessionmaker(bind=engine)()

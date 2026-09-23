@@ -129,6 +129,71 @@ def _guess_group(rid: int, name_zh: str) -> str | None:
     return None
 
 
+# Chuyên mục mặc định hardcode sẵn (rid, tên Trung, tên Việt, nhóm) để người dùng
+# có ngay danh sách chọn ở lần chạy đầu mà không phải "Quét chuyên mục mới".
+# Nửa đầu là phân khu chính của Bilibili (tid theo `_TID_GROUP`), nửa sau là các
+# ngách nhỏ hay dùng. Quét tự động vẫn chạy để bắt chuyên mục mới/đổi tên.
+_DEFAULT_CATEGORIES: list[tuple[int, str, str, str]] = [
+    (1, "动画", "Hoạt hình (Anime)", "Anime"),
+    (3, "音乐", "Âm nhạc", "Âm nhạc"),
+    (4, "游戏", "Game", "Game"),
+    (5, "娱乐", "Giải trí", "Giải trí"),
+    (11, "电视剧", "Phim truyền hình", "Phim truyền hình"),
+    (13, "番剧", "Phim hoạt hình dài tập", "Phim hoạt hình"),
+    (23, "电影", "Điện ảnh", "Điện ảnh"),
+    (36, "知识", "Kiến thức", "Kiến thức"),
+    (119, "鬼畜", "Chế (Kuso)", "Chế"),
+    (129, "舞蹈", "Vũ đạo", "Vũ đạo"),
+    (155, "时尚", "Thời trang", "Thời trang"),
+    (160, "生活", "Đời sống", "Đời sống"),
+    (168, "国创", "Hoạt hình Trung Quốc", "Hoạt hình Trung Quốc"),
+    (177, "纪录片", "Phim tài liệu", "Phim tài liệu"),
+    (181, "影视", "Phim ảnh", "Phim ảnh"),
+    (188, "科技", "Công nghệ", "Công nghệ"),
+    (217, "动物圈", "Động vật", "Động vật"),
+    (223, "汽车", "Xe cộ", "Xe cộ"),
+    (234, "运动", "Thể thao", "Thể thao"),
+    (211, "美食记录", "Ẩm thực - Ghi chép", "Ẩm thực"),
+    (76, "美食制作", "Ẩm thực - Nấu ăn", "Ẩm thực"),
+    (21, "日常", "Đời sống thường ngày", "Đời sống"),
+    (138, "搞笑", "Hài hước", "Đời sống"),
+    (218, "喵星人", "Động vật - Mèo", "Động vật"),
+    (219, "汪星人", "Động vật - Chó", "Động vật"),
+]
+
+# Chỉ được bật theo dõi ở lần chạy đầu tiên (bảng còn trống).
+_DEFAULT_FOLLOWED_RIDS = frozenset({211, 138, 21})
+
+
+def ensure_default_categories(db: Session) -> int:
+    """Chèn chuyên mục mặc định còn thiếu, trả về số dòng đã thêm.
+
+    Chạy mỗi lần khởi động nên cả DB cũ (đã có vài chuyên mục) cũng được bổ sung.
+    Không đụng dòng đã có — giữ nguyên tên/nhóm/`is_followed` người dùng đã chọn.
+    `is_followed` mặc định chỉ áp dụng khi bảng trống hẳn, để không tự bật lại
+    mục người dùng đã bỏ theo dõi.
+    """
+    existing = {rid for (rid,) in db.query(Category.rid).all()}
+    first_run = not existing
+    added = 0
+    for rid, name_zh, name_vi, group in _DEFAULT_CATEGORIES:
+        if rid in existing:
+            continue
+        db.add(
+            Category(
+                rid=rid,
+                name_zh=name_zh,
+                name_vi=name_vi,
+                group_name=group,
+                is_followed=first_run and rid in _DEFAULT_FOLLOWED_RIDS,
+            )
+        )
+        added += 1
+    if added:
+        db.commit()
+    return added
+
+
 def resync_known_groups(db: Session) -> int:
     """Gán lại nhóm cho MỌI chuyên mục đã có trong DB theo `_TID_GROUP` mới nhất.
 

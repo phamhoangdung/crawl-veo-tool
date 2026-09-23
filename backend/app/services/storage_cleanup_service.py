@@ -3,14 +3,14 @@ import logging
 import shutil
 import time
 
-from app.core.config import _storage_dir
+from app.core.config import storage_dir
 
 logger = logging.getLogger(__name__)
 
 # Lấy từ config chứ không tự ghép đường dẫn: bản đóng gói (Phase 12) để storage
 # trong thư mục dữ liệu người dùng, hard-code `backend/storage` sẽ khiến dọn dẹp
 # im lặng không tìm thấy gì.
-_STORAGE_ROOT = _storage_dir()
+_STORAGE_ROOT = storage_dir()
 _JOB_DIR_PATTERN = "*"  # storage/<job_id>/<video_id>/...
 
 # Mặc định 1 ngày/lần: dọn file quá 30 ngày thì chạy dày hơn cũng không dọn thêm

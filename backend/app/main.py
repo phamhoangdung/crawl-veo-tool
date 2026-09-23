@@ -26,19 +26,22 @@ from app.api import (
     pipeline,
     projects,
     settings,
+    system,
     timeline,
     topics,
     translate,
     trending,
+    video_import,
     youtube,
 )
 from app.core import worker_pool
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
-from app.models.category import Category
+from app.core.logging_setup import setup_file_logging
 from app.models.user import User
-from app.services import storage_cleanup_service, trending_service
+from app.services import category_service, storage_cleanup_service, trending_service
 
 logging.basicConfig(level=logging.INFO)
+setup_file_logging()
 
 app = FastAPI(title="Crawl Video Tool API")
 
@@ -46,7 +49,9 @@ app.add_middleware(
     CORSMiddleware,
     # Vite tự đổi cổng (5173, 5174...) nếu cổng mặc định đang bận — cho phép mọi
     # cổng localhost thay vì cố định 1 cổng, tránh lỗi CORS vặt vãnh lúc dev.
-    allow_origin_regex=r"http://localhost:\d+",
+    # Bản đóng gói Tauri chạy webview ở origin tauri.localhost (Windows) hoặc
+    # tauri://localhost (macOS/Linux), không phải localhost:<cổng>.
+    allow_origin_regex=r"http://localhost:\d+|https?://tauri\.localhost|tauri://localhost",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -74,6 +79,8 @@ app.include_router(youtube.router)
 app.include_router(topics.router)
 app.include_router(settings.router)
 app.include_router(channels.router)
+app.include_router(system.router)
+app.include_router(video_import.router)
 
 
 @app.on_event("startup")
@@ -125,34 +132,9 @@ def stop_worker_pool() -> None:
     worker_pool.shutdown()
 
 
-# Chuyên mục mồi để trang Trending không rỗng ở lần chạy đầu; danh sách đầy đủ
-# được phát hiện tự động qua POST /api/trending/bilibili/categories/refresh.
-_SEED_CATEGORIES: list[tuple[int, str, str, str]] = [
-    (211, "美食记录", "Ẩm thực - Ghi chép", "Ẩm thực"),
-    (76, "美食制作", "Ẩm thực - Nấu ăn", "Ẩm thực"),
-    (21, "日常", "Đời sống thường ngày", "Đời sống"),
-    (138, "搞笑", "Hài hước", "Giải trí"),
-    (218, "喵星人", "Động vật - Mèo", "Động vật"),
-    (219, "汪星人", "Động vật - Chó", "Động vật"),
-]
-
-
 def _ensure_seed_categories() -> None:
-    """Chỉ chèn khi bảng còn trống — tránh ghi đè lựa chọn của người dùng."""
     with SessionLocal() as db:
-        if db.query(Category).count() > 0:
-            return
-        for rid, name_zh, name_vi, group in _SEED_CATEGORIES:
-            db.add(
-                Category(
-                    rid=rid,
-                    name_zh=name_zh,
-                    name_vi=name_vi,
-                    group_name=group,
-                    is_followed=rid in (211, 138, 21),
-                )
-            )
-        db.commit()
+        category_service.ensure_default_categories(db)
 
 
 def _ensure_default_user() -> None:

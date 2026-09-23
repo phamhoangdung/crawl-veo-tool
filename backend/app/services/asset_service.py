@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.core.config import _storage_dir
+from app.core.config import storage_dir
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class Asset:
 
 
 def assets_dir() -> Path:
-    path = _storage_dir() / "assets"
+    path = storage_dir() / "assets"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

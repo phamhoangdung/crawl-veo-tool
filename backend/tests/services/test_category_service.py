@@ -153,3 +153,41 @@ class TestTranslateMissingNames:
 
             assert translated == 0
             mock_translate.assert_not_awaited()
+
+
+class TestEnsureDefaultCategories:
+    def test_first_run_seeds_all_defaults_and_follows_only_starter_set(
+        self, session_factory
+    ) -> None:
+        with session_factory() as db:
+            added = category_service.ensure_default_categories(db)
+            assert added == len(category_service._DEFAULT_CATEGORIES)
+            followed = {c.rid for c in db.query(Category).filter(Category.is_followed)}
+            assert followed == set(category_service._DEFAULT_FOLLOWED_RIDS)
+            assert db.query(Category).filter(Category.name_vi.is_(None)).count() == 0
+
+    def test_idempotent_on_second_call(self, session_factory) -> None:
+        with session_factory() as db:
+            category_service.ensure_default_categories(db)
+            assert category_service.ensure_default_categories(db) == 0
+
+    def test_existing_db_gets_missing_defaults_without_touching_user_choices(
+        self, session_factory
+    ) -> None:
+        """DB cũ chỉ có 1 dòng người dùng đã đổi: phải được bổ sung mục thiếu,
+        không bị ghi đè tên/nhóm, và mục mới KHÔNG tự bật theo dõi."""
+        with session_factory() as db:
+            db.add(Category(rid=4, name_zh="游戏", name_vi="Tên tôi tự đặt", is_followed=False))
+            db.commit()
+
+            added = category_service.ensure_default_categories(db)
+
+            assert added == len(category_service._DEFAULT_CATEGORIES) - 1
+            game = db.get(Category, 4)
+            assert game.name_vi == "Tên tôi tự đặt"
+            assert game.is_followed is False
+            assert db.query(Category).filter(Category.is_followed).count() == 0
+
+    def test_default_rids_are_unique(self) -> None:
+        rids = [rid for rid, *_ in category_service._DEFAULT_CATEGORIES]
+        assert len(rids) == len(set(rids))

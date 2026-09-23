@@ -13,7 +13,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import _storage_dir
+from app.core.config import storage_dir
 from app.models.character_reference import CharacterReference
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class CharacterReferenceError(ValueError):
 
 
 def references_dir() -> Path:
-    path = _storage_dir() / "character_refs"
+    path = storage_dir() / "character_refs"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

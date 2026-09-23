@@ -12,7 +12,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.adapters import ffmpeg
-from app.core.config import _storage_dir
+from app.core.config import storage_dir
 from app.core.db import SessionLocal
 from app.models.generated_asset import GeneratedAsset
 from app.services import asset_service, progress_service, project_service
@@ -28,7 +28,7 @@ class ProjectRenderError(RuntimeError):
 
 
 def output_path_for(project_id: int) -> Path:
-    directory = _storage_dir() / "projects" / str(project_id)
+    directory = storage_dir() / "projects" / str(project_id)
     directory.mkdir(parents=True, exist_ok=True)
     return directory / "final.mp4"
 

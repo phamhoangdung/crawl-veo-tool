@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import storage_dir
 from app.core.db import get_db
 from app.models.video import Video
 from app.schemas.clip import ClipCandidateRead, ClipCreateRequest, ClipRead
@@ -38,7 +39,7 @@ def create_clip(
     if source_path is None or not source_path.exists():
         raise HTTPException(status_code=404, detail=f"Không có file '{variant}' cho video này")
 
-    video_dir = Path(video.local_path).parent if video.local_path else Path("storage") / str(video_id)
+    video_dir = Path(video.local_path).parent if video.local_path else storage_dir() / str(video_id)
     clips_dir = video_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     output_path = clips_dir / f"clip_{int(payload.start)}_{int(payload.end)}.mp4"

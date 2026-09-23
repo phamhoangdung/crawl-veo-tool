@@ -11,7 +11,7 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.adapters import ffmpeg
-from app.core.config import _storage_dir
+from app.core.config import storage_dir
 from app.models.generation_project import GenerationProject
 from app.models.video import Video
 
@@ -55,7 +55,7 @@ def _resolve_subject(db: Session, subject_type: SubjectType, subject_id: int) ->
         work_dir = (
             Path(video.local_path).parent
             if video.local_path
-            else Path("storage") / str(subject_id)
+            else storage_dir() / str(subject_id)
         )
         return _Subject(row=video, work_dir=work_dir)
 
@@ -63,7 +63,7 @@ def _resolve_subject(db: Session, subject_type: SubjectType, subject_id: int) ->
         project = db.get(GenerationProject, subject_id)
         if project is None:
             raise ProjectNotFoundError(f"Dự án {subject_id} không tồn tại")
-        return _Subject(row=project, work_dir=_storage_dir() / "projects" / str(subject_id))
+        return _Subject(row=project, work_dir=storage_dir() / "projects" / str(subject_id))
 
     raise ValueError(f"Loại chủ thể không hợp lệ: {subject_type!r}")
 

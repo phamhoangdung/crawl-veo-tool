@@ -156,6 +156,37 @@ def probe_duration_seconds(video_path: Path) -> float | None:
         return None
 
 
+def extract_thumbnail(
+    video_path: Path, output_path: Path, *, at_seconds: float = 1.0
+) -> None:
+    """Trích 1 khung hình làm ảnh bìa cho video nhập từ máy (video tải từ nền
+    tảng đã có cover_url riêng, video tự có thì không).
+
+    Seek trước `-i` cho nhanh; clip ngắn hơn `at_seconds` thì lùi về giữa clip để
+    không ra ảnh rỗng.
+    """
+    ensure_ffmpeg_available()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    duration = probe_duration_seconds(video_path)
+    if duration is not None and duration <= at_seconds:
+        at_seconds = duration / 2
+
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-ss", str(at_seconds),
+            "-i", str(video_path),
+            "-frames:v", "1",
+            "-vf", "scale=640:-2",
+            "-q:v", "3",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
 def extract_last_frame(
     video_path: Path, output_path: Path, *, offset_from_end: float = 0.05
 ) -> None:

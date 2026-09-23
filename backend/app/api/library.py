@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import storage_dir
 from app.core.db import get_db
 from app.models.video import Video
 from app.schemas.library import LibraryItemRead
@@ -12,7 +13,7 @@ from app.services import library_service
 router = APIRouter(prefix="/api/library", tags=["library"])
 
 _DEFAULT_USER_ID = 1
-_ZIP_TMP_DIR = Path(__file__).resolve().parent.parent.parent / "storage" / "_zips"
+_ZIP_TMP_DIR = storage_dir() / "_zips"
 
 
 @router.get("", response_model=list[LibraryItemRead])

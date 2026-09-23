@@ -11,7 +11,7 @@ PNG_1X1 = bytes.fromhex(
 @pytest.fixture(autouse=True)
 def temp_assets_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """Không đụng vào storage thật — test tạo/xoá file nên phải cách ly."""
-    monkeypatch.setattr(asset_service, "_storage_dir", lambda: tmp_path)
+    monkeypatch.setattr(asset_service, "storage_dir", lambda: tmp_path)
     return tmp_path
 
 

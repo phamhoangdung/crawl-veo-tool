@@ -6,14 +6,14 @@ import httpx
 
 from app.adapters import ffmpeg
 from app.adapters.bilibili.client import BilibiliClient
-from app.core.config import get_settings
+from app.core.config import get_settings, storage_dir
 from app.core.db import SessionLocal
 from app.models.video import Video, VideoStatus
 from app.services import progress_service, settings_service
 
 logger = logging.getLogger(__name__)
 
-_STORAGE_ROOT = Path(__file__).resolve().parent.parent.parent / "storage"
+_STORAGE_ROOT = storage_dir()
 _DOWNLOAD_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Referer": "https://www.bilibili.com",
