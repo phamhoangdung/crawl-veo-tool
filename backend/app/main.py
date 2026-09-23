@@ -36,6 +36,7 @@ from app.api import (
 )
 from app.core import worker_pool
 from app.core.db import Base, SessionLocal, engine, ensure_schema_columns
+from app.core.ffmpeg_locator import ensure_ffmpeg_on_path
 from app.core.logging_setup import setup_file_logging
 from app.models.user import User
 from app.services import category_service, storage_cleanup_service, trending_service
@@ -89,6 +90,10 @@ def on_startup() -> None:
     ensure_schema_columns()
     _ensure_default_user()
     _ensure_seed_categories()
+    if not ensure_ffmpeg_on_path():
+        logging.getLogger(__name__).warning(
+            "Không tìm thấy ffmpeg — tải/ghép video sẽ lỗi tới khi cài (winget install Gyan.FFmpeg)."
+        )
 
 
 # Giữ tham chiếu tới task nền: mất tham chiếu thì Python có thể thu gom task

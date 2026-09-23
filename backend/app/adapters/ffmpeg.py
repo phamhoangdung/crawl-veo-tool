@@ -1,10 +1,10 @@
 import logging
 import platform
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
+from app.core.ffmpeg_locator import ensure_ffmpeg_on_path
 from app.services import font_service
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,10 @@ _DEFAULT_FONT_CANDIDATES = [
 
 class FfmpegNotFoundError(RuntimeError):
     def __init__(self) -> None:
-        super().__init__("ffmpeg không có trong PATH — cài ffmpeg trước khi tải/merge video.")
+        super().__init__(
+            "Không tìm thấy ffmpeg (đã tìm trong PATH, registry và các thư mục cài phổ biến). "
+            "Cài bằng: winget install Gyan.FFmpeg — rồi thử lại, không cần mở lại app."
+        )
 
 
 class FontNotFoundError(RuntimeError):
@@ -50,7 +53,9 @@ def _escape_filter_path(path: str) -> str:
 
 
 def ensure_ffmpeg_available() -> None:
-    if shutil.which("ffmpeg") is None:
+    # Tìm lại ở registry/thư mục cài phổ biến trước khi báo thiếu — app mở từ
+    # trình cài đặt có thể không thừa hưởng PATH của người dùng.
+    if not ensure_ffmpeg_on_path():
         raise FfmpegNotFoundError()
 
 
