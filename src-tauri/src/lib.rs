@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
 use tauri::{Manager, RunEvent};
@@ -35,7 +35,23 @@ fn resolve_backend_exe(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 fn spawn_backend(app: &tauri::AppHandle) -> Result<Child, String> {
     let exe_path = resolve_backend_exe(app)?;
-    Command::new(&exe_path)
+    let mut command = Command::new(&exe_path);
+    // Nhật ký backend tự ghi ra file (xem backend/app/core/logging_setup.py), nên
+    // không cần console: null handle để Python vẫn có stdout/stderr hợp lệ.
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    // Không có cờ này Windows mở cửa sổ cmd cho mỗi sidecar console.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    command
         .spawn()
         .map_err(|e| format!("Không khởi động được backend ({:?}): {e}", exe_path))
 }
