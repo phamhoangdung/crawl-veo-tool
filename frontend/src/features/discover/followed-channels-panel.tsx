@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { FEATURE_CHANNEL_VIDEOS } from '@/config/app'
 import { Loader2, Radio } from 'lucide-react'
 import { getChannelVideos, getFollowedChannels } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -15,7 +16,9 @@ import { VideoGridPanel } from './video-grid-panel'
  * `TrendingPage`. Gộp nhiều kênh thành 1 feed chung để sau nếu cần (xem plan).
  */
 export function FollowedChannelsPanel() {
-  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
+    null
+  )
 
   const { data: channels, isLoading } = useQuery({
     queryKey: ['channels', 'followed', 'bilibili'],
@@ -34,8 +37,8 @@ export function FollowedChannelsPanel() {
   if (!channels || channels.length === 0) {
     return (
       <p className='text-sm text-muted-foreground'>
-        Chưa theo dõi kênh nào — bấm &quot;Theo dõi&quot; trong popup xem trước 1
-        video để bắt đầu.
+        Chưa theo dõi kênh nào — bấm &quot;Theo dõi&quot; trong popup xem trước
+        1 video để bắt đầu.
       </p>
     )
   }
@@ -50,7 +53,9 @@ export function FollowedChannelsPanel() {
             key={channel.channel_id}
             type='button'
             size='sm'
-            variant={channel.channel_id === selectedChannelId ? 'default' : 'outline'}
+            variant={
+              channel.channel_id === selectedChannelId ? 'default' : 'outline'
+            }
             onClick={() => setSelectedChannelId(channel.channel_id)}
           >
             <Radio className='size-3.5' />
@@ -59,9 +64,19 @@ export function FollowedChannelsPanel() {
         ))}
       </div>
 
-      {selected ? (
+      {selected && !FEATURE_CHANNEL_VIDEOS ? (
+        <p className='text-sm text-muted-foreground'>
+          Xem video theo kênh đang tạm tắt (Bilibili chặn truy cập kênh). Kênh
+          bạn theo dõi vẫn được lưu lại.
+        </p>
+      ) : selected ? (
         <VideoGridPanel
-          queryKey={['trending', 'bilibili', 'channel-page', selected.channel_id]}
+          queryKey={[
+            'trending',
+            'bilibili',
+            'channel-page',
+            selected.channel_id,
+          ]}
           fetchPage={(page) => getChannelVideos(selected.channel_id, page)}
         />
       ) : (

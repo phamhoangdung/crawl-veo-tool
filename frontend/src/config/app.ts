@@ -19,3 +19,11 @@ export const APP_OWNER = {
 
 /** Dấu ấn tác giả hiển thị ở chân sidebar. */
 export const APP_CREDIT = 'Deoz'
+
+/**
+ * Tạm tắt lấy video của 1 kênh (dải "Video khác trong kênh" + tab xem video
+ * kênh đã theo dõi): Bilibili chặn risk-control (412) gần như 100% request
+ * không đăng nhập, chỉ tốn request và nhồi nhật ký. Đặt `true` để bật lại —
+ * backend/route vẫn còn nguyên.
+ */
+export const FEATURE_CHANNEL_VIDEOS = false

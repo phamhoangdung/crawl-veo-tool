@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { FEATURE_CHANNEL_VIDEOS } from '@/config/app'
 import {
   Download,
   ExternalLink,
@@ -117,6 +118,7 @@ export function VideoPreviewDialog({
   channelName = null,
   channelIsFollowed = false,
   onSelectVideo,
+  channelVideosEnabled = FEATURE_CHANNEL_VIDEOS,
   videoId = null,
   onDownload,
   isDownloading = false,
@@ -133,6 +135,8 @@ export function VideoPreviewDialog({
   channelIsFollowed?: boolean
   /** Bấm vào 1 thẻ gợi ý — cha chỉ cần đổi state video đang xem. */
   onSelectVideo?: (video: TrendingVideo) => void
+  /** Bật dải "Video khác trong kênh" — mặc định theo `FEATURE_CHANNEL_VIDEOS`. */
+  channelVideosEnabled?: boolean
   /** Id thật trong DB của video ĐANG XEM — `null` = chưa từng tải. Có giá trị
    * thì tự hiện %/link "Video của tôi" thay vì nút tải (xem `VideoCard`, cùng
    * pattern). Không truyền (YouTube) = không hiện khối tải trong popup. */
@@ -154,7 +158,7 @@ export function VideoPreviewDialog({
   const channelVideos = useQuery({
     queryKey: ['trending', 'bilibili', 'channel-videos', channelId],
     queryFn: () => getChannelVideos(channelId!),
-    enabled: open && channelId !== null,
+    enabled: open && channelId !== null && channelVideosEnabled,
     staleTime: 5 * 60 * 1000,
   })
 
@@ -252,17 +256,19 @@ export function VideoPreviewDialog({
                   videos={related.data?.videos ?? []}
                   onSelect={onSelectVideo}
                 />
-                <SuggestionRow
-                  title='Video khác trong kênh'
-                  isLoading={channelVideos.isLoading}
-                  videos={channelVideos.data?.videos ?? []}
-                  emptyMessage={
-                    channelVideos.data?.degraded
-                      ? 'Bilibili đang giới hạn truy cập kênh này, thử lại sau.'
-                      : 'Chưa có video nào khác.'
-                  }
-                  onSelect={onSelectVideo}
-                />
+                {channelVideosEnabled && (
+                  <SuggestionRow
+                    title='Video khác trong kênh'
+                    isLoading={channelVideos.isLoading}
+                    videos={channelVideos.data?.videos ?? []}
+                    emptyMessage={
+                      channelVideos.data?.degraded
+                        ? 'Bilibili đang giới hạn truy cập kênh này, thử lại sau.'
+                        : 'Chưa có video nào khác.'
+                    }
+                    onSelect={onSelectVideo}
+                  />
+                )}
               </div>
             )}
           </div>

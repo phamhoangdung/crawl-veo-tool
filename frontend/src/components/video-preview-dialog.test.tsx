@@ -143,6 +143,7 @@ describe('VideoPreviewDialog', () => {
         externalLabel='Mở trên Bilibili'
         bvid='BV123'
         channelId='1'
+        channelVideosEnabled
         channelName='kênh'
         onSelectVideo={() => {}}
         onClose={() => {}}
@@ -196,6 +197,32 @@ describe('VideoPreviewDialog', () => {
       expect(document.body.textContent).not.toContain('Video tương tự')
     })
 
+    it('mặc định TẮT lấy video kênh: không gọi API kênh, không hiện dải "Video khác trong kênh"', async () => {
+      mockRelated.mockResolvedValue({
+        videos: [],
+        page: 1,
+        has_more: false,
+        source: 'popular',
+      })
+      await wrap(
+        <VideoPreviewDialog
+          title='Video Bilibili'
+          embedUrl='https://player.bilibili.com/player.html?bvid=BV1'
+          externalUrl='https://www.bilibili.com/video/BV1'
+          externalLabel='Mở trên Bilibili'
+          onClose={() => {}}
+          bvid='BV1'
+          channelId='42'
+          channelName='Kênh test'
+          onSelectVideo={() => {}}
+        />
+      )
+      await vi.waitFor(() => expect(mockRelated).toHaveBeenCalledWith('BV1'))
+      expect(mockChannelVideos).not.toHaveBeenCalled()
+      expect(document.body.textContent).not.toContain('Video khác trong kênh')
+      expect(document.body.textContent).toContain('Video tương tự')
+    })
+
     it('có bvid: hiện tên kênh + nút Theo dõi, gọi đúng 2 API gợi ý', async () => {
       mockRelated.mockResolvedValue({
         videos: [],
@@ -219,6 +246,7 @@ describe('VideoPreviewDialog', () => {
           onClose={() => {}}
           bvid='BV1'
           channelId='42'
+          channelVideosEnabled
           channelName='Kênh test'
           channelIsFollowed={false}
           onSelectVideo={() => {}}
@@ -266,6 +294,7 @@ describe('VideoPreviewDialog', () => {
           onClose={() => {}}
           bvid='BV1'
           channelId='42'
+          channelVideosEnabled
           channelName='Kênh test'
           channelIsFollowed={false}
           onSelectVideo={() => {}}
@@ -308,6 +337,7 @@ describe('VideoPreviewDialog', () => {
           onClose={() => {}}
           bvid='BV1'
           channelId='42'
+          channelVideosEnabled
           channelName='Kênh test'
           onSelectVideo={() => {}}
         />
@@ -343,6 +373,7 @@ describe('VideoPreviewDialog', () => {
           onClose={() => {}}
           bvid='BV1'
           channelId='42'
+          channelVideosEnabled
           channelName='Kênh test'
           onSelectVideo={onSelectVideo}
         />
