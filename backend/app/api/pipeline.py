@@ -21,6 +21,7 @@ from app.services import (
     download_service,
     dubbing_service,
     progress_service,
+    settings_service,
     subtitle_service,
     voice_service,
 )
@@ -90,6 +91,13 @@ async def download_video(
     return _to_detail(video)
 
 
+def _clear_error(db: Session, video: Video) -> None:
+    """Bước vừa chạy xong thì lỗi của lần thất bại trước không còn đúng nữa."""
+    if video.error_message is not None:
+        video.error_message = None
+        db.commit()
+
+
 def _run_transcribe(video_id: int) -> None:
     """Chạy nền: faster-whisper mất vài phút, không thể giữ request mở suốt thời gian đó."""
     with SessionLocal() as db:
@@ -101,6 +109,7 @@ def _run_transcribe(video_id: int) -> None:
             return
         try:
             dubbing_service.run_transcribe(db, video)
+            _clear_error(db, video)
             progress_service.finish(video_id, kind="transcribe")
         except Exception as exc:
             logger.exception("Tách lời thoại video %s thất bại", video_id)
@@ -138,6 +147,7 @@ async def _run_translate(video_id: int, source_lang: str, target_lang: str) -> N
             await dubbing_service.run_translate(
                 db, _DEFAULT_USER_ID, video, source_lang, target_lang
             )
+            _clear_error(db, video)
             progress_service.finish(video_id, kind="translate")
         except Exception as exc:
             logger.exception("Dịch video %s thất bại", video_id)
@@ -178,6 +188,7 @@ def _run_diarize(video_id: int) -> None:
             return
         try:
             dubbing_service.run_diarize(db, video)
+            _clear_error(db, video)
             progress_service.finish(video_id, kind="diarize")
         except Exception as exc:
             logger.exception("Phân vai người nói video %s thất bại", video_id)
@@ -193,6 +204,11 @@ def diarize_video(
     """Nhận diện có bao nhiêu người nói khác nhau, gắn nhãn cho từng đoạn thoại
     — không bắt buộc, bỏ qua bước này thì `/dub` vẫn chạy bằng 1 giọng chung."""
     video = _get_video_or_404(db, video_id)
+    if not settings_service.get_speaker_diarization_enabled(db, _DEFAULT_USER_ID):
+        raise HTTPException(
+            status_code=409,
+            detail="Phân vai người nói đang tắt — bật trong Cài đặt > Lồng tiếng.",
+        )
     if progress_service.is_running(video_id, "diarize"):
         raise HTTPException(
             status_code=409, detail="Video này đang được phân vai người nói."

@@ -1,3 +1,6 @@
+import os
+from concurrent.futures.process import BrokenProcessPool
+
 import pytest
 from app.core import worker_pool
 
@@ -17,6 +20,10 @@ def _square(x: int) -> int:
     return x * x
 
 
+def _die() -> None:
+    os._exit(1)
+
+
 def _add(a: int, b: int = 0) -> int:
     return a + b
 
@@ -31,6 +38,12 @@ class TestSubmit:
         worker_pool.submit(_square, 2).result(timeout=60)
         pool_second = worker_pool.get_pool()
         assert pool_first is pool_second
+
+    def test_pool_recreated_after_worker_dies(self) -> None:
+        with pytest.raises(BrokenProcessPool):
+            worker_pool.submit(_die).result(timeout=60)
+        # Callback chạy ngay sau khi future hoàn tất; lần gọi tiếp phải dùng pool mới.
+        assert worker_pool.submit(_square, 5).result(timeout=60) == 25
 
     def test_kwargs_forwarded(self) -> None:
         future = worker_pool.submit(_add, 3, b=4)

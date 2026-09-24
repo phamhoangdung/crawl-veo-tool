@@ -16,6 +16,7 @@ _DEFAULT_USER_ID = 1  # MVP: 1 user cố định, xem app/api/crawl.py.
 class AppSettingsRead(BaseModel):
     download_connections: int
     download_max_videos: int
+    speaker_diarization_enabled: bool
 
 
 class AppSettingsUpdate(BaseModel):
@@ -23,6 +24,7 @@ class AppSettingsUpdate(BaseModel):
     # chậm hơn 8, cho nhập cao hơn chỉ hại người dùng (xem phase-21).
     download_connections: int | None = Field(default=None, ge=1, le=8)
     download_max_videos: int | None = Field(default=None, ge=1, le=10)
+    speaker_diarization_enabled: bool | None = None
 
 
 @router.get("", response_model=AppSettingsRead)
@@ -39,5 +41,6 @@ def update_app_settings(
         _DEFAULT_USER_ID,
         download_connections=payload.download_connections,
         download_max_videos=payload.download_max_videos,
+        speaker_diarization_enabled=payload.speaker_diarization_enabled,
     )
     return AppSettingsRead(**result)

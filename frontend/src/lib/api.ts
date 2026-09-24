@@ -1,7 +1,16 @@
 import axios from 'axios'
 
+declare global {
+  interface Window {
+    /** Bản đóng gói (Tauri) tiêm địa chỉ backend thật — cổng được chọn lúc chạy. */
+    __VIEDUB_API_BASE__?: string
+  }
+}
+
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  window.__VIEDUB_API_BASE__ ??
+  import.meta.env.VITE_API_BASE_URL ??
+  'http://localhost:8000'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -1654,6 +1663,8 @@ export async function computeTopicScore(topicId: number) {
 export interface AppSettings {
   download_connections: number
   download_max_videos: number
+  /** Phân vai người nói (Phase 19) — mặc định tắt. */
+  speaker_diarization_enabled: boolean
 }
 
 export async function getAppSettings() {

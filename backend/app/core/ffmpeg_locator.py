@@ -13,7 +13,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from app.core.config import app_data_dir
+from app.core.config import app_data_dir, is_frozen
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +77,23 @@ def find_ffmpeg_dir() -> Path | None:
     return None
 
 
+def bundled_ffmpeg_dir() -> Path | None:
+    """Thư mục ffmpeg đóng gói kèm bản cài (PyInstaller đặt ở `_internal/ffmpeg`)."""
+    if not is_frozen():
+        return None
+    directory = Path(getattr(sys, "_MEIPASS", "")) / "ffmpeg"
+    return directory if (directory / _EXE).is_file() else None
+
+
 def ensure_ffmpeg_on_path() -> bool:
     """True nếu gọi được `ffmpeg` sau hàm này. Gọi lại nhiều lần vẫn an toàn."""
+    bundled = bundled_ffmpeg_dir()
+    if bundled is not None:
+        # Ưu tiên bản đóng gói (đúng phiên bản đã test) thay vì ffmpeg lạ trong PATH máy.
+        if str(bundled) not in os.environ.get("PATH", "").split(os.pathsep):
+            os.environ["PATH"] = f"{bundled}{os.pathsep}{os.environ.get('PATH', '')}"
+            logger.info("Dùng ffmpeg đóng gói kèm app: %s", bundled)
+        return True
     if shutil.which("ffmpeg") is not None:
         return True
     directory = find_ffmpeg_dir()

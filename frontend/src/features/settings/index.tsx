@@ -1,5 +1,5 @@
 import { Outlet } from '@tanstack/react-router'
-import { Monitor, Bell, Download, Palette } from 'lucide-react'
+import { Monitor, Bell, Download, Mic, Palette } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -27,6 +27,11 @@ const sidebarNavItems = [
     title: 'Tải xuống',
     href: '/settings/downloads',
     icon: <Download size={18} />,
+  },
+  {
+    title: 'Lồng tiếng',
+    href: '/settings/dubbing',
+    icon: <Mic size={18} />,
   },
 ]
 

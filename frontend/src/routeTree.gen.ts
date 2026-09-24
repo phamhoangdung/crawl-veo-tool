@@ -36,6 +36,7 @@ import { Route as AuthenticatedApiKeysIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedAiStudioIndexRouteImport } from './routes/_authenticated/ai-studio/index'
 import { Route as AuthenticatedVideosVideoIdRouteImport } from './routes/_authenticated/videos/$videoId'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedSettingsDubbingRouteImport } from './routes/_authenticated/settings/dubbing'
 import { Route as AuthenticatedSettingsDownloadsRouteImport } from './routes/_authenticated/settings/downloads'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
@@ -190,6 +191,12 @@ const AuthenticatedSettingsNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsDubbingRoute =
+  AuthenticatedSettingsDubbingRouteImport.update({
+    id: '/dubbing',
+    path: '/dubbing',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsDownloadsRoute =
   AuthenticatedSettingsDownloadsRouteImport.update({
     id: '/downloads',
@@ -239,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/downloads': typeof AuthenticatedSettingsDownloadsRoute
+  '/settings/dubbing': typeof AuthenticatedSettingsDubbingRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
   '/ai-studio/': typeof AuthenticatedAiStudioIndexRoute
@@ -271,6 +279,7 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/downloads': typeof AuthenticatedSettingsDownloadsRoute
+  '/settings/dubbing': typeof AuthenticatedSettingsDubbingRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
   '/ai-studio': typeof AuthenticatedAiStudioIndexRoute
@@ -306,6 +315,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/downloads': typeof AuthenticatedSettingsDownloadsRoute
+  '/_authenticated/settings/dubbing': typeof AuthenticatedSettingsDubbingRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/videos/$videoId': typeof AuthenticatedVideosVideoIdRoute
   '/_authenticated/ai-studio/': typeof AuthenticatedAiStudioIndexRoute
@@ -341,6 +351,7 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/downloads'
+    | '/settings/dubbing'
     | '/settings/notifications'
     | '/videos/$videoId'
     | '/ai-studio/'
@@ -373,6 +384,7 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/downloads'
+    | '/settings/dubbing'
     | '/settings/notifications'
     | '/videos/$videoId'
     | '/ai-studio'
@@ -407,6 +419,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/downloads'
+    | '/_authenticated/settings/dubbing'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/videos/$videoId'
     | '/_authenticated/ai-studio/'
@@ -628,6 +641,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/dubbing': {
+      id: '/_authenticated/settings/dubbing'
+      path: '/dubbing'
+      fullPath: '/settings/dubbing'
+      preLoaderRoute: typeof AuthenticatedSettingsDubbingRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/downloads': {
       id: '/_authenticated/settings/downloads'
       path: '/downloads'
@@ -671,6 +691,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
   AuthenticatedSettingsDownloadsRoute: typeof AuthenticatedSettingsDownloadsRoute
+  AuthenticatedSettingsDubbingRoute: typeof AuthenticatedSettingsDubbingRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -681,6 +702,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
     AuthenticatedSettingsDownloadsRoute: AuthenticatedSettingsDownloadsRoute,
+    AuthenticatedSettingsDubbingRoute: AuthenticatedSettingsDubbingRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render } from 'vitest-browser-react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import '@/styles/index.css'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render } from 'vitest-browser-react'
 import { getAppSettings, updateAppSettings } from '@/lib/api'
 import { SettingsDownloads } from './index'
 
@@ -15,7 +15,9 @@ const mockGet = vi.mocked(getAppSettings)
 const mockUpdate = vi.mocked(updateAppSettings)
 
 async function wrap() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
   return await render(
     <QueryClientProvider client={client}>
       <SettingsDownloads />
@@ -30,7 +32,11 @@ describe('SettingsDownloads — Phase 21', () => {
   })
 
   it('hiện đúng giá trị mặc định (1 luồng) khi vừa cài mới', async () => {
-    mockGet.mockResolvedValue({ download_connections: 1, download_max_videos: 3 })
+    mockGet.mockResolvedValue({
+      download_connections: 1,
+      download_max_videos: 3,
+      speaker_diarization_enabled: false,
+    })
 
     const screen = await wrap()
 
@@ -41,8 +47,16 @@ describe('SettingsDownloads — Phase 21', () => {
   })
 
   it('đổi số luồng gọi đúng API và không đụng vào số video tải cùng lúc', async () => {
-    mockGet.mockResolvedValue({ download_connections: 1, download_max_videos: 3 })
-    mockUpdate.mockResolvedValue({ download_connections: 8, download_max_videos: 3 })
+    mockGet.mockResolvedValue({
+      download_connections: 1,
+      download_max_videos: 3,
+      speaker_diarization_enabled: false,
+    })
+    mockUpdate.mockResolvedValue({
+      download_connections: 8,
+      download_max_videos: 3,
+      speaker_diarization_enabled: false,
+    })
 
     const screen = await wrap()
 
@@ -58,7 +72,11 @@ describe('SettingsDownloads — Phase 21', () => {
   })
 
   it('lỗi lưu cài đặt thì không làm sập trang', async () => {
-    mockGet.mockResolvedValue({ download_connections: 1, download_max_videos: 3 })
+    mockGet.mockResolvedValue({
+      download_connections: 1,
+      download_max_videos: 3,
+      speaker_diarization_enabled: false,
+    })
     mockUpdate.mockRejectedValue(new Error('network error'))
 
     const screen = await wrap()
@@ -67,6 +85,8 @@ describe('SettingsDownloads — Phase 21', () => {
 
     await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalled())
     // Trang vẫn còn hiện nội dung, không crash trắng trang.
-    await expect.element(screen.getByText('Số luồng mỗi video')).toBeInTheDocument()
+    await expect
+      .element(screen.getByText('Số luồng mỗi video'))
+      .toBeInTheDocument()
   })
 })

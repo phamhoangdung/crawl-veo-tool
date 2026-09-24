@@ -74,6 +74,27 @@ class TestUpdate:
 
 
 class TestGetAll:
-    def test_returns_both_keys(self, db) -> None:
+    def test_returns_all_keys(self, db) -> None:
         result = settings_service.get_all(db, 1)
-        assert set(result.keys()) == {"download_connections", "download_max_videos"}
+        assert set(result.keys()) == {
+            "download_connections",
+            "download_max_videos",
+            "speaker_diarization_enabled",
+        }
+
+
+class TestSpeakerDiarization:
+    def test_off_by_default(self, db) -> None:
+        """Kết quả phân vai chưa ổn định → chỉ chạy khi người dùng tự bật."""
+        assert settings_service.get_speaker_diarization_enabled(db, 1) is False
+
+    def test_toggle_persists(self, db) -> None:
+        settings_service.update(db, 1, speaker_diarization_enabled=True)
+        assert settings_service.get_speaker_diarization_enabled(db, 1) is True
+        settings_service.update(db, 1, speaker_diarization_enabled=False)
+        assert settings_service.get_speaker_diarization_enabled(db, 1) is False
+
+    def test_updating_other_key_keeps_toggle(self, db) -> None:
+        settings_service.update(db, 1, speaker_diarization_enabled=True)
+        settings_service.update(db, 1, download_connections=4)
+        assert settings_service.get_speaker_diarization_enabled(db, 1) is True

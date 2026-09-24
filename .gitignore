@@ -14,6 +14,9 @@ storage/
 target/
 src-tauri/gen/
 
+# ffmpeg tải về để đóng gói (scripts/fetch-ffmpeg.mjs) — binary ~200MB, không commit.
+backend/vendor/
+
 # Khung hình trích từ video YouTube của người khác — chỉ để tham chiếu UI khi
 # thiết kế, giữ trên máy chứ không đưa lên repo (nội dung có bản quyền của họ).
 docs/ai-video-generation/goha-screenshots/

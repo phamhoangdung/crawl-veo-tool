@@ -33,9 +33,24 @@ fn resolve_backend_exe(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(resource_dir.join("backend").join("viedub-backend.exe"))
 }
 
-fn spawn_backend(app: &tauri::AppHandle) -> Result<Child, String> {
+/// Cổng backend lắng nghe. Bản đóng gói xin hệ điều hành 1 cổng đang RẢNH thay vì
+/// cố định 8000 — máy người dùng có thể đã có phần mềm khác (hoặc bản app cũ chưa
+/// tắt hẳn) chiếm 8000, khi đó giao diện sẽ nói chuyện nhầm với tiến trình lạ.
+/// Dev mode giữ 8000 vì frontend dev (Vite) trỏ cứng vào đó.
+fn pick_backend_port() -> u16 {
+    if cfg!(debug_assertions) {
+        return 8000;
+    }
+    std::net::TcpListener::bind(("127.0.0.1", 0))
+        .and_then(|listener| listener.local_addr())
+        .map(|addr| addr.port())
+        .unwrap_or(8000)
+}
+
+fn spawn_backend(app: &tauri::AppHandle, port: u16) -> Result<Child, String> {
     let exe_path = resolve_backend_exe(app)?;
     let mut command = Command::new(&exe_path);
+    command.env("BACKEND_PORT", port.to_string());
     // Nhật ký backend tự ghi ra file (xem backend/app/core/logging_setup.py), nên
     // không cần console: null handle để Python vẫn có stdout/stderr hợp lệ.
     command
@@ -70,7 +85,8 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
-            match spawn_backend(&handle) {
+            let port = pick_backend_port();
+            match spawn_backend(&handle, port) {
                 Ok(child) => {
                     log::info!("Backend đã khởi động, pid={}", child.id());
                     let state = handle.state::<BackendProcess>();
@@ -81,6 +97,16 @@ pub fn run() {
                     return Err(e.into());
                 }
             }
+
+            // Cửa sổ tạo ở đây (không để tauri.conf.json tự tạo) để tiêm được địa chỉ
+            // backend vào trang TRƯỚC khi frontend chạy — `frontend/src/lib/api.ts` đọc
+            // `window.__VIEDUB_API_BASE__`.
+            let window_config = app.config().app.windows[0].clone();
+            tauri::WebviewWindowBuilder::from_config(app, &window_config)?
+                .initialization_script(format!(
+                    "window.__VIEDUB_API_BASE__ = 'http://127.0.0.1:{port}';"
+                ))
+                .build()?;
 
             Ok(())
         })

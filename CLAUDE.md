@@ -47,7 +47,7 @@ Chi tiết đầy đủ của mỗi trạng thái nằm ở dòng "Trạng thái
 | 9. Compliance & value-add cho re-up | [docs/phases/phase-9-reup-compliance.md](docs/phases/phase-9-reup-compliance.md) | Xong & verify thật — thiếu source ledger |
 | 10. Video kể chuyện (script + TTS + video nền) | [docs/phases/phase-10-story-videos.md](docs/phases/phase-10-story-videos.md) | Chưa bắt đầu |
 | 11. Clip ngắn TikTok + cross-post | [docs/phases/phase-11-shorts-crosspost.md](docs/phases/phase-11-shorts-crosspost.md) | Cắt clip xong & verify thật — cross-post ngoài phạm vi |
-| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | Có installer thật — chưa test máy sạch |
+| 12. Đóng gói Desktop App (Tauri + PyInstaller) | [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md) | Có installer thật, tự chứa ffmpeg/Demucs, cổng động — verify mô phỏng máy sạch, chưa chạy Setup.exe trên máy khác |
 | 13. Trình chỉnh sửa timeline (AI gợi ý + kéo-thả) | [docs/phases/phase-13-timeline-editor.md](docs/phases/phase-13-timeline-editor.md) | Xong & verify thật — Phase 9/10/11 dùng chung |
 | 14. Tạo video bằng AI generative (node-based đơn giản hoá) | [docs/phases/phase-14-ai-video-generation.md](docs/phases/phase-14-ai-video-generation.md) | Lõi xong — chưa chạy với key fal.ai thật |
 | 15. Account Pool — pool-group cho provider quota-theo-project (Google Veo) | [docs/phases/phase-15-account-pool-groups.md](docs/phases/phase-15-account-pool-groups.md) | Chưa bắt đầu — có thể hoãn vô thời hạn |

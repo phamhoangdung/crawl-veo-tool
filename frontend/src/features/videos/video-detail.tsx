@@ -20,6 +20,7 @@ import {
   downloadVideo,
   dubVideo,
   getApiErrorMessage,
+  getAppSettings,
   getDownloadUrl,
   getVideoDetail,
   getVideoFilesById,
@@ -423,6 +424,15 @@ export function VideoDetail() {
     queryFn: () => getVideoDetail(videoId),
   })
 
+  // Phân vai người nói là tuỳ chọn (Cài đặt > Lồng tiếng, mặc định tắt) — tắt thì
+  // ẩn bước "Phân vai" và tab "Giọng đọc" cho gọn.
+  const { data: appSettings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
+  const diarizationOn = appSettings?.speaker_diarization_enabled ?? false
+  const steps = STEPS.filter((s) => s.kind !== 'diarize' || diarizationOn)
+
   const reveal = useMutation({
     mutationFn: () => revealInFileManager(videoId),
     onError: () => toast.error('Không mở được thư mục.'),
@@ -523,9 +533,11 @@ export function VideoDetail() {
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value='voices' disabled={!hasSpeakers}>
-                  Giọng đọc
-                </TabsTrigger>
+                {diarizationOn && (
+                  <TabsTrigger value='voices' disabled={!hasSpeakers}>
+                    Giọng đọc
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value='editor' disabled={!hasFile}>
                   Dựng video
                 </TabsTrigger>
@@ -609,7 +621,7 @@ export function VideoDetail() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className='space-y-3'>
-                    {STEPS.map((step) => (
+                    {steps.map((step) => (
                       <StepCard
                         key={step.kind}
                         step={step}

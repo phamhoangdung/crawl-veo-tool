@@ -7,6 +7,7 @@ import { bootPercent, type BootStepId } from '@/lib/boot-steps'
 import { BootGate } from './boot-gate'
 
 vi.mock('@/lib/api', () => ({
+  API_BASE_URL: 'http://127.0.0.1:8000',
   api: { get: vi.fn() },
   getTrendingCategories: vi.fn(),
   getFollowedCategories: vi.fn(),

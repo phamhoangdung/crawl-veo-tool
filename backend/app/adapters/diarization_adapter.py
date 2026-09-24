@@ -1,10 +1,8 @@
 import logging
-import tempfile
 from pathlib import Path
 
 import numpy as np
 import torch
-import torchaudio
 from pydub import AudioSegment
 from sklearn.cluster import AgglomerativeClustering
 
@@ -32,11 +30,15 @@ def _get_model():
     global _MODEL
     if _MODEL is None:
         from speechbrain.inference.speaker import EncoderClassifier
+        from speechbrain.utils.fetching import LocalStrategy
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         _MODEL = EncoderClassifier.from_hparams(
             source="speechbrain/spkrec-ecapa-voxceleb",
             savedir=str(_model_cache_dir()),
+            # Mặc định SpeechBrain tạo symlink — trên Windows cần quyền admin hoặc
+            # bật Developer Mode, máy người dùng thường không có -> lỗi tải model.
+            local_strategy=LocalStrategy.COPY,
             run_opts={"device": device},
         )
     return _MODEL
@@ -48,15 +50,13 @@ def _segment_embedding(
     clip = audio[int(start_s * 1000) : int(end_s * 1000)]
     if len(clip) < _MIN_CLIP_MS:
         clip = clip + AudioSegment.silent(duration=_MIN_CLIP_MS - len(clip))
-    clip = clip.set_channels(1).set_frame_rate(16000)
+    clip = clip.set_channels(1).set_frame_rate(16000).set_sample_width(2)
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-    try:
-        clip.export(tmp_path, format="wav")
-        signal, _sample_rate = torchaudio.load(str(tmp_path))
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    # Đọc thẳng mẫu âm thanh từ pydub thay vì ghi ra wav rồi `torchaudio.load`:
+    # torchaudio 2.9+ chuyển sang bắt buộc cài `torchcodec` để đọc file, mà gói
+    # đó nặng và không cần thiết cho việc này.
+    samples = np.array(clip.get_array_of_samples(), dtype=np.float32) / 32768.0
+    signal = torch.from_numpy(samples).unsqueeze(0)
 
     embedding = model.encode_batch(signal)
     return embedding.squeeze().detach().cpu().numpy()

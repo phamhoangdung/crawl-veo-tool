@@ -12,6 +12,7 @@ ly gì thêm (xem docs/performance-optimization/plan.md mục P2).
 
 from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from typing import Any, TypeVar
 
 from app.core.config import get_settings
@@ -35,7 +36,21 @@ def submit(func: Callable[..., _T], /, *args: Any, **kwargs: Any) -> "Future[_T]
     trong 1 thread nền (Starlette threadpool hoặc `asyncio.to_thread`), không
     phải thread của event loop chính, nên chặn ở đây không ảnh hưởng server.
     """
-    return get_pool().submit(func, *args, **kwargs)
+    pool = get_pool()
+    future = pool.submit(func, *args, **kwargs)
+    future.add_done_callback(lambda done: _discard_if_broken(pool, done))
+    return future
+
+
+def _discard_if_broken(pool: ProcessPoolExecutor, future: "Future[Any]") -> None:
+    """Worker chết đột ngột (hết RAM, crash native) làm pool hỏng vĩnh viễn — mọi
+    lần `submit` sau đều lỗi cho tới khi khởi động lại app. Bỏ pool hỏng để lần gọi
+    kế tiếp tạo pool mới, người dùng chỉ cần bấm chạy lại."""
+    global _pool
+    if not future.cancelled() and isinstance(future.exception(), BrokenProcessPool):
+        if _pool is pool:
+            _pool = None
+        pool.shutdown(wait=False)
 
 
 def shutdown() -> None:

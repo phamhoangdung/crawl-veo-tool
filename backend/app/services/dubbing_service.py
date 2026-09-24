@@ -13,6 +13,7 @@ from app.models.video import Video, VideoStatus
 from app.services import (
     audio_chunk_service,
     progress_service,
+    settings_service,
     transcribe_service,
     translate_service,
     tts_service,
@@ -177,6 +178,13 @@ async def run_dub_and_mux(
     db.commit()
     try:
         segments = video.transcript_json or []
+        # Tắt phân vai trong Cài đặt thì bỏ qua nhãn người nói đã có sẵn (từ lúc
+        # còn bật) — lồng tiếng bằng 1 giọng chung như khi chưa từng phân vai.
+        speaker_voices = (
+            video.speaker_voices_json or {}
+            if settings_service.get_speaker_diarization_enabled(db, user_id)
+            else {}
+        )
         video_dir = Path(video.local_path).parent
         segments_dir = video_dir / "tts_segments"
         segments_dir.mkdir(exist_ok=True)
@@ -206,7 +214,7 @@ async def run_dub_and_mux(
 
             target_duration = max(segment["end"] - segment["start"], 0.3)
             speaker = segment.get("speaker")
-            voice = (video.speaker_voices_json or {}).get(speaker) if speaker else None
+            voice = speaker_voices.get(speaker) if speaker else None
             async with tts_semaphore:
                 clip = await _synthesize_segment_matched_duration(
                     db, user_id, text, target_duration, segments_dir, index, voice=voice

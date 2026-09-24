@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { APP_NAME } from '@/config/app'
-import { api, getFollowedCategories, getTrendingCategories } from '@/lib/api'
+import {
+  API_BASE_URL,
+  api,
+  getFollowedCategories,
+  getTrendingCategories,
+} from '@/lib/api'
 import { BOOT_STEPS, bootPercent, type BootStepId } from '@/lib/boot-steps'
 import {
   CATEGORIES_QUERY_KEY,
@@ -120,8 +125,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
             </h1>
             <p className='text-sm text-muted-foreground'>
               {APP_NAME} không nhận được phản hồi từ backend sau{' '}
-              {BACKEND_TIMEOUT_MS / 1000} giây. Kiểm tra backend đang chạy (cổng
-              8000) hoặc phần mềm diệt virus có chặn không, rồi thử lại.
+              {BACKEND_TIMEOUT_MS / 1000} giây. Kiểm tra backend đang chạy (địa
+              chỉ {API_BASE_URL}) hoặc phần mềm diệt virus có chặn không, rồi thử
+              lại.
             </p>
             <p className='text-xs break-all text-muted-foreground'>
               Nhật ký lỗi: %APPDATA%\VieDubStudio\logs\backend.log

@@ -15,6 +15,8 @@ from app.models.app_setting import AppSetting
 DOWNLOAD_CONNECTIONS_KEY = "download_connections"
 DOWNLOAD_MAX_VIDEOS_KEY = "download_max_videos"
 
+SPEAKER_DIARIZATION_KEY = "speaker_diarization_enabled"
+
 DOWNLOAD_CONNECTIONS_MIN = 1
 DOWNLOAD_CONNECTIONS_MAX = 8
 DOWNLOAD_MAX_VIDEOS_MIN = 1
@@ -52,10 +54,18 @@ def get_download_max_videos(db: Session, user_id: int) -> int:
     )
 
 
+def get_speaker_diarization_enabled(db: Session, user_id: int) -> bool:
+    """Phân vai người nói (Phase 19) — mặc định TẮT: kết quả chưa ổn định (video
+    1 người dẫn vẫn có thể ra hàng chục "người nói"), nên chỉ bật khi người dùng
+    chủ động muốn thử. Lưu dạng 0/1 như các khoá số khác."""
+    return bool(_get_int(db, user_id, SPEAKER_DIARIZATION_KEY, 0))
+
+
 def get_all(db: Session, user_id: int) -> dict[str, int]:
     return {
         DOWNLOAD_CONNECTIONS_KEY: get_download_connections(db, user_id),
         DOWNLOAD_MAX_VIDEOS_KEY: get_download_max_videos(db, user_id),
+        SPEAKER_DIARIZATION_KEY: int(get_speaker_diarization_enabled(db, user_id)),
     }
 
 
@@ -77,9 +87,12 @@ def update(
     *,
     download_connections: int | None = None,
     download_max_videos: int | None = None,
+    speaker_diarization_enabled: bool | None = None,
 ) -> dict[str, int]:
     """Chỉ ghi các khoá được truyền vào (không None) — gọi `PUT` với 1 field
     không được vô tình xoá field còn lại."""
+    if speaker_diarization_enabled is not None:
+        _set_int(db, user_id, SPEAKER_DIARIZATION_KEY, int(speaker_diarization_enabled))
     if download_connections is not None:
         _set_int(db, user_id, DOWNLOAD_CONNECTIONS_KEY, download_connections)
     if download_max_videos is not None:
