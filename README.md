@@ -28,7 +28,7 @@ VieDub Studio turns foreign-language short videos into Vietnamese-dubbed videos 
 
 ## Quick install (end users, Windows)
 
-1. Open the **Releases** page of this repository and download the latest `VieDub Studio_x.y.z_x64-setup.exe`.
+1. **[Download VieDub-Studio-Setup.exe](https://github.com/phamhoangdung/crawl-veo-tool/releases/latest/download/VieDub-Studio-Setup.exe)** (always the latest release; all versions are on the [Releases](https://github.com/phamhoangdung/crawl-veo-tool/releases) page). The link works once the repository is public and the first release has been built.
 2. Run it. It installs per user (no administrator rights needed). Windows SmartScreen may warn because the installer is not code-signed: click **More info → Run anyway**.
 3. Start **VieDub Studio** from the Start menu. The installer is small on purpose: heavy components are downloaded once, on demand. A banner at the top of the app offers **ffmpeg** (~110MB) and the **AI pack** (Whisper, Demucs, speaker separation; ~250MB download, ~800MB on disk). Click **Tải về** on each and wait for it to finish; this needs an internet connection.
 4. Open the **API Keys** page and enter the keys of the AI providers you want to use (translation / TTS). Keys are encrypted and stored locally.

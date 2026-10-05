@@ -63,5 +63,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="ai-pack-v${{ needs.plan.outputs.version }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --latest=false --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
           gh release upload "$tag" dist-packs/ai-pack-win64.zip --clobber
