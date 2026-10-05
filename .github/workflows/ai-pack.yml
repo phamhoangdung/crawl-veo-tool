@@ -1,22 +1,47 @@
-# Builds the downloadable AI pack (torch CPU, demucs, speechbrain, faster-whisper...) and
-# uploads it to the release `ai-pack-v<AI_PACK_VERSION>` that the app downloads from on
-# first use (backend/app/core/packs.py). Run manually; only needed when
-# backend/requirements-ai.txt changes (then bump AI_PACK_VERSION in packs.py).
+# Build the downloadable AI pack (torch CPU, demucs, speechbrain, faster-whisper...) and upload it
+# to the release `ai-pack-v<AI_PACK_VERSION>` the app downloads from on first use
+# (backend/app/core/packs.py). The version is read from packs.py, nothing to type.
+# Runs on pushes to main that touch the pack definition, and skips when that release already has
+# the file. To publish a new pack, change backend/requirements-ai.txt AND bump AI_PACK_VERSION.
 name: ai-pack
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - backend/requirements-ai.txt
+      - backend/app/core/packs.py
+      - scripts/build-ai-pack.mjs
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Pack version (must equal AI_PACK_VERSION in backend/app/core/packs.py)"
-        required: true
-        default: "1"
 
 permissions:
   contents: write
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read AI_PACK_VERSION and check the release
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 '^AI_PACK_VERSION' backend/app/core/packs.py | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "ai-pack-v$version" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx 'ai-pack-win64.zip'; then
+            echo "ai-pack-v$version already has the pack, nothing to build."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -37,6 +62,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="ai-pack-v${{ inputs.version }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "AI pack v${{ inputs.version }}" --notes "Downloadable AI pack used by the desktop app."
+          tag="ai-pack-v${{ needs.plan.outputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
           gh release upload "$tag" dist-packs/ai-pack-win64.zip --clobber
