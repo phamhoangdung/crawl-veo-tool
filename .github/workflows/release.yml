@@ -1,14 +1,21 @@
-# Build the Windows installer (VieDub Studio) and publish it as a GitHub Release.
-# The tag is derived automatically from the version in src-tauri/tauri.conf.json (v<version>):
-# every push to main checks whether that release already exists and only builds when it does not.
-# To ship a new release, bump the version (`npm run version:bump`), commit and push; no manual tag.
-# Manual runs from the Actions tab behave the same way (use them to retry a failed build).
+# Build the Windows installer (VieDub Studio) and publish it as a GitHub Release on EVERY push to main.
+# The version is automatic: the next patch after the highest existing `v*` tag (or the version in
+# src-tauri/tauri.conf.json when that is higher, e.g. after `npm run version:bump minor`). The tag
+# is created by the release itself; the repo files are not modified. Docs-only pushes are skipped.
 name: release
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".claude/**"
   workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,19 +28,26 @@ jobs:
       build: ${{ steps.v.outputs.build }}
     steps:
       - uses: actions/checkout@v4
-      - name: Read version and check for an existing release
+        with:
+          fetch-depth: 0
+      - name: Compute the next version
         id: v
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(grep -m1 '"version"' src-tauri/tauri.conf.json | sed -E 's/.*"([0-9.]+)".*/\1/')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "v$version" >/dev/null 2>&1; then
-            echo "Release v$version already exists, nothing to build."
-            echo "build=false" >> "$GITHUB_OUTPUT"
+          conf=$(grep -m1 '"version"' src-tauri/tauri.conf.json | grep -oE '[0-9]+[.][0-9]+[.][0-9]+')
+          latest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -n1)
+          if [ -z "$latest" ]; then
+            next="$conf"
           else
-            echo "build=true" >> "$GITHUB_OUTPUT"
+            top=$( (echo "$conf"; echo "$latest") | sort -V | tail -n1)
+            if [ "$top" = "$conf" ] && [ "$conf" != "$latest" ]; then
+              next="$conf"
+            else
+              next=$(echo "$latest" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
+            fi
           fi
+          echo "Next version: $next (config $conf, latest tag ${latest:-none})"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "build=true" >> "$GITHUB_OUTPUT"
 
   windows:
     needs: plan
@@ -76,7 +90,10 @@ jobs:
           Get-Content backend/requirements.txt | Where-Object { $_ -notmatch "^(faster-whisper|demucs|speechbrain|scikit-learn)" } | Set-Content req-core.txt
           backend\.venv\Scripts\python.exe -m pip install -r req-core.txt
 
-      # Not `npm run desktop:build`: that bumps the version, which here is decided by the commit.
+      - name: Apply the computed version to the build files
+        run: node scripts/bump-version.mjs ${{ needs.plan.outputs.version }}
+
+      # Not `npm run desktop:build`: the version was already set above.
       - name: Build installer
         run: npm run desktop:build:keep
 
