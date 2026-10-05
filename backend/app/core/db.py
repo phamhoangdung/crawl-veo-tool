@@ -10,17 +10,17 @@ from app.core.config import get_settings
 
 
 def _ensure_sqlite_dir(database_url: str) -> None:
-    """Tạo sẵn thư mục chứa file SQLite.
+    """Pre-create the directory that holds the SQLite file.
 
-    `storage/` nằm trong .gitignore nên máy mới clone về sẽ không có thư mục
-    này, và SQLite không tự tạo thư mục cha — nó chỉ báo "unable to open
+    `storage/` is in .gitignore so a freshly cloned machine will not have it,
+    and SQLite does not create parent directories — it only reports "unable to open
     database file".
     """
     if not database_url.startswith("sqlite"):
         return
 
     # sqlite:///relative/path → "/relative/path"; sqlite:////abs/path → "//abs/path".
-    # Bỏ đúng 1 dấu "/" đầu để giữ nguyên tính tuyệt đối/tương đối của đường dẫn.
+    # Strip exactly 1 leading "/" to keep the path's absolute/relative nature intact.
     raw_path = urlparse(database_url).path
     db_path = raw_path[1:] if raw_path.startswith("/") else raw_path
     if not db_path or db_path == ":memory:":
@@ -61,25 +61,25 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def ensure_schema_columns() -> None:
-    """Thêm các cột mới vào bảng đã tồn tại.
+    """Add new columns to tables that already exist.
 
-    `Base.metadata.create_all()` chỉ tạo bảng mới, không sửa bảng cũ — thêm cột
-    vào model mà không migrate sẽ khiến mọi query bảng đó lỗi "no such column".
-    Dự án cá nhân, thay đổi schema thưa nên chưa cần Alembic; chỉ xử lý thêm cột
-    nullable, đủ cho nhu cầu hiện tại.
+    `Base.metadata.create_all()` only creates new tables, it does not alter old ones — adding a column
+    to a model without migrating makes every query on that table fail with "no such column".
+    Personal project with infrequent schema changes, so Alembic is not needed yet; only nullable
+    column additions are handled, which is enough for now.
     """
     _migrate_api_keys_pool()
 
-    # VideoStatus.PAUSED_QUOTA (Phase 8) không cần migrate cột — SQLite lưu Enum
-    # dưới dạng VARCHAR không ràng buộc, thêm 1 giá trị enum Python mới ở
-    # app/models/video.py là đủ, không đụng tới cột `status` đã có sẵn.
+    # VideoStatus.PAUSED_QUOTA (Phase 8) needs no column migration — SQLite stores Enum
+    # as an unconstrained VARCHAR, so adding a new Python enum value in
+    # app/models/video.py is enough, without touching the existing `status` column.
     expected: dict[str, dict[str, str]] = {
         "videos": {
             "cover_url": "VARCHAR",
             "timeline_json": "JSON",
             "timeline_rendered_path": "VARCHAR",
             "speaker_voices_json": "JSON",
-            # Phase 22: id kênh thật, xem docstring `models/video.py::Video.channel_id`.
+            # Phase 22: real channel id, see the `models/video.py::Video.channel_id` docstring.
             "channel_id": "VARCHAR",
         },
         "generation_projects": {
@@ -87,8 +87,8 @@ def ensure_schema_columns() -> None:
             "timeline_rendered_path": "VARCHAR",
         },
         "category_snapshots": {
-            # Phase Trending cải thiện (2026-09-16): điểm `pts` thật của Bilibili,
-            # đáng tin hơn total_plays để đo "độ hot" — xem schemas/trending.py.
+            # Trending improvement phase (2026-09-16): Bilibili's real `pts` score,
+            # more reliable than total_plays for measuring "hotness" — see schemas/trending.py.
             "total_pts": "INTEGER DEFAULT 0",
         },
     }
@@ -99,23 +99,23 @@ def ensure_schema_columns() -> None:
                 row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")
             }
             if not existing:
-                continue  # bảng chưa tồn tại — create_all() sẽ tạo với đủ cột
+                continue  # table does not exist yet — create_all() will create it with all columns
             for name, sql_type in columns.items():
                 if name not in existing:
                     conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
 
 
 def _migrate_api_keys_pool() -> None:
-    """Phase 8: bảng `api_keys` cũ có `UNIQUE(user_id, provider)` (1 key/provider).
+    """Phase 8: the old `api_keys` table has `UNIQUE(user_id, provider)` (1 key/provider).
 
-    SQLite lưu UNIQUE table-constraint dưới dạng "autoindex" (`sqlite_autoindex_*`)
-    — loại index này KHÔNG thể xoá bằng `DROP INDEX`, chỉ có cách dựng lại bảng
-    (rename → tạo bảng mới đúng schema model hiện tại → copy dữ liệu → xoá bảng cũ).
-    Idempotent: chỉ chạy khi còn phát hiện constraint cũ, không ảnh hưởng lần chạy
-    sau khi đã migrate xong.
+    SQLite stores a UNIQUE table-constraint as an "autoindex" (`sqlite_autoindex_*`)
+    — that kind of index CANNOT be removed with `DROP INDEX`; the only way is to rebuild the table
+    (rename → create new table with the current model schema → copy data → drop old table).
+    Idempotent: only runs while the old constraint is still detected, so it does not affect runs
+    after the migration is done.
     """
-    # Import cục bộ: app.models.api_key import Base từ chính module này (db.py) —
-    # import ở đầu file sẽ tạo vòng lặp import.
+    # Local import: app.models.api_key imports Base from this very module (db.py) —
+    # importing at the top of the file would create an import cycle.
     from app.models.api_key import ApiKey
 
     with engine.begin() as conn:
@@ -123,7 +123,7 @@ def _migrate_api_keys_pool() -> None:
             row[1] for row in conn.exec_driver_sql("PRAGMA table_info(api_keys)")
         }
         if not existing_cols:
-            return  # bảng chưa tồn tại — create_all() sẽ tạo đúng schema mới luôn
+            return  # table does not exist yet — create_all() will create the new schema anyway
 
         legacy_unique_index = None
         for row in conn.exec_driver_sql("PRAGMA index_list(api_keys)"):
@@ -139,7 +139,7 @@ def _migrate_api_keys_pool() -> None:
                 break
 
         if legacy_unique_index is None:
-            return  # đã ở schema mới (hoặc DB mới tinh, không có constraint cũ)
+            return  # already on the new schema (or a brand-new DB, no old constraint)
 
         conn.exec_driver_sql("ALTER TABLE api_keys RENAME TO api_keys_legacy")
         ApiKey.__table__.create(bind=conn)

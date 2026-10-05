@@ -8,16 +8,16 @@ interface OverlayLayerProps {
 }
 
 /**
- * Hộp overlay text kéo-thả trên khung preview video. `x`/`y` là toạ độ TÂM chữ
- * theo tỉ lệ [0,1] — khớp đúng công thức backend dùng khi render (drawtext
- * `x=w*fx-text_w/2`), để vị trí xem trước và bản render ra khớp nhau.
+ * Drag-and-drop text overlay box on the video preview frame. `x`/`y` are the CENTER coordinates of the text
+ * as ratios [0,1] — matching exactly the formula the backend uses when rendering (drawtext
+ * `x=w*fx-text_w/2`), so the preview position and the render match.
  */
 export function OverlayLayer({ currentTime }: OverlayLayerProps) {
-  // Chỉ subscribe đúng track "overlay" — trước đây lấy cả `s.operations` khiến
-  // component này render lại mỗi khi BẤT KỲ track nào đổi (vd kéo watermark),
-  // dù chẳng liên quan gì tới overlay text. `mapTrack` trong store giữ nguyên
-  // reference của track không đổi nên so sánh mặc định (Object.is) của Zustand
-  // vẫn đúng — track "overlay" không đổi thì không render lại, không cần
+  // Subscribe only to the "overlay" track — previously it took all of `s.operations`, making
+  // this component re-render whenever ANY track changed (e.g. dragging a watermark),
+  // though it has nothing to do with the text overlay. `mapTrack` in the store keeps the
+  // reference of unchanged tracks so Zustand's default comparison (Object.is)
+  // is still right — if the "overlay" track is unchanged it does not re-render, with no need for
   // `useShallow`.
   const overlayTrackIndex = useEditorStore((s) =>
     s.operations.tracks.findIndex((t) => t.type === 'overlay')
@@ -41,8 +41,8 @@ export function OverlayLayer({ currentTime }: OverlayLayerProps) {
       })
     }, endGesture)
 
-    // `beginGesture` phải chạy lúc pointerdown THẬT sự xảy ra, không phải lúc
-    // JSX gọi `beginDrag(...)` để dựng handler (chuyện đó xảy ra mỗi lần render).
+    // `beginGesture` must run when the pointerdown REALLY happens, not when the
+    // JSX calls `beginDrag(...)` to build the handler (that happens on every render).
     return (e: React.PointerEvent) => {
       beginGesture()
       handlePointerDown(e)

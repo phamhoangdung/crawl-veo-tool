@@ -1,5 +1,5 @@
-// Tăng version cho bản đóng gói. Nguồn chuẩn là src-tauri/tauri.conf.json (tên file
-// installer lấy từ đó), rồi đồng bộ sang Cargo.toml và frontend/package.json.
+// Bumps the version for packaged builds. The canonical source is src-tauri/tauri.conf.json
+// (installer file names come from it); it is then synced to Cargo.toml and frontend/package.json.
 //   node scripts/bump-version.mjs [patch|minor|major|x.y.z] [--dry]
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -36,8 +36,8 @@ function next(current) {
 
 function write(file, kind, version) {
   const text = readFileSync(file, "utf8");
-  // Chỉ thay lần xuất hiện ĐẦU TIÊN: ở Cargo.toml đó là version của [package],
-  // các dòng version của dependency nằm phía sau.
+  // Replace only the FIRST occurrence: in Cargo.toml that is the [package] version,
+  // the dependencies' version lines come after it.
   writeFileSync(file, text.replace(VERSION_LINE[kind], `$1${version}$3`));
 }
 

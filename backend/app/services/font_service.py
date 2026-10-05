@@ -1,12 +1,12 @@
-"""Danh mục font kèm sẵn cho phụ đề/watermark text (drawtext + burn_subtitles).
+"""Catalog of bundled fonts for subtitles/watermark text (drawtext + burn_subtitles).
 
-Dùng font đóng gói CÙNG mã nguồn (tải từ Google Fonts, giấy phép OFL cho phép
-đóng gói lại) thay vì dò font cài trên máy hệ điều hành — chạy giống nhau trên
-mọi máy, không phụ thuộc máy user (đặc biệt quan trọng cho bản đóng gói desktop,
-Phase 12: máy user cài Windows sạch có thể thiếu font). Cả 4 family đều có
-subset "vietnamese" chính thức trên Google Fonts (đã kiểm tra METADATA.pb), tức
-glyph dấu tiếng Việt đã được kiểm định — không chọn đại font Latin cơ bản vì
-nhiều font thiếu hẳn dấu tiếng Việt dù có vẻ hỗ trợ Unicode.
+Uses fonts packaged WITH the source (downloaded from Google Fonts, the OFL license allows
+redistribution) instead of probing fonts installed on the OS — behaves the same on
+every machine, independent of the user's machine (especially important for the desktop package,
+Phase 12: a clean Windows install may lack fonts). All 4 families have the official
+"vietnamese" subset on Google Fonts (checked METADATA.pb), meaning the
+Vietnamese diacritic glyphs are verified — we do not pick just any basic Latin font because
+many fonts lack Vietnamese diacritics entirely even though they seem to support Unicode.
 """
 
 from dataclasses import dataclass
@@ -19,14 +19,14 @@ from app.core.config import resource_dir
 class FontOption:
     id: str
     label: str
-    # Tên family THẬT bên trong file .ttf (name table) — dùng cho `FontName` của
-    # `force_style` (burn_subtitles/libass), PHẢI khớp chữ để libass nhận diện
-    # đúng font khi quét `fontsdir`, khác `label` là tên hiển thị UI (có thể có
-    # thêm mô tả).
+    # The REAL family name inside the .ttf file (name table) — used for the `FontName` of
+    # `force_style` (burn_subtitles/libass), it MUST match exactly so libass recognizes
+    # the right font when scanning `fontsdir`, unlike `label` which is the UI display name (may include
+    # extra description).
     family_name: str
     regular_file: str
-    # None = font không có file đậm riêng (vd font display vốn đã đậm sẵn) —
-    # `resolve_fontfile(bold=True)` sẽ tự rơi về file thường.
+    # None = the font has no separate bold file (e.g. a display font that is already bold) —
+    # `resolve_fontfile(bold=True)` will fall back to the regular file.
     bold_file: str | None
 
 
@@ -58,25 +58,25 @@ def get_font(font_id: str) -> FontOption:
 
 
 def get_font_or_default(font_id: str | None) -> FontOption:
-    """Như `get_font` nhưng không lỗi khi id trống/lạ — rơi về font mặc định.
-    Dùng ở đường render (burn_subtitles/drawtext): timeline lưu trước khi có
-    tính năng này không có field `font_family`, không nên làm hỏng cả lần render
-    chỉ vì thiếu 1 field tuỳ chọn."""
+    """Like `get_font` but does not fail on an empty/unknown id — falls back to the default font.
+    Used in the render path (burn_subtitles/drawtext): timelines saved before this
+    feature existed have no `font_family` field, and should not break a whole render
+    just for lacking 1 optional field."""
     return _FONTS_BY_ID.get(font_id or "", _FONTS_BY_ID[DEFAULT_FONT_ID])
 
 
 def resolve_fontfile(font_id: str | None, *, bold: bool = False) -> Path:
-    """Đường dẫn file .ttf thật trên đĩa cho 1 font id + độ đậm. `font_id=None`
-    hoặc không tìm thấy id thì rơi về font mặc định thay vì lỗi — timeline cũ
-    lưu trước khi có tính năng này không có field `font_family`."""
+    """Real .ttf file path on disk for 1 font id + weight. `font_id=None`
+    or an id not found falls back to the default font instead of erroring — old timelines
+    saved before this feature existed have no `font_family` field."""
     font = get_font_or_default(font_id)
     filename = (font.bold_file if bold else None) or font.regular_file
     return resource_dir() / "fonts" / filename
 
 
 def fonts_dir() -> Path:
-    """Thư mục chứa mọi file font — dùng cho tham số `fontsdir` của filter
-    `subtitles` (ffmpeg/libass), để libass tìm đúng font đã đóng gói mà không
-    cần dò qua fontconfig hệ thống (tránh lỗi 'Cannot load default config file'
-    đã gặp với `drawtext`, xem ghi chú Phase 13)."""
+    """Directory containing all font files — used for the `fontsdir` parameter of the
+    `subtitles` filter (ffmpeg/libass), so libass finds the bundled fonts without
+    probing system fontconfig (avoiding the 'Cannot load default config file' error
+    seen with `drawtext`, see the Phase 13 notes)."""
     return resource_dir() / "fonts"

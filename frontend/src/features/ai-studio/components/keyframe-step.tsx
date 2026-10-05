@@ -65,9 +65,9 @@ export function KeyframeStep({ settings, selectedKeyframeId, onSelectKeyframe }:
 
   const generate = useMutation({
     mutationFn: async () => {
-      // Gửi job rồi hỏi lại tiến độ, không giữ 1 request mở suốt vài phút:
-      // provider thật mất 1-5 phút/ảnh, trình duyệt hoặc proxy sẽ cắt kết nối
-      // trước khi kịp có kết quả.
+      // Send the job then poll for progress, not holding 1 request open for several minutes:
+      // a real provider takes 1-5 minutes per image, and the browser or a proxy would cut the connection
+      // before a result is available.
       const jobs = await Promise.all(
         Array.from({ length: settings.variantCount }, (_, index) =>
           generateKeyframeAsync({
@@ -93,8 +93,8 @@ export function KeyframeStep({ settings, selectedKeyframeId, onSelectKeyframe }:
     },
     onError: (error) => {
       if (!axios.isAxiosError(error)) {
-        // Job thất bại đến đây dưới dạng Error thường (không phải lỗi HTTP) —
-        // thông báo của provider nằm trong `message`, đừng nuốt mất nó.
+        // A failed job arrives here as a plain Error (not an HTTP error) —
+        // the provider's message is in `message`, do not swallow it.
         toast.error(
           error instanceof Error && error.message
             ? error.message

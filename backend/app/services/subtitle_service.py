@@ -10,7 +10,7 @@ def _format_timestamp(seconds: float) -> str:
 
 
 def build_bilingual_srt(segments: list[dict]) -> str:
-    """Mỗi cue gồm 2 dòng: bản gốc rồi tới bản dịch — dạng phụ đề song ngữ phổ biến."""
+    """Each cue has 2 lines: the original then the translation — the common bilingual subtitle format."""
     lines: list[str] = []
     for i, segment in enumerate(segments, start=1):
         original = (segment.get("text") or "").strip()
@@ -34,11 +34,11 @@ def write_srt(segments: list[dict], output_path: Path) -> Path:
 
 
 def pick_font_size_for(width: int, height: int) -> int:
-    """Video dọc (9:16 kiểu Douyin) cần cỡ chữ tương đối lớn hơn vì khung hẹp hơn khung
-    ngang (16:9 kiểu Bilibili) — quy đổi theo % chiều rộng thay vì số cố định.
+    """Vertical video (Douyin-style 9:16) needs relatively larger text because the frame is narrower than a
+    landscape (Bilibili-style 16:9) frame — converted by % of width instead of a fixed number.
 
-    Đã verify template ngang (16:9) bằng burn-in thật; chưa có video mẫu 9:16 để verify
-    thật template dọc — xem docs/phases/phase-5-subtitles-library.md phần Ghi chú.
+    The landscape (16:9) template was verified with a real burn-in; there is no 9:16 sample video yet to
+    verify the vertical template for real — see docs/phases/phase-5-subtitles-library.md, Notes section.
     """
     is_portrait = height > width
     reference_dimension = height if is_portrait else width

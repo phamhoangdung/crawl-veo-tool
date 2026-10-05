@@ -14,12 +14,15 @@ storage/
 target/
 src-tauri/gen/
 
-# ffmpeg tải về để đóng gói (scripts/fetch-ffmpeg.mjs) — binary ~200MB, không commit.
+# Locally vendored ffmpeg binaries (no longer used by the build: ffmpeg is a downloadable pack) — ~200MB, do not commit.
 backend/vendor/
 
-# Khung hình trích từ video YouTube của người khác — chỉ để tham chiếu UI khi
-# thiết kế, giữ trên máy chứ không đưa lên repo (nội dung có bản quyền của họ).
+# Frames extracted from other people's YouTube videos — only for UI reference while
+# designing, kept on the machine and not pushed to the repo (their content is copyrighted).
 docs/ai-video-generation/goha-screenshots/
 
 # TanStack Router codegen temp cache (local, regenerated on dev/build)
 frontend/.tanstack/
+
+# Built AI pack output (scripts/build-ai-pack.mjs) and staging dir
+dist-packs/

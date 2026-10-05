@@ -1,9 +1,9 @@
-"""Test `app.adapters.douyin.search` (Phase 3, nghiên cứu 2026-09-15).
+"""Test `app.adapters.douyin.search` (Phase 3, research 2026-09-15).
 
-`_sign`/`_gen_fake_ms_token` đã verify bằng request thật lúc viết code (xem
-docstring module) — test ở đây chỉ khoá lại hành vi (không gọi mạng, không cần
-cookie thật): tạo URL đã ký đúng dạng, và phân loại response theo `status_code`
-đúng như Douyin trả về thật (2483 = cần đăng nhập).
+`_sign`/`_gen_fake_ms_token` were verified with a real request when the code was written (see the
+module docstring) — the tests here only lock down the behavior (no network calls, no real
+cookie needed): build a correctly shaped signed URL, and classify the response by `status_code`
+exactly as Douyin really returns it (2483 = login required).
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -26,8 +26,8 @@ class TestGenFakeMsToken:
         assert all(c.isalnum() or c in "-_" for c in token)
 
     def test_different_each_call(self) -> None:
-        """msToken giả phải khác nhau mỗi lần — trùng lặp là dấu hiệu chống bot
-        của Douyin có thể nhận diện request đến từ cùng 1 script."""
+        """The fake msToken must differ every time — duplicates are a sign that Douyin's anti-bot
+        could recognize requests coming from the same script."""
         assert _gen_fake_ms_token() != _gen_fake_ms_token()
 
 
@@ -41,8 +41,8 @@ class TestSign:
 class TestProbeSearch:
     @pytest.mark.asyncio
     async def test_login_required_maps_to_specific_error(self) -> None:
-        """status_code 2483 là mã thật Douyin trả khi thiếu cookie đăng nhập —
-        verify bằng request thật (2026-09-15), không phải đoán."""
+        """status_code 2483 is the real code Douyin returns when the login cookie is missing —
+        verified with a real request (2026-09-15), not guessed."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {
@@ -71,8 +71,8 @@ class TestProbeSearch:
 
     @pytest.mark.asyncio
     async def test_unknown_nonzero_status_raises_generic_search_error(self) -> None:
-        """Lỗi khác "cần đăng nhập" không nên bị gộp nhầm — UI cần biết đây là
-        tình huống mới chưa từng gặp, không phải cứ bảo đi đăng nhập lại."""
+        """Errors other than "login required" must not be wrongly lumped in — the UI needs to know this is
+        a new situation never seen before, not just keep telling the user to log in again."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"status_code": 8, "status_msg": "rate limited"}
@@ -99,8 +99,8 @@ class TestProbeSearch:
 
     @pytest.mark.asyncio
     async def test_no_cookie_header_when_not_provided(self) -> None:
-        """Không gửi header Cookie rỗng — tránh Douyin xử lý khác với 'không gửi
-        gì' (đã thấy tình huống tương tự với DOUYIN_COOKIE ở douyin_service)."""
+        """Do not send an empty Cookie header — avoids Douyin treating it differently from 'sending
+        nothing' (a similar situation was seen with DOUYIN_COOKIE in douyin_service)."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"status_code": 2483, "status_msg": "x"}

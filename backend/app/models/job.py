@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class Platform(str, enum.Enum):
     BILIBILI = "bilibili"
     DOUYIN = "douyin"
-    # Video người dùng tự có sẵn trên máy, nhập qua POST /api/videos/import.
+    # A video the user already has on their machine, imported via POST /api/videos/import.
     LOCAL = "local"
 
 
@@ -26,7 +26,7 @@ class JobStatus(str, enum.Enum):
 
 
 class Job(Base):
-    """1 job = 1 lần crawl theo từ khoá; chứa nhiều Video bên trong."""
+    """1 job = 1 keyword crawl; contains many Videos."""
 
     __tablename__ = "jobs"
 

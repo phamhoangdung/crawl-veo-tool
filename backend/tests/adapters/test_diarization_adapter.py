@@ -14,8 +14,8 @@ class TestAssignSpeakers:
         ]
 
     def test_clusters_two_distinct_voices(self, monkeypatch) -> None:
-        """4 đoạn, 2 giọng rõ ràng (embedding giả lập ở 2 góc khác hẳn nhau) —
-        không load model thật, chỉ verify logic cluster + gán nhãn đúng."""
+        """4 segments, 2 clearly distinct voices (simulated embeddings in 2 very different corners) —
+        does not load the real model, only verifies the clustering logic + correct labeling."""
         segments = [
             {"start": 0.0, "end": 1.0, "text": "a"},
             {"start": 1.0, "end": 2.0, "text": "b"},
@@ -45,5 +45,5 @@ class TestAssignSpeakers:
         assert speakers[0] == speakers[1]
         assert speakers[2] == speakers[3]
         assert speakers[0] != speakers[2]
-        # Segment gốc không bị mất field khi thêm speaker.
+        # The original segment does not lose fields when speaker is added.
         assert result[0]["text"] == "a"

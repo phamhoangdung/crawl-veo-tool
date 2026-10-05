@@ -1,4 +1,4 @@
-// Chạy uvicorn bằng interpreter phù hợp với máy đang chạy (xem python-path.mjs).
+// Runs uvicorn with the interpreter that suits this machine (see python-path.mjs).
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -10,7 +10,7 @@ import {
   reportSpawnError,
 } from "./python-path.mjs";
 
-// Cổng lấy từ .env ở root (nguồn duy nhất), env của shell được ưu tiên cao hơn.
+// The port comes from the root .env (single source); shell env variables take priority.
 function backendPortFromEnvFile() {
   const envPath = resolve(ROOT, ".env");
   if (!existsSync(envPath)) return undefined;
@@ -31,7 +31,7 @@ console.log(`[backend] ${python} (${version}) :${port}`);
 const child = spawn(python, args, {
   cwd: ROOT,
   stdio: "inherit",
-  // Trên Windows, đường dẫn .exe cần shell để cmd giải đúng.
+  // On Windows, .exe paths need a shell so cmd resolves them correctly.
   shell: isWindows,
 });
 
@@ -40,7 +40,7 @@ child.on("error", (err) => {
   process.exit(1);
 });
 
-// Chuyển tiếp Ctrl+C xuống uvicorn rồi thoát theo đúng exit code của nó.
+// Forward Ctrl+C to uvicorn, then exit with its exit code.
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => child.kill(sig));
 }

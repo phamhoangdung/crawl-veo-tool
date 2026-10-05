@@ -12,22 +12,22 @@ class TestPlanChunks:
         assert audio_chunk_service.plan_chunks(0.0, []) == []
 
     def test_cuts_at_silence_nearest_the_target(self) -> None:
-        """Có nhiều khoảng lặng hợp lệ thì chọn cái gần `target` nhất, không phải
-        cái đầu tiên gặp — cắt quá sớm sẽ tạo ra nhiều khúc hơn mức cần."""
+        """With many valid silences, pick the one closest to `target`, not
+        the first one met — cutting too early produces more chunks than needed."""
         silences = [(160.0, 162.0), (298.0, 302.0), (400.0, 402.0)]
         chunks = audio_chunk_service.plan_chunks(900.0, silences)
         assert chunks[0] == (0.0, 300.0), "khoảng lặng ở 300s gần target 300s nhất"
 
     def test_falls_back_to_hard_cut_when_no_silence_in_range(self) -> None:
-        """Nhạc nền liên tục không có chỗ lặng nào — thà cắt cứng ở `max` còn hơn
-        để một khúc dài vô hạn làm tràn RAM."""
+        """Continuous background music with no silence at all — better a hard cut at `max` than
+        letting an endless chunk overflow RAM."""
         chunks = audio_chunk_service.plan_chunks(
             1000.0, [], target_seconds=300.0, max_seconds=420.0
         )
         assert chunks[0] == (0.0, 420.0)
 
     def test_ignores_silence_too_early_to_be_useful(self) -> None:
-        """Khoảng lặng ở giây thứ 5 mà cắt luôn thì sinh ra hàng trăm khúc tí hon."""
+        """A silence at second 5 and cutting right there would produce hundreds of tiny chunks."""
         chunks = audio_chunk_service.plan_chunks(1000.0, [(5.0, 7.0)])
         assert chunks[0][1] > 100.0
 
@@ -47,7 +47,7 @@ class TestPlanChunks:
 
 class TestSeparateVocalsDispatch:
     def test_short_audio_goes_straight_to_demucs(self, tmp_path: Path) -> None:
-        """Dưới ngưỡng thì KHÔNG được cắt: thêm bước cắt/ghép chỉ tổ chậm."""
+        """Below the threshold it must NOT cut: adding cut/join steps only slows things down."""
         audio = tmp_path / "a.wav"
         audio.write_bytes(b"x")
         with (
@@ -82,7 +82,7 @@ class TestSeparateVocalsDispatch:
         assert separate.call_count == len(reported) > 1
         assert reported[-1][0] == reported[-1][1], "khúc cuối phải báo done == total"
         assert concat.call_count == 2, "ghép lại cả vocals lẫn nhạc nền"
-        # Đường dẫn quy ước mà timeline_service.get_audio_stems đọc — đổi là mất
-        # track nhạc nền trong editor mà không báo lỗi gì.
+        # The conventional path that timeline_service.get_audio_stems reads — changing it loses
+        # the background music track in the editor without any error.
         assert background == tmp_path / "out" / "htdemucs" / "a" / "no_vocals.wav"
         assert vocals == tmp_path / "out" / "htdemucs" / "a" / "vocals.wav"

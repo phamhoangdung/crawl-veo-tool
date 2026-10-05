@@ -1,9 +1,9 @@
-"""Test `topic_service` — CRUD + thuật toán tính điểm cơ hội (Phase 17).
+"""Test `topic_service` — CRUD + the opportunity score algorithm (Phase 17).
 
-Mock ở mức `run_with_key` (đã chọn key + gọi YouTubeClient xong xuôi) để test
-tập trung vào logic tính điểm (trung vị tỉ lệ view/sub) và các quy tắc nghiệp
-vụ (cooldown, quyền sở hữu topic) — không gọi API YouTube thật (cần key thật,
-xem docs/phases/phase-17-content-opportunity.md).
+Mocked at the `run_with_key` level (key already chosen + YouTubeClient call done) so the test
+focuses on the scoring logic (median of the view/sub ratio) and the business
+rules (cooldown, topic ownership) — no real YouTube API calls (a real key would be needed,
+see docs/phases/phase-17-content-opportunity.md).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -132,7 +132,7 @@ class TestComputeScore:
             with patch.object(topic_service, "run_with_key", fake_run_with_key):
                 topic = await topic_service.compute_score(db, 1, 1)
 
-            assert topic.score == 10.0  # trung vị của [10, 50, 0.1]
+            assert topic.score == 10.0  # median of [10, 50, 0.1]
             assert topic.sample_video_count == 3
             assert topic.competition_count == 340
             assert topic.top_video_title == "video 2 hit"

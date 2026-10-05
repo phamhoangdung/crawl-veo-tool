@@ -5,13 +5,13 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 router = APIRouter(prefix="/api/image", tags=["image"])
 
-# Bilibili chặn hotlink theo Referer: request từ localhost bị 403. Proxy này gọi
-# hộ với Referer hợp lệ. Hiện frontend dùng referrerPolicy="no-referrer" là đủ,
-# giữ endpoint này làm phương án dự phòng nếu CDN siết chặt hơn.
+# Bilibili blocks hotlinking by Referer: requests from localhost get 403. This proxy calls
+# on our behalf with a valid Referer. Currently the frontend uses referrerPolicy="no-referrer" which is enough,
+# and this endpoint is kept as a fallback in case the CDN tightens up.
 _BILIBILI_REFERER = "https://www.bilibili.com"
 
-# Chỉ proxy đúng CDN ảnh của Bilibili — nếu nhận URL tuỳ ý, endpoint này trở
-# thành lỗ hổng SSRF (bắt backend gọi tới địa chỉ nội bộ).
+# Only proxy Bilibili's own image CDN — if it accepted arbitrary URLs, this endpoint would
+# become an SSRF hole (making the backend call internal addresses).
 _ALLOWED_HOST_SUFFIXES = (".hdslb.com", ".bilibili.com")
 
 _MAX_BYTES = 10 * 1024 * 1024
@@ -49,6 +49,6 @@ async def proxy_image(url: str = Query(..., description="URL ảnh trên CDN Bil
     return Response(
         content=upstream.content,
         media_type=content_type,
-        # Ảnh cover không đổi nên cache thoải mái, đỡ gọi lại CDN mỗi lần render.
+        # Cover images do not change so cache freely, avoiding calling the CDN again on every render.
         headers={"Cache-Control": "public, max-age=86400"},
     )

@@ -7,11 +7,11 @@ from app.core.db import Base
 
 
 class CharacterReference(Base):
-    """Bộ ảnh tham chiếu nhân vật/cảnh (character sheet) — nhiều góc của cùng 1
-    nhân vật, đính kèm vào mọi lần sinh ảnh/video để giữ đặc điểm nhất quán.
+    """Character/scene reference set (character sheet) — several angles of the same
+    character, attached to every image/video generation to keep features consistent.
 
-    `name` là slug (không dấu, không khoảng trắng) vì được dùng làm mention token
-    `@ten` trong prompt — xem docs/ai-video-generation/research.md Phần 6.1.
+    `name` is a slug (no diacritics, no spaces) because it is used as the mention token
+    `@name` in prompts — see docs/ai-video-generation/research.md Part 6.1.
     """
 
     __tablename__ = "character_references"

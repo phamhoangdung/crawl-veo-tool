@@ -1,4 +1,4 @@
-"""Phase 21 — bảng cài đặt đầu tiên của dự án (trước đây chỉ đọc từ env)."""
+"""Phase 21 — the project's first settings table (previously only read from env)."""
 
 import pytest
 from sqlalchemy import create_engine
@@ -32,8 +32,8 @@ class TestDefaults:
         )
 
     def test_default_is_1_connection(self, db) -> None:
-        """Mặc định phải KHỚP hành vi cũ (1 luồng) — người dùng chưa đụng vào
-        Cài đặt thì không được tự nhiên đổi tốc độ/hành vi tải."""
+        """The default must MATCH the old behavior (1 stream) — a user who has not touched
+        Settings must not suddenly see the download speed/behavior change."""
         assert settings_service.get_download_connections(db, 1) == 1
 
 
@@ -85,7 +85,7 @@ class TestGetAll:
 
 class TestSpeakerDiarization:
     def test_off_by_default(self, db) -> None:
-        """Kết quả phân vai chưa ổn định → chỉ chạy khi người dùng tự bật."""
+        """Speaker separation results are not stable yet → only runs when the user turns it on themselves."""
         assert settings_service.get_speaker_diarization_enabled(db, 1) is False
 
     def test_toggle_persists(self, db) -> None:

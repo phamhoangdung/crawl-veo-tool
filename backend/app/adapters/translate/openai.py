@@ -31,10 +31,10 @@ async def translate(
 async def complete(
     client: httpx.AsyncClient, api_key: str, prompt: str, *, temperature: float = 0.7
 ) -> str:
-    """Gọi model với prompt tự do — dùng cho sinh metadata, không phải dịch.
+    """Call the model with a free-form prompt — used for metadata generation, not translation.
 
-    Temperature cao hơn `translate` vì viết tiêu đề/mô tả cần đa dạng, tránh mọi
-    video ra cùng một khuôn (đúng thứ chính sách inauthentic content nhắm tới).
+    Higher temperature than `translate` because writing titles/descriptions needs variety, to avoid every
+    video coming out in the same mold (exactly what the inauthentic content policy targets).
     """
     response = await client.post(
         _ENDPOINT,

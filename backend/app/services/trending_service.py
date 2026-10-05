@@ -18,13 +18,13 @@ from app.services import category_service, channel_service, crawl_service
 
 logger = logging.getLogger(__name__)
 
-# ranking/region trả trọn 1 lần (~11 video, không phân trang). Muốn lướt tiếp thì
-# chuyển sang search theo tên tiếng Trung của category — search mới có phân trang.
+# ranking/region returns everything at once (~11 videos, no pagination). To keep scrolling,
+# switch to search by the category's Chinese name — only search has pagination.
 _RANKING_PAGE = 1
 
 
 def _parse_duration_to_seconds(raw: str | int | None) -> int | None:
-    """Bilibili trả duration dạng 'mm:ss' (search) hoặc số giây thuần (ranking)."""
+    """Bilibili returns duration as 'mm:ss' (search) or plain seconds (ranking)."""
     if raw is None:
         return None
     if isinstance(raw, int):
@@ -42,18 +42,18 @@ def _parse_duration_to_seconds(raw: str | int | None) -> int | None:
 
 
 def _parse_published_at(raw: str | int | None) -> str | None:
-    """Chuẩn hoá ngày đăng về ISO 8601 UTC — 2 nguồn trả 2 định dạng khác nhau:
-    ranking trả chuỗi giờ Bắc Kinh 'YYYY-MM-DD HH:MM' (không có offset trong
-    chuỗi, verify qua đối chiếu với `pubdate` unix timestamp của cùng 1 video ở
-    endpoint `x/web-interface/view` — chênh đúng 8 tiếng), search trả unix
-    timestamp UTC thuần (`pubdate`).
+    """Normalize the publish date to ISO 8601 UTC — the 2 sources return 2 formats:
+    ranking returns a Beijing time string 'YYYY-MM-DD HH:MM' (with no offset in the
+    string, verified by comparing with the unix timestamp `pubdate` of the same video at the
+    endpoint `x/web-interface/view` — exactly 8 hours apart), search returns a pure UTC unix
+    timestamp (`pubdate`).
     """
     if raw is None:
         return None
     try:
         if isinstance(raw, int):
             return datetime.fromtimestamp(raw, tz=timezone.utc).isoformat()
-        dt = datetime.strptime(raw, "%Y-%m-%d %H:%M")  # noqa: DTZ007 — gán tz ngay dòng dưới
+        dt = datetime.strptime(raw, "%Y-%m-%d %H:%M")  # noqa: DTZ007 — tz is assigned on the next line
         dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
         return dt.astimezone(timezone.utc).isoformat()
     except (ValueError, OSError):
@@ -61,7 +61,7 @@ def _parse_published_at(raw: str | int | None) -> str | None:
 
 
 def _normalize_cover_url(raw: str | None) -> str | None:
-    """Search trả ảnh dạng '//i2.hdslb.com/...' (thiếu scheme); ranking trả http."""
+    """Search returns the image as '//i2.hdslb.com/...' (missing the scheme); ranking returns http."""
     if not raw:
         return None
     if raw.startswith("//"):
@@ -78,21 +78,21 @@ def _from_ranking_item(item: dict) -> TrendingVideoRead:
         title=item.get("title", ""),
         author_name=item.get("author"),
         play_count=item.get("play"),
-        # ranking/region không trả lượt thích; `favorites` (lưu video) là chỉ số
-        # tương tác gần nhất có sẵn.
+        # ranking/region does not return likes; `favorites` (video saves) is the closest
+        # engagement metric available.
         like_count=item.get("favorites"),
         duration_seconds=_parse_duration_to_seconds(item.get("duration")),
         cover_url=_normalize_cover_url(item.get("pic")),
-        # Field mapping verify bằng request thật tới x/web-interface/view
-        # (2026-09-16): review=bình luận, video_review=danmaku, xem docstring
+        # Field mapping verified with a real request to x/web-interface/view
+        # (2026-09-16): review=comments, video_review=danmaku, see the
         # TrendingVideoRead.
         comment_count=item.get("review"),
         danmaku_count=item.get("video_review"),
         coin_count=item.get("coins"),
         heat_score=item.get("pts"),
         published_at=_parse_published_at(item.get("create")),
-        # Phase 22: `mid` phẳng ở top-level item (khác `_from_popular_item`
-        # phải đào vào `owner.mid`).
+        # Phase 22: `mid` is flat at the top level of the item (unlike `_from_popular_item`,
+        # which must dig into `owner.mid`).
         channel_id=str(mid) if mid else None,
     )
 
@@ -109,8 +109,8 @@ def _from_search_item(item: dict) -> TrendingVideoRead:
         cover_url=_normalize_cover_url(item.get("pic")),
         comment_count=item.get("review"),
         danmaku_count=item.get("danmaku"),
-        # search không trả `coins`/`pts` — None, không giả định bằng 0 (0 sẽ
-        # trông như "có dữ liệu nhưng bằng 0", sai với thực tế "không có").
+        # search returns no `coins`/`pts` — None, not assumed to be 0 (0 would
+        # look like "there is data but it is zero", wrong versus the reality of "there is none").
         coin_count=None,
         heat_score=None,
         published_at=_parse_published_at(item.get("pubdate")),
@@ -119,9 +119,9 @@ def _from_search_item(item: dict) -> TrendingVideoRead:
 
 
 def _from_popular_item(item: dict) -> TrendingVideoRead:
-    # `popular` trả `stat` đầy đủ như endpoint chi tiết video thật (view/like/
-    # danmaku/reply/coin) — verify bằng request thật 2026-09-16, khác hẳn
-    # `ranking/region` phải suy luận field `review`/`video_review` mập mờ.
+    # `popular` returns the full `stat` like the real video detail endpoint (view/like/
+    # danmaku/reply/coin) — verified with a real request 2026-09-16, unlike
+    # `ranking/region` where the ambiguous `review`/`video_review` fields must be inferred.
     stat = item.get("stat") or {}
     owner = item.get("owner") or {}
     mid = owner.get("mid")
@@ -136,12 +136,12 @@ def _from_popular_item(item: dict) -> TrendingVideoRead:
         comment_count=stat.get("reply"),
         danmaku_count=stat.get("danmaku"),
         coin_count=stat.get("coin"),
-        # Không có pts/xếp hạng tính điểm — đây là danh sách phổ biến biên tập
-        # của Bilibili, không phải bảng xếp hạng theo thuật toán như ranking.
+        # No pts/score ranking — this is Bilibili's editorially curated popular list,
+        # not an algorithmic ranking like ranking.
         heat_score=None,
         published_at=_parse_published_at(item.get("pubdate")),
-        # Phase 22: `owner.mid` (khác `_from_ranking_item`/`_from_search_item`
-        # có `mid` phẳng ở top-level).
+        # Phase 22: `owner.mid` (unlike `_from_ranking_item`/`_from_search_item`
+        # which have a flat `mid` at the top level).
         channel_id=str(mid) if mid else None,
     )
 
@@ -149,14 +149,14 @@ def _from_popular_item(item: dict) -> TrendingVideoRead:
 def _from_space_video_item(item: dict) -> TrendingVideoRead:
     """`x/space/wbi/arc/search` (`data.list.vlist[]`) — Phase 22.
 
-    **CHƯA verify field thật**: đo thật 2026-09-22 với 10 kênh phổ biến, cả
-    10/10 request đều bị risk-control chặn (412/-352) trước khi có được 1
-    response thật để đối chiếu — xem `channel_service.ChannelVideosResult`.
-    Field mapping dưới đây dựa theo tài liệu cộng đồng
-    (SocialSisterYi/bilibili-API-collect) — `length` (không phải `duration`
-    như các endpoint khác) là tên field ĐÃ ĐƯỢC TÀI LIỆU XÁC NHẬN khác biệt.
-    Ai verify được bằng response thật (có cookie/may mắn né được risk-control)
-    xin đối chiếu lại converter này.
+    **Real fields NOT verified yet**: measured 2026-09-22 with 10 popular channels, all
+    10/10 requests were blocked by risk control (412/-352) before a single
+    real response could be obtained to compare against — see `channel_service.ChannelVideosResult`.
+    The field mapping below follows community docs
+    (SocialSisterYi/bilibili-API-collect) — `length` (not `duration`
+    like other endpoints) is a field name the docs CONFIRM as different.
+    Whoever can verify with a real response (with a cookie, or by luckily dodging risk control)
+    please re-check this converter.
     """
     mid = item.get("mid")
     return TrendingVideoRead(
@@ -164,7 +164,7 @@ def _from_space_video_item(item: dict) -> TrendingVideoRead:
         title=item.get("title", ""),
         author_name=item.get("author"),
         play_count=item.get("play"),
-        like_count=None,  # vlist không có field lượt thích theo tài liệu cộng đồng
+        like_count=None,  # vlist has no likes field according to community docs
         duration_seconds=_parse_duration_to_seconds(item.get("length")),
         cover_url=_normalize_cover_url(item.get("pic")),
         comment_count=item.get("comment"),
@@ -177,9 +177,9 @@ def _from_space_video_item(item: dict) -> TrendingVideoRead:
 
 
 def _attach_library_status(db: Session, videos: list[TrendingVideoRead]) -> None:
-    """Gắn `video_id`/`already_in_library` bằng 1 query duy nhất cho cả danh
-    sách (không N+1) — Phase 20: màn Khám phá cần biết video nào đã tải để
-    hiện thanh %/badge ngay trên thẻ, không phải đoán qua bvid ở frontend.
+    """Attach `video_id`/`already_in_library` with a single query for the whole
+    list (no N+1) — Phase 20: the Discovery screen needs to know which videos are downloaded to
+    show the progress bar/badge right on the card, without guessing via bvid in the frontend.
     """
     if not videos:
         return
@@ -197,9 +197,9 @@ def _attach_library_status(db: Session, videos: list[TrendingVideoRead]) -> None
 
 
 def _attach_channel_info(db: Session, videos: list[TrendingVideoRead]) -> None:
-    """Phase 22: ghi nhận kênh vừa thấy (`upsert_seen_batch`) + gắn
-    `channel_is_followed` — cùng 1 query duy nhất cho cả danh sách, cùng
-    pattern chống N+1 với `_attach_library_status`.
+    """Phase 22: record the channels just seen (`upsert_seen_batch`) + attach
+    `channel_is_followed` — the same single query for the whole list, the same
+    N+1-avoidance pattern as `_attach_library_status`.
     """
     channel_ids = [v.channel_id for v in videos if v.channel_id]
     if not channel_ids:
@@ -229,9 +229,9 @@ def _attach_channel_info(db: Session, videos: list[TrendingVideoRead]) -> None:
 async def get_bilibili_popular_page(
     db: Session, page: int = 1, page_size: int = 20
 ) -> TrendingPageRead:
-    """Danh sách phổ biến TOÀN TRANG Bilibili (không giới hạn 1 chuyên mục) —
-    dùng cho tab "Tất cả". Có phân trang thật (khác `ranking/region`), nên
-    không cần fallback sang search như `get_category_page`.
+    """SITE-WIDE popular list of Bilibili (not limited to 1 category) —
+    used for the "All" tab. Has real pagination (unlike `ranking/region`), so
+    no fallback to search is needed like `get_category_page`.
     """
     async with BilibiliClient() as client:
         items = await client.get_popular(page=page, page_size=page_size)
@@ -249,14 +249,14 @@ async def search_bilibili(
     page: int = 1,
     translate_keyword: bool = False,
 ) -> TrendingPageRead:
-    """Tìm kiếm tự do theo từ khoá bất kỳ — không giới hạn trong 1 chuyên mục.
-    Dùng chung `_from_search_item` với `get_category_page` (cùng nguồn dữ liệu,
-    cùng hạn chế: không có pts/coin, xem docstring `TrendingVideoRead`).
+    """Free search by any keyword — not limited to 1 category.
+    Shares `_from_search_item` with `get_category_page` (same data source,
+    same limits: no pts/coin, see the `TrendingVideoRead` docstring).
 
-    `translate_keyword` tái dùng đúng logic dịch từ khoá của luồng crawl
-    (`crawl_service.translate_keyword_to_chinese`) — trước đây trang Trending
-    không có tuỳ chọn này dù trang Crawl có, khiến search tiếng Việt gần như
-    luôn ra 0 kết quả trên Bilibili."""
+    `translate_keyword` reuses exactly the keyword translation logic of the crawl flow
+    (`crawl_service.translate_keyword_to_chinese`) — previously the Trending page
+    lacked this option though the Crawl page had it, so Vietnamese search almost
+    always returned 0 results on Bilibili."""
     translation_failed = False
     search_keyword = keyword
     if translate_keyword:
@@ -295,10 +295,10 @@ async def get_bilibili_ranking(rid: int, day: int = 3) -> list[TrendingVideoRead
 
 
 async def get_related(db: Session, bvid: str) -> TrendingPageRead:
-    """Video liên quan (Phase 22) — endpoint công khai `archive/related`, cùng
-    hình dạng dữ liệu với `popular` (owner/stat/pic/duration), dùng lại
-    `_from_popular_item`. Không phân trang (Bilibili trả trọn 1 lần, tối đa
-    ~40 video) — `has_more` luôn `False`.
+    """Related videos (Phase 22) — public endpoint `archive/related`, the same
+    data shape as `popular` (owner/stat/pic/duration), reusing
+    `_from_popular_item`. No pagination (Bilibili returns everything at once, at most
+    ~40 videos) — `has_more` is always `False`.
     """
     async with BilibiliClient() as client:
         items = await client.get_related(bvid)
@@ -311,9 +311,9 @@ async def get_related(db: Session, bvid: str) -> TrendingPageRead:
 async def get_channel_videos(
     db: Session, mid: str, page: int = 1, page_size: int = 25
 ) -> TrendingPageRead:
-    """Video khác trong 1 kênh (Phase 22) — `degraded=True` khi bị
-    risk-control (xem `channel_service.list_channel_videos`), KHÔNG raise lên
-    router: 1 API phụ lỗi không được làm vỡ cả popup xem trước."""
+    """Other videos of 1 channel (Phase 22) — `degraded=True` when hit by
+    risk control (see `channel_service.list_channel_videos`), does NOT raise up to the
+    router: 1 failing auxiliary API must not break the whole preview popup."""
     result = await channel_service.list_channel_videos(mid, page=page, page_size=page_size)
     videos = [_from_space_video_item(item) for item in result.videos]
     _attach_library_status(db, videos)
@@ -330,8 +330,8 @@ async def get_channel_videos(
 async def get_category_page(
     db: Session, rid: int, page: int = 1, day: int = 3
 ) -> TrendingPageRead:
-    """Trang đầu lấy từ bảng xếp hạng (đúng nghĩa 'đang hot'), các trang sau
-    lấy từ search theo tên tiếng Trung của category vì ranking không phân trang.
+    """The first page comes from the ranking (truly "hot"), later pages
+    come from search by the category's Chinese name because ranking has no pagination.
     """
     category = db.get(Category, rid)
 
@@ -341,7 +341,7 @@ async def get_category_page(
             videos = [_from_ranking_item(item) for item in items]
             _attach_library_status(db, videos)
             _attach_channel_info(db, videos)
-            # Chỉ hứa còn trang sau khi biết search bằng từ khoá nào.
+            # Only promise a next page once we know which keyword the search uses.
             return TrendingPageRead(
                 videos=videos, page=page, has_more=category is not None, source="ranking"
             )
@@ -349,7 +349,7 @@ async def get_category_page(
         if category is None or not category.name_zh:
             return TrendingPageRead(videos=[], page=page, has_more=False, source="search")
 
-        # Search page 1 trùng nội dung với ranking nên bắt đầu từ page 2.
+        # Search page 1 duplicates the ranking content so start from page 2.
         results = await client.search_videos(category.name_zh, page=page)
 
     seen: set[str] = set()
@@ -369,10 +369,10 @@ async def get_category_page(
 async def get_categories_stats(
     db: Session, rids: list[int], day: int = 3, save_history: bool = True
 ) -> list[CategoryStatsRead]:
-    """Thống kê từng chuyên mục để vẽ chart, đồng thời ghi 1 điểm vào lịch sử.
+    """Stats of each category to draw a chart, also recording 1 point into history.
 
-    Gọi song song vì mỗi chuyên mục là 1 request riêng; chuyên mục lỗi thì bỏ
-    qua thay vì làm hỏng cả biểu đồ.
+    Called in parallel because each category is a separate request; a failing category is skipped
+    instead of spoiling the whole chart.
     """
 
     async def one(rid: int) -> tuple[CategoryStatsRead, float] | None:
@@ -381,7 +381,7 @@ async def get_categories_stats(
             return None
         try:
             videos = await get_bilibili_ranking(rid=rid, day=day)
-        except Exception as exc:  # noqa: BLE001 — 1 chuyên mục lỗi không được chặn cả chart
+        except Exception as exc:  # noqa: BLE001 — 1 failing category must not block the whole chart
             logger.warning("Lấy thống kê chuyên mục %s thất bại: %s", rid, exc)
             return None
         if not videos:
@@ -390,14 +390,14 @@ async def get_categories_stats(
         plays = [v.play_count or 0 for v in videos]
         likes = [v.like_count or 0 for v in videos]
         pts_values = [v.heat_score or 0 for v in videos]
-        # Video đại diện chọn theo `pts` (điểm xếp hạng thật), không phải view
-        # thô — 1 video view khủng nhưng pts thấp (cũ/ít tương tác) không phải
-        # thứ đang khiến chuyên mục này "hot" theo đúng thuật toán của Bilibili.
+        # The representative video is chosen by `pts` (the real ranking score), not raw
+        # views — a video with huge views but low pts (old/low engagement) is not
+        # what makes this category "hot" by Bilibili's own algorithm.
         top = max(videos, key=lambda v: v.heat_score or 0)
         avg_plays = sum(plays) // len(plays)
         total_pts = int(sum(pts_values))
-        # pts trung bình trên mỗi ngày xếp hạng — cho phép so sánh giữa các
-        # khung thời gian khác nhau (day=1 vs day=3).
+        # Average pts per ranking day — allows comparing between different
+        # time windows (day=1 vs day=3).
         heat_score = (total_pts / len(pts_values)) / max(day, 1)
 
         return (
@@ -436,26 +436,26 @@ async def get_categories_stats(
     return sorted((s for s, _ in pairs), key=lambda s: s.total_pts, reverse=True)
 
 
-# Phase 20 — biểu đồ "Chủ đề đang được quan tâm" chuyển sang trang phụ
-# (Báo cáo xu hướng), không còn nằm chắn đường ở màn Khám phá chính. Trước đây
-# lịch sử CHỈ dày lên khi người dùng tự mở trang (`GET /stats` gọi
-# `get_categories_stats(save_history=True)`) — chuyển sang trang phụ mà không
-# đổi cách ghi thì dữ liệu càng thưa hơn (ít người ghé trang phụ hơn trang
-# chính). Vòng lặp nền này ghi đều đặn bất kể có ai mở trang hay không.
+# Phase 20 — the "Topics of interest" chart moved to a secondary page
+# (Trend report), no longer blocking the way on the main Discovery screen. Previously
+# history ONLY grew when the user opened the page themselves (`GET /stats` called
+# `get_categories_stats(save_history=True)`) — moving to a secondary page without
+# changing how it is recorded would make the data even sparser (fewer people visit the secondary page than
+# the main one). This background loop records regularly whether or not anyone opens the page.
 SNAPSHOT_INTERVAL_SECONDS = 4 * 3600
 
 
 async def run_periodic_snapshot(
     session_factory, interval_seconds: float = SNAPSHOT_INTERVAL_SECONDS
 ) -> None:
-    """Vòng lặp ghi snapshot các chuyên mục đang theo dõi — chạy nền trong
-    chính process backend, cùng pattern với
-    `storage_cleanup_service.run_periodic_cleanup()` (xem docstring ở đó về lý
-    do không dùng cron ngoài/APScheduler: app đóng gói desktop không có
-    crontab để cài).
+    """Loop recording snapshots of the followed categories — runs in the background inside the
+    backend process itself, same pattern as
+    `storage_cleanup_service.run_periodic_cleanup()` (see the docstring there for the
+    reason for not using external cron/APScheduler: the packaged desktop app has no
+    crontab to install).
 
-    Ghi ngay lần đầu rồi mới ngủ — máy cá nhân bật/tắt liên tục, đợi đủ
-    `interval_seconds` mới ghi lần đầu thì có khi cả ngày không ghi được gì.
+    Records right away the first time, then sleeps — a personal machine is turned on/off constantly, and waiting a full
+    `interval_seconds` before the first write may mean nothing is recorded all day.
     """
     while True:
         try:
@@ -466,7 +466,7 @@ async def run_periodic_snapshot(
         except asyncio.CancelledError:
             raise
         except Exception:
-            # 1 chu kỳ lỗi (Bilibili tạm trục trặc, mất mạng...) không được
-            # phép giết hẳn vòng lặp — thử lại ở chu kỳ sau.
+            # 1 failing cycle (Bilibili hiccup, network loss...) must not
+            # kill the loop for good — retry in the next cycle.
             logger.exception("Ghi snapshot chuyên mục định kỳ thất bại, sẽ thử lại ở chu kỳ sau")
         await asyncio.sleep(interval_seconds)

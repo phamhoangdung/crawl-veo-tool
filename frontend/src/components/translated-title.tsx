@@ -8,18 +8,18 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-/** Có ký tự Hán nào không — không có thì khỏi dịch, đỡ tốn quota. */
+/** Whether there is any Han character — if none, skip translating, saving quota. */
 function hasChinese(text: string) {
   return /[一-鿿]/.test(text)
 }
 
 /**
- * Tiêu đề tiếng Trung, hover thì hiện bản dịch tiếng Việt.
+ * A Chinese title, showing the Vietnamese translation on hover.
  *
- * Dịch theo kiểu lười (chỉ khi hover) chứ không dịch sẵn cả danh sách: mở trang
- * là dịch 40 tiêu đề thì đốt quota cho những dòng người dùng không bao giờ xem.
- * Kết quả được cache 2 tầng — TanStack Query trong phiên, và DB ở backend nên
- * còn nguyên sau khi restart.
+ * Translated lazily (only on hover) rather than pre-translating the whole list: opening the page
+ * would translate 40 titles and burn quota on rows the user never looks at.
+ * The result is cached in 2 layers — TanStack Query within the session, and the DB in the backend so it
+ * survives a restart.
  */
 export function TranslatedTitle({
   title,
@@ -36,14 +36,14 @@ export function TranslatedTitle({
   const { data, isLoading, isError } = useQuery({
     queryKey: ['translate', title],
     queryFn: () => translateText(title),
-    // Chỉ gọi khi tooltip đã mở thật.
+    // Only call once the tooltip has really opened.
     enabled: open && shouldTranslate,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60,
     retry: false,
   })
 
-  // Tiêu đề không có chữ Hán thì giữ hành vi cũ: title= của trình duyệt.
+  // A title without Han characters keeps the old behavior: the browser's title=.
   if (!shouldTranslate) {
     return href ? (
       <a href={href} target='_blank' rel='noreferrer' className={className} title={title}>
@@ -68,7 +68,7 @@ export function TranslatedTitle({
         )}
       </TooltipTrigger>
       <TooltipContent side='top' className='max-w-md'>
-        {/* Hiện cả nguyên văn: bản dịch máy có thể sai, người dùng cần đối chiếu. */}
+        {/* Show the original too: machine translation can be wrong, the user needs to cross-check. */}
         <p className='mb-1 text-[11px] opacity-70'>{title}</p>
         {isLoading && <p className='flex items-center gap-1'>Đang dịch…</p>}
         {isError && <p>Không dịch được (kiểm tra API key hoặc quota)</p>}

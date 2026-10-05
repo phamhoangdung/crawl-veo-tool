@@ -1,8 +1,8 @@
-"""Phase 20 — màn Khám phá tải hàng loạt: giới hạn SỐ VIDEO tải song song qua
-semaphore (`download_max_videos`), khác hẳn số kết nối cho MỖI video của
-Phase 21 (chưa code). Test `run_download_task` — hàm orchestration dùng
-chung cho cả nút tải đơn lẻ (trang Video của tôi) lẫn tải hàng loạt (màn
-Khám phá), trước đây nằm riêng trong `api/pipeline.py`."""
+"""Phase 20 — bulk download on the Discovery screen: limits the NUMBER OF VIDEOS downloading in parallel through a
+semaphore (`download_max_videos`), very different from the per-video connection count of
+Phase 21 (not coded yet). Tests `run_download_task` — the orchestration function shared by
+both the single download button (My videos page) and the bulk download (the
+Discovery screen), previously living separately in `api/pipeline.py`."""
 
 import asyncio
 
@@ -21,8 +21,8 @@ from app.services import download_service, progress_service
 
 @pytest.fixture(autouse=True)
 def _reset_download_slots(monkeypatch: pytest.MonkeyPatch):
-    """Semaphore module-level: xoá giữa các test để không rò rỉ giới hạn/khoá
-    của test trước (mỗi test set `download_max_videos` khác nhau)."""
+    """Module-level semaphore: clear it between tests so the limit/lock of the
+    previous test does not leak (each test sets a different `download_max_videos`)."""
     monkeypatch.setattr(download_service, "_download_slots", None)
     get_settings.cache_clear()
     yield
@@ -46,8 +46,8 @@ def db():
 
 
 class TestDownloadSlotsLimit:
-    """`download_bilibili_video` phải xếp hàng qua semaphore, không chạy quá
-    `download_max_videos` lượt thật cùng lúc."""
+    """`download_bilibili_video` must queue through the semaphore, never running more than
+    `download_max_videos` real downloads at once."""
 
     @pytest.mark.anyio
     async def test_limits_concurrent_slot_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,7 +96,7 @@ class TestDownloadSlotsLimit:
         monkeypatch.setattr(download_service, "_download_bilibili_video_slot", fake_slot)
 
         task1 = asyncio.create_task(download_service.download_bilibili_video(1, 1, "BV1", 1))
-        # Nhường event loop để task1 kịp giữ slot rồi mới thả task2 vào hàng chờ.
+        # Yield the event loop so task1 gets to hold the slot before task2 is released into the waiting line.
         await asyncio.sleep(0)
         task2 = asyncio.create_task(download_service.download_bilibili_video(1, 2, "BV2", 1))
         await asyncio.sleep(0)
@@ -122,7 +122,7 @@ class TestRunDownloadTask:
             download_service, "SessionLocal", sessionmaker(bind=engine)
         )
 
-        # Không raise dù video không tồn tại trong DB.
+        # Does not raise even though the video does not exist in the DB.
         await download_service.run_download_task(999)
 
     @pytest.mark.anyio

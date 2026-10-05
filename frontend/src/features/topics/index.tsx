@@ -18,11 +18,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
-/** Nhãn định tính cho điểm cơ hội (trung vị tỉ lệ view/sub kênh) — heuristic
- * tham khảo, không phải điểm số khoa học chính xác (xem docstring backend
- * `topic_service.py`). Ngưỡng chọn theo kinh nghiệm phổ biến khi soi "video
- * outlier" trên YouTube: 1 video ăn khách gấp 20 lần quy mô kênh trở lên là
- * hiếm và đáng chú ý. */
+/** Qualitative label for the opportunity score (median of the channel view/sub ratio) — a heuristic
+ * for reference, not a precise scientific score (see the backend docstring
+ * `topic_service.py`). Thresholds chosen from common experience when inspecting "outlier
+ * videos" on YouTube: 1 hit video at 20 times the channel's scale or more is
+ * rare and worth noticing. */
 function scoreBadge(score: number | null) {
   if (score === null) return null
   if (score >= 20) {
@@ -142,10 +142,10 @@ function TopicCard({ topic }: { topic: Topic }) {
 }
 
 /**
- * Nội dung tab "Chủ đề quan tâm" trong trang Báo cáo xu hướng (Phase 20 —
- * trước đây là trang riêng `/topics`, gộp vào vì cùng bản chất "xem để quyết
- * định làm gì" như biểu đồ chuyên mục). Không tự bọc `AppHeader`/`Main` —
- * trang cha (`features/insights`) đã lo phần khung.
+ * Content of the "Topics of interest" tab in the Trend report page (Phase 20 —
+ * previously a separate `/topics` page, merged in because it is the same "look to decide
+ * what to make" in nature as the category chart). Does not wrap `AppHeader`/`Main` itself —
+ * the parent page (`features/insights`) already handles the frame.
  */
 export function TopicsPanel() {
   const queryClient = useQueryClient()

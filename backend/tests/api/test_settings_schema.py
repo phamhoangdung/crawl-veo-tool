@@ -1,7 +1,7 @@
-"""Phase 21 — chặn cứng khoảng hợp lệ NGAY Ở SCHEMA (`Field(ge, le)`), không
-phụ thuộc UI chặn. Test ở tầng schema (không dùng TestClient — codebase này
-chưa có pattern đó, xem docs/conventions.md) vẫn xác nhận đúng validation sẽ
-chạy trước khi payload chạm tới service."""
+"""Phase 21 — hard-limit the valid range RIGHT AT THE SCHEMA (`Field(ge, le)`), not
+depending on the UI limiting it. Tested at the schema layer (no TestClient — this codebase
+has no such pattern yet, see docs/conventions.md) it still confirms that exactly the validation
+runs before the payload reaches the service."""
 
 import pytest
 from pydantic import ValidationError
@@ -32,5 +32,5 @@ class TestDownloadMaxVideosBounds:
 
 
 def test_both_fields_optional_none_is_valid() -> None:
-    """`PUT` chỉ đổi 1 field vẫn hợp lệ — không bắt buộc gửi cả 2."""
+    """`PUT` changing only 1 field is still valid — sending both is not required."""
     AppSettingsUpdate()

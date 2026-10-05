@@ -1,10 +1,10 @@
-"""Adapter giả cho sinh ảnh/video — dùng khi FALAI_MODE=fake (mặc định khi chưa
-có key thật). Sinh file bằng ffmpeg thay vì gọi API, để phát triển không tốn phí.
+"""Fake adapter for image/video generation — used when FALAI_MODE=fake (the default when there is
+no real key yet). Generates files with ffmpeg instead of calling the API, so development costs nothing.
 
-Cố ý mô phỏng cả hành vi xấu (delay, 429, prompt bị chặn, hết quota): mấy tình
-huống này gần như không thể tái tạo theo ý muốn bằng API thật, nên fake adapter
-test được nhiều hơn chứ không chỉ rẻ hơn. Xem "Chế độ phát triển không tốn phí"
-trong docs/phases/phase-14-ai-video-generation.md.
+Deliberately simulates bad behavior too (delay, 429, blocked prompt, out of quota): these
+situations are nearly impossible to reproduce on demand with the real API, so the fake adapter
+can test more, not just cost less. See "Chế độ phát triển không tốn phí"
+in docs/phases/phase-14-ai-video-generation.md.
 """
 
 import asyncio
@@ -52,7 +52,7 @@ async def _simulate_latency(seconds: float) -> None:
 
 
 def _label(prompt: str, extra: str) -> str:
-    """Text overlay lên frame để phân biệt clip nào là clip nào khi ghép nhiều clip."""
+    """Text overlay on the frame to tell clips apart when concatenating many clips."""
     head = prompt.strip().replace("\n", " ")[:60]
     return f"FAKE | {extra} | {head}"
 

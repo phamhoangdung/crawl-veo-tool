@@ -17,7 +17,7 @@ import { BrandLoader } from './brand-loader'
 
 const POLL_INTERVAL_MS = 500
 const BACKEND_TIMEOUT_MS = 120_000
-/** Giữ splash tối thiểu ngần này để logo không chớp rồi biến mất khi backend đã sẵn. */
+/** Keep the splash at least this long so the logo does not flash and vanish when the backend is already ready. */
 const MIN_VISIBLE_MS = 600
 const FADE_MS = 250
 
@@ -39,11 +39,11 @@ async function waitForBackend(isCancelled: () => boolean): Promise<boolean> {
 type Phase = 'booting' | 'failed' | 'leaving' | 'ready'
 
 /**
- * Chặn giao diện cho tới khi backend trả lời `/health` và dữ liệu nền tảng đã
- * nạp vào cache. Bản đóng gói bật backend chậm hơn cửa sổ app, nên không có cổng
- * này người dùng sẽ thấy "Network Error" ngay lần mở đầu tiên.
+ * Block the UI until the backend answers `/health` and the foundational data is
+ * loaded into the cache. The packaged build starts the backend slower than the app window, so without this gate
+ * the user would see "Network Error" on the very first open.
  *
- * Prefetch lỗi KHÔNG chặn: trang tự fetch lại và báo lỗi theo cách riêng của nó.
+ * A failed prefetch does NOT block: the page refetches and reports the error in its own way.
  */
 export function BootGate({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()

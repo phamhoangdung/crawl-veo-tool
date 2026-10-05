@@ -15,8 +15,8 @@ class ApiKeyStatus(str, enum.Enum):
 
 
 class ApiKey(Base):
-    """Phase 8: nhiều key/provider (pool) — không còn unique(user_id, provider) như
-    trước. Xem docs/phases/phase-8-ai-account-pool.md và migration bảng cũ ở
+    """Phase 8: multiple keys per provider (pool) — no more unique(user_id, provider) as
+    before. See docs/phases/phase-8-ai-account-pool.md and the old-table migration in
     app/core/db.py::_migrate_api_keys_pool()."""
 
     __tablename__ = "api_keys"

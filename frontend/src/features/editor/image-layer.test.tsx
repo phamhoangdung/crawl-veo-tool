@@ -42,7 +42,7 @@ describe('ImageLayer', () => {
     const box = document.querySelector('[data-testid=image-box-0]') as HTMLElement
 
     expect(box).not.toBeNull()
-    // 0.85 * 400 = 340px (tâm ảnh, -translate-x-1/2 nên left CSS vẫn là 340px)
+    // 0.85 * 400 = 340px (the image center, -translate-x-1/2 so the CSS left is still 340px)
     expect(box.getBoundingClientRect().left + box.getBoundingClientRect().width / 2).toBeCloseTo(340, 0)
   })
 
@@ -55,7 +55,7 @@ describe('ImageLayer', () => {
     dispatchPointer(window, 'pointerup', 300, 66)
 
     const clip = useEditorStore.getState().operations.tracks[1].clips[0]
-    // Kéo -40px trên khung 400px = -0.1
+    // Dragging -40px on a 400px frame = -0.1
     expect(clip.x).toBeCloseTo(0.75, 2)
     expect(clip.y).toBeCloseTo(0.22, 2)
     expect(clip.width).toBe(0.15)
@@ -88,7 +88,7 @@ describe('ImageLayer', () => {
     dispatchPointer(window, 'pointerup', 410, 50)
 
     const clip = useEditorStore.getState().operations.tracks[1].clips[0]
-    // Kéo +40px trên khung 400px = +0.1
+    // Dragging +40px on a 400px frame = +0.1
     expect(clip.width).toBeCloseTo(0.25, 2)
     expect(clip.x).toBe(0.85)
     expect(clip.y).toBe(0.12)

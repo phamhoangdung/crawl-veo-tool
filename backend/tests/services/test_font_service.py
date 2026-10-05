@@ -12,9 +12,9 @@ class TestListFonts:
         assert all(f.id and f.label and f.family_name and f.regular_file for f in fonts)
 
     def test_every_registered_file_exists_on_disk(self) -> None:
-        """Bắt lỗi gõ nhầm tên file — nếu sai, `resolve_fontfile` sẽ trả về
-        đường dẫn không tồn tại và ffmpeg chỉ báo lỗi khi render, khó truy ra
-        nguyên nhân."""
+        """Catches a typo in a file name — if wrong, `resolve_fontfile` would return
+        a nonexistent path and ffmpeg would only report an error at render time, making the
+        cause hard to trace."""
         for font in font_service.list_fonts():
             assert (font_service.fonts_dir() / font.regular_file).exists(), font.regular_file
             if font.bold_file:

@@ -5,7 +5,7 @@ from app.services import metadata_service
 
 
 class TestExtractJson:
-    """Model hay bọc JSON trong markdown hoặc thêm lời dẫn — phải bóc được."""
+    """The model often wraps JSON in markdown or adds an intro — it must be extractable."""
 
     def test_plain_json(self) -> None:
         assert metadata_service._extract_json('{"title": "a"}') == {"title": "a"}
@@ -25,7 +25,7 @@ class TestExtractJson:
 
 class TestClean:
     def test_truncates_long_title_and_flags_it(self) -> None:
-        """Cắt về giới hạn thay vì từ chối, nhưng phải báo lại để người dùng biết."""
+        """Cut to the limit instead of rejecting, but report it so the user knows."""
         long_title = "a" * 100
         result = metadata_service._clean({"title": long_title, "description": "", "tags": []})
 
@@ -65,7 +65,7 @@ class TestTranscriptExcerpt:
         assert "有活就干" in metadata_service._transcript_excerpt(video)
 
     def test_truncates_long_transcript(self) -> None:
-        """Video dài có thể vượt giới hạn token của model."""
+        """A long video may exceed the model's token limit."""
         video = Video(transcript_json=[{"text": "x" * 5000, "translated_text": ""}])
         assert len(metadata_service._transcript_excerpt(video, max_chars=100)) == 100
 
@@ -85,7 +85,7 @@ class TestGenerateMetadata:
     async def test_uses_custom_prompt_template(
         self, dummy_session: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """n8n truyền prompt riêng cho từng loại video."""
+        """n8n passes its own prompt for each kind of video."""
         captured: dict[str, str] = {}
 
         async def fake_complete(db, user_id, prompt: str) -> str:

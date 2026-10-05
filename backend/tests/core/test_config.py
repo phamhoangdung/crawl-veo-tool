@@ -59,7 +59,7 @@ class TestEnsureMasterKeyFile:
         monkeypatch.setattr(config, "app_data_dir", lambda: tmp_path)
         key = config._ensure_master_key_file()
 
-        # Không raise là đủ verify key hợp lệ cho Fernet.
+        # Not raising is enough to verify the key is valid for Fernet.
         fernet = Fernet(key.encode())
         token = fernet.encrypt(b"hello")
         assert fernet.decrypt(token) == b"hello"

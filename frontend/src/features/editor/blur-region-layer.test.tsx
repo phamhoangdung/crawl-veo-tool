@@ -55,7 +55,7 @@ describe('BlurRegionLayer', () => {
     dispatchPointer(window, 'pointerup', 260, 80)
 
     const clip = useEditorStore.getState().operations.tracks[1].clips[0]
-    // Kéo -40px trên khung 400px = -0.1
+    // Dragging -40px on a 400px frame = -0.1
     expect(clip.x).toBeCloseTo(0.6, 2)
     expect(clip.y).toBeCloseTo(0.15, 2)
     expect(clip.width).toBe(0.2)
@@ -92,7 +92,7 @@ describe('BlurRegionLayer', () => {
     await render(<Harness />)
     const box = document.querySelector('[data-testid=blur-region-0]')!
 
-    // Kéo mạnh sang phải: vùng che tràn ra ngoài làm ffmpeg crop lỗi.
+    // Dragging hard to the right: the hiding region spills outside and makes the ffmpeg crop fail.
     dispatchPointer(box, 'pointerdown', 300, 50)
     dispatchPointer(window, 'pointermove', 900, 600)
     dispatchPointer(window, 'pointerup', 900, 600)

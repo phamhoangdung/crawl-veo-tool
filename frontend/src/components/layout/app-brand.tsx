@@ -8,8 +8,8 @@ import {
 import { APP_NAME, APP_TAGLINE } from '@/config/app'
 
 /**
- * Tên phần mềm ở đầu sidebar. Thay cho TeamSwitcher của template — tool chạy
- * local cho một người dùng nên không có khái niệm chuyển team.
+ * The software name at the top of the sidebar. Replaces the template's TeamSwitcher — the tool runs
+ * locally for one user so there is no notion of switching teams.
  */
 export function AppBrand() {
   return (

@@ -15,16 +15,16 @@ _PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 
 @pytest.fixture
 def db(monkeypatch) -> Session:
-    """Dùng file tạm chứ không phải `sqlite://` in-memory: `render_worker` chạy
-    nền nên tự mở `SessionLocal()` riêng (đúng, vì session của request đã đóng),
-    mà in-memory DB không chia sẻ được sang session khác."""
+    """Use a temp file rather than in-memory `sqlite://`: `render_worker` runs in the
+    background so it opens its own `SessionLocal()` (correct, since the request's session is closed),
+    and an in-memory DB cannot be shared with another session."""
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         engine = create_engine(f"sqlite:///{tmp}/test.db")
         Base.metadata.create_all(engine)
         factory = sessionmaker(bind=engine)
-        # Worker phải nhìn thấy cùng DB với test.
+        # The worker must see the same DB as the test.
         monkeypatch.setattr(service, "SessionLocal", factory)
 
         session = factory()
@@ -32,9 +32,9 @@ def db(monkeypatch) -> Session:
         session.commit()
         yield session
         session.close()
-        # Windows không xoá được file đang có handle mở: `session.close()` mới
-        # trả connection về pool chứ chưa đóng file, nên thiếu dòng này thì
-        # TemporaryDirectory dọn dẹp sẽ ném PermissionError ở mọi test.
+        # Windows cannot delete a file with an open handle: `session.close()` only
+        # returns the connection to the pool without closing the file, so without this line
+        # TemporaryDirectory cleanup would raise PermissionError in every test.
         engine.dispose()
 
 
@@ -64,8 +64,8 @@ def fake_pipeline(monkeypatch) -> dict:
         Path(output_path).write_bytes(b"fake-mp4")
 
     def fake_last_frame(video_path, output_path, **kwargs):
-        # Clip giả chỉ là vài byte, không phải video thật — ffmpeg thật sẽ fail
-        # khi trích frame từ nó, nên phải stub cả bước nối frame.
+        # The fake clip is only a few bytes, not a real video — real ffmpeg would fail
+        # extracting a frame from it, so the frame-chaining step must be stubbed too.
         Path(output_path).write_bytes(_PNG)
 
     def fake_render(operations, output_path):
@@ -77,18 +77,18 @@ def fake_pipeline(monkeypatch) -> dict:
     monkeypatch.setattr(ai_generation_service.ffmpeg, "make_ken_burns_clip", fake_ken_burns)
     monkeypatch.setattr(ai_generation_service.ffmpeg, "extract_last_frame", fake_last_frame)
     monkeypatch.setattr(service.ffmpeg, "render_timeline", fake_render)
-    # Clip giả không đọc được kích thước, còn kiểm tra đồng nhất đã có test riêng
-    # ở TestUniformDimensions (test đó KHÔNG dùng fixture này).
+    # The fake clip has no readable dimensions, and the uniformity check has its own test
+    # in TestUniformDimensions (that test does NOT use this fixture).
     monkeypatch.setattr(service.ffmpeg, "get_video_dimensions", lambda path: (1280, 720))
     return calls
 
 
 @pytest.fixture(autouse=True)
 def clean_progress():
-    """`progress_service._active` là dict ở module nên sống xuyên test, còn mỗi
-    test lại dùng DB in-memory mới nên project id luôn bắt đầu từ 1 — không dọn
-    sạch thì entry "đang chạy" của test trước làm test sau tưởng đang render.
-    `clear_finished()` không đủ vì nó cố ý giữ lại entry chưa kết thúc."""
+    """`progress_service._active` is a module-level dict so it lives across tests, while each
+    test uses a fresh in-memory DB so project ids always start from 1 — if not cleaned,
+    the "running" entry of an earlier test makes a later test think it is rendering.
+    `clear_finished()` is not enough because it deliberately keeps unfinished entries."""
     progress_service._active.clear()
     yield
     progress_service._active.clear()
@@ -103,7 +103,7 @@ def _project(db: Session, count: int = 3):
 
 class TestStartRender:
     def test_registers_progress_before_returning(self, db: Session) -> None:
-        """UI phải thấy job ngay khi request trả về, không đợi worker chạy."""
+        """The UI must see the job as soon as the request returns, not wait for the worker to run."""
         project = _project(db)
 
         service.start_render(db, 1, project.id)
@@ -148,8 +148,8 @@ class TestRenderWorker:
     def test_progress_reaches_done_under_project_subject(
         self, db: Session, fake_pipeline
     ) -> None:
-        """Tiến độ phải gắn subject_type='project' — nếu nhét vào ô video thì
-        mọi query theo video_id sẽ lặng lẽ trả sai."""
+        """Progress must be tagged subject_type='project' — if stuffed into the video slot
+        every query by video_id would silently return wrong results."""
         project = _project(db, count=2)
         service.start_render(db, 1, project.id)
 
@@ -167,7 +167,7 @@ class TestRenderWorker:
     def test_failure_marks_progress_failed_not_left_running(
         self, db: Session, monkeypatch
     ) -> None:
-        """Worker chạy nền: nếu không đóng tiến độ khi lỗi, UI sẽ quay mãi."""
+        """Background worker: if progress is not closed on error, the UI spins forever."""
         project = _project(db, count=1)
         service.start_render(db, 1, project.id)
 
@@ -192,8 +192,8 @@ class TestUniformDimensions:
     def test_raises_with_scene_numbers_when_clips_differ(
         self, db: Session, monkeypatch
     ) -> None:
-        """Lệch kích thước làm xfade xuất file hỏng mà không báo lỗi, nên phải
-        chặn sớm và nói rõ cảnh nào lệch."""
+        """A size mismatch makes xfade output a broken file without an error, so it must
+        be blocked early and say clearly which scene mismatches."""
         project = _project(db, count=2)
         scenes = project_service.list_scenes(db, project.id)
         for index, scene in enumerate(scenes):

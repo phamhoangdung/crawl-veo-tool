@@ -24,9 +24,9 @@ import {
 } from '@/components/ui/dialog'
 import { CoverImage } from '@/components/cover-image'
 
-/** 1 thẻ nhỏ trong dải gợi ý ngang — bấm để đổi video đang xem NGAY TRONG
- * dialog đang mở, không mở dialog chồng dialog (giữ người dùng ở lại luồng
- * khám phá liên tục, xem docs/phases/phase-22-channel-follow.md). */
+/** 1 small card in the horizontal suggestion strip — click to change the video being watched RIGHT INSIDE
+ * the open dialog, without opening a dialog over a dialog (keeping the user in the continuous
+ * discovery flow, see docs/phases/phase-22-channel-follow.md). */
 function SuggestionCard({
   video,
   onSelect,
@@ -92,20 +92,20 @@ function SuggestionRow({
 }
 
 /**
- * Popup xem nhanh 1 video qua iframe nhúng chính thức (không tự lấy/giải mã
- * luồng video ở client) — dùng chung cho lưới video Bilibili và YouTube ở màn
- * Khám phá, trước đây mỗi bên tự viết lại y hệt (chỉ khác URL/nhãn).
+ * Popup for quickly viewing 1 video through the official embedded iframe (it does not fetch/decode
+ * the video stream on the client itself) — shared by the Bilibili and YouTube video grids on the
+ * Discovery screen, previously each wrote the same thing again (only the URL/label differed).
  *
- * Phase 22: khi có `bvid` (chỉ Bilibili — YouTube không truyền, giữ nguyên
- * hành vi cũ) thêm khối tên kênh + nút theo dõi, và 2 dải gợi ý ngang lazy-fetch
- * ("Video tương tự"/"Video khác trong kênh"). Dải "khác trong kênh" có thể
- * suy giảm (`degraded`) do Bilibili risk-control — hiện đúng thông báo thay vì
- * danh sách rỗng im lặng.
+ * Phase 22: when there is a `bvid` (Bilibili only — YouTube does not pass it, keeping the
+ * old behavior) it adds a channel name block + follow button, and 2 horizontal suggestion strips lazy-fetched
+ * ("Similar videos"/"Other videos in the channel"). The "other in the channel" strip can
+ * degrade (`degraded`) due to Bilibili risk control — showing the proper message instead of a
+ * silently empty list.
  *
- * Phản hồi người dùng: xem xong trong popup mà muốn tải thì phải đóng popup,
- * tìm lại đúng thẻ trong lưới (có khi đã cuộn mất) mới bấm tải được — quá vòng
- * vèo. Thêm nút "Tải video" ngay trong popup (`onDownload`), tự đồng bộ %
- * qua SSE giống hệt thẻ trong lưới nếu `videoId` đã có.
+ * User feedback: after watching in the popup, wanting to download meant closing the popup and
+ * finding the exact card in the grid again (sometimes scrolled away) before clicking download — too
+ * roundabout. Added a "Download video" button right in the popup (`onDownload`), syncing the %
+ * over SSE exactly like the card in the grid if `videoId` already exists.
  */
 export function VideoPreviewDialog({
   title,
@@ -123,7 +123,7 @@ export function VideoPreviewDialog({
   onDownload,
   isDownloading = false,
 }: {
-  /** `null` = đóng popup. */
+  /** `null` = close the popup. */
   title: string | null
   embedUrl: string | null
   externalUrl: string | null
@@ -133,13 +133,13 @@ export function VideoPreviewDialog({
   channelId?: string | null
   channelName?: string | null
   channelIsFollowed?: boolean
-  /** Bấm vào 1 thẻ gợi ý — cha chỉ cần đổi state video đang xem. */
+  /** Clicking a suggestion card — the parent only needs to change the state of the video being watched. */
   onSelectVideo?: (video: TrendingVideo) => void
-  /** Bật dải "Video khác trong kênh" — mặc định theo `FEATURE_CHANNEL_VIDEOS`. */
+  /** Turn on the "Other videos in the channel" strip — defaults to `FEATURE_CHANNEL_VIDEOS`. */
   channelVideosEnabled?: boolean
-  /** Id thật trong DB của video ĐANG XEM — `null` = chưa từng tải. Có giá trị
-   * thì tự hiện %/link "Video của tôi" thay vì nút tải (xem `VideoCard`, cùng
-   * pattern). Không truyền (YouTube) = không hiện khối tải trong popup. */
+  /** Real id in the DB of the video BEING WATCHED — `null` = never downloaded. When it has a value
+   * it shows the %/"My videos" link instead of the download button (see `VideoCard`, same
+   * pattern). Not passed (YouTube) = no download block shown in the popup. */
   videoId?: number | null
   onDownload?: () => void
   isDownloading?: boolean
@@ -164,14 +164,14 @@ export function VideoPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      {/* Giới hạn theo chiều cao màn hình + cho cuộn: popup dài hơn màn hình thì nút Đóng/tiêu đề bị đẩy ra ngoài và không với tới được. */}
+      {/* Limited by screen height + scrollable: a popup taller than the screen pushes the Close button/title out and out of reach. */}
       <DialogContent className='max-h-[92vh] gap-3 overflow-y-auto sm:max-w-2xl'>
         <DialogHeader>
           <DialogTitle className='line-clamp-2 pr-6'>{title}</DialogTitle>
         </DialogHeader>
         {embedUrl && externalUrl && (
           <div className='min-w-0 space-y-3'>
-            {/* Rộng tối đa theo 16:9 của 50% chiều cao màn hình — video không bao giờ chiếm hết màn. */}
+            {/* Max width by the 16:9 of 50% of the screen height — the video never takes up the whole screen. */}
             <div className='mx-auto aspect-video w-full max-w-[calc(50vh*16/9)] overflow-hidden rounded-md bg-black'>
               <iframe
                 src={embedUrl}

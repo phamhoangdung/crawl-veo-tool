@@ -1,8 +1,8 @@
-"""Dựng toàn bộ dự án nhiều cảnh thành 1 file video (Phase 15).
+"""Build a whole multi-scene project into 1 video file (Phase 15).
 
-Chạy nền bằng `BackgroundTasks`: sinh 5 cảnh rồi ghép mất vài phút, làm đồng bộ
-như `timeline_service.render_timeline_for_video` (Phase 13) sẽ đụng timeout của
-request.
+Runs in the background via `BackgroundTasks`: generating 5 scenes then joining takes minutes, doing it synchronously
+like `timeline_service.render_timeline_for_video` (Phase 13) would hit the request
+timeout.
 """
 
 import asyncio
@@ -40,7 +40,7 @@ def is_rendering(project_id: int) -> bool:
 
 
 def start_render(db: Session, user_id: int, project_id: int) -> None:
-    """Đăng ký tiến độ trước khi trả request, để UI thấy ngay là job đã nhận."""
+    """Register progress before returning the request, so the UI sees right away that the job was accepted."""
     project = project_service.get_project(db, user_id, project_id)
     if project is None:
         raise ProjectRenderError(f"Không tìm thấy dự án id={project_id}")
@@ -57,8 +57,8 @@ def start_render(db: Session, user_id: int, project_id: int) -> None:
 
 
 def render_worker(project_id: int, user_id: int) -> None:
-    """Chạy trong background task — tự mở session riêng vì session của request
-    đã đóng khi request trả về."""
+    """Run in a background task — opens its own session because the request's session
+    was already closed when the request returned."""
     try:
         asyncio.run(_render(project_id, user_id))
     except Exception as exc:
@@ -110,11 +110,11 @@ async def _render(project_id: int, user_id: int) -> None:
 
 
 def export_to_asset_library(db: Session, user_id: int, project_id: int) -> asset_service.Asset:
-    """Đưa video đã dựng vào kho file dùng chung (`asset_service`, Phase 9).
+    """Put the built video into the shared file library (`asset_service`, Phase 9).
 
-    Kho đó là nguồn của `AssetPicker` trong Timeline Editor (Phase 13), nên sau
-    bước này video mở được ở editor để thêm lồng tiếng/phụ đề. Copy chứ không
-    move: `rendered_path` của dự án phải còn để nút "Xem / tải video" vẫn chạy.
+    That library is the source of the `AssetPicker` in the Timeline Editor (Phase 13), so after
+    this step the video can be opened in the editor to add dubbing/subtitles. Copy rather than
+    move: the project's `rendered_path` must remain so the "View / download video" button still works.
     """
     project = project_service.get_project(db, user_id, project_id)
     if project is None:
@@ -132,10 +132,10 @@ def export_to_asset_library(db: Session, user_id: int, project_id: int) -> asset
 
 
 def _ensure_uniform_dimensions(db: Session, project_id: int) -> None:
-    """Chặn trước khi render nếu các clip lệch kích thước.
+    """Block before rendering if the clips differ in size.
 
-    `xfade` giả định mọi clip cùng resolution; lệch nhau thì ffmpeg xuất ra file
-    hỏng thay vì báo lỗi, nên thà chặn sớm với thông báo rõ. Tự động scale để sau.
+    `xfade` assumes every clip has the same resolution; if they differ ffmpeg outputs a
+    broken file instead of reporting an error, so better to block early with a clear message. Auto-scaling comes later.
     """
     sizes: dict[tuple[int, int], list[int]] = {}
     for scene in project_service.list_scenes(db, project_id):

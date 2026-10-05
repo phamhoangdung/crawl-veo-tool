@@ -8,13 +8,13 @@ from app.models.job import Platform
 
 
 class Channel(Base):
-    """Kênh/tác giả Bilibili (Douyin để sau, xem `Platform`) — mirror
-    `models/category.py::Category` (phát hiện tự động qua dữ liệu quét được,
-    không hardcode danh sách), khác ở chỗ theo dõi TỪNG kênh một
-    (`follow`/`unfollow`) thay vì thay thế cả danh sách một lần như chuyên mục
-    (`set_followed`) — tập kênh có thể lớn hơn nhiều tập chuyên mục.
+    """Bilibili channel/author (Douyin later, see `Platform`) — mirrors
+    `models/category.py::Category` (auto-discovered from scanned data,
+    no hardcoded list), except that channels are followed ONE AT A TIME
+    (`follow`/`unfollow`) instead of replacing the whole list at once like categories
+    (`set_followed`) — the set of channels can be much larger than the set of categories.
 
-    Phase 22 — xem docs/phases/phase-22-channel-follow.md.
+    Phase 22 — see docs/phases/phase-22-channel-follow.md.
     """
 
     __tablename__ = "channels"
@@ -22,8 +22,8 @@ class Channel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     platform: Mapped[Platform] = mapped_column()
-    # Bilibili: str(mid). Lưu dạng string để không giả định định dạng id của
-    # nền tảng khác khi Douyin dùng lại bảng này sau (Phase 3 hết blocked).
+    # Bilibili: str(mid). Stored as a string so we do not assume the id format of
+    # other platforms when Douyin reuses this table later (once Phase 3 is unblocked).
     channel_id: Mapped[str] = mapped_column(String)
     name: Mapped[str] = mapped_column(String)
     avatar_url: Mapped[str | None] = mapped_column(String, default=None)

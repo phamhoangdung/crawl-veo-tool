@@ -13,7 +13,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 
-/** Chọn chuyên mục muốn theo dõi — gom theo nhóm cho dễ tìm giữa ~39 mục. */
+/** Pick the categories to follow — grouped by group to make them easy to find among ~39 entries. */
 export function CategoryPicker({
   categories,
   selected,

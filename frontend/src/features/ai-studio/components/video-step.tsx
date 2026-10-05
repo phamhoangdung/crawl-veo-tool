@@ -86,7 +86,7 @@ export function VideoStep({ settings, selectedKeyframeId }: Props) {
       toast.error('Không tạo được video.')
       return
     }
-    // 409 = vượt ngưỡng mỗi lần gọi, người dùng có thể xác nhận để tiếp tục.
+    // 409 = exceeded the per-call threshold, the user can confirm to continue.
     if (error.response?.status === 409) {
       setPendingConfirm(getApiErrorMessage(error, 'Lần sinh này vượt ngưỡng chi phí.'))
       return
@@ -110,8 +110,8 @@ export function VideoStep({ settings, selectedKeyframeId }: Props) {
   })
 
   const aiVideo = useMutation({
-    // Sinh clip là tác vụ lâu nhất và đắt nhất — chạy nền rồi hỏi lại tiến độ,
-    // để mất kết nối giữa chừng không đồng nghĩa với mất kết quả đã trả tiền.
+    // Generating a clip is the longest and most expensive task — run in the background then poll for progress,
+    // so losing the connection midway does not mean losing a result already paid for.
     mutationFn: async (confirmExpensive: boolean) => {
       const job = await generateVideoClipAsync({
         prompt,

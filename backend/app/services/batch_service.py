@@ -1,8 +1,8 @@
-"""Chạy cả pipeline cho nhiều video liên tiếp, không phải bấm từng bước.
+"""Run the whole pipeline for several videos in a row, without clicking each step.
 
-Đây là thứ chặn việc sản xuất hàng loạt: trước đó mỗi video phải bấm 5 nút
-(tải → tách lời → dịch → lồng tiếng → ghép phụ đề), và phải ngồi canh vì bước
-sau chỉ bấm được khi bước trước xong.
+This is what blocked mass production: before, every video needed 5 button clicks
+(download → transcribe → translate → dub → burn subtitles), and someone had to sit and watch because the next
+step could only be clicked once the previous one finished.
 """
 
 import asyncio
@@ -14,14 +14,14 @@ from app.models.video import Video
 
 logger = logging.getLogger(__name__)
 
-# Số video xử lý cùng lúc. Để 1 vì các bước nặng (whisper, demucs) đã ăn hết CPU
-# — chạy 2 video song song chỉ làm cả hai cùng chậm, chưa kể tranh RAM.
+# Number of videos processed at once. Set to 1 because the heavy steps (whisper, demucs) already eat all the CPU
+# — running 2 videos in parallel only makes both slow, not to mention RAM contention.
 DEFAULT_CONCURRENCY = 1
 
 Step = str
 
-# Thứ tự pipeline. Bỏ "burn" khỏi mặc định: ghép phụ đề cứng là lựa chọn phong
-# cách, không phải bước ai cũng cần.
+# Pipeline order. "burn" is left out of the default: burning in subtitles is a style
+# choice, not a step everyone needs.
 DEFAULT_STEPS: list[Step] = ["download", "transcribe", "translate", "dub"]
 
 
@@ -53,9 +53,9 @@ class BatchJob:
         return sum(1 for i in self.items if i.status in ("done", "failed", "skipped"))
 
 
-# Chỉ chạy 1 batch tại một thời điểm — nhiều batch cùng lúc sẽ tranh CPU và làm
-# tất cả cùng chậm. Giữ trong bộ nhớ như progress_service (mất khi restart là
-# đúng: batch dở không tiếp tục được).
+# Only run 1 batch at a time — several batches at once would fight for CPU and make
+# everything slow. Kept in memory like progress_service (losing it on restart is
+# correct: a half-done batch cannot continue).
 _current: BatchJob | None = None
 _lock = asyncio.Lock()
 
@@ -65,8 +65,8 @@ def get_current() -> BatchJob | None:
 
 
 def cancel_current() -> bool:
-    """Dừng sau khi video đang chạy xong — không cắt ngang giữa chừng để khỏi
-    bỏ lại file dở dang."""
+    """Stop after the currently running video finishes — do not cut in midway so no
+    half-written files are left behind."""
     if _current is None or not _current.is_running:
         return False
     _current.cancelled = True
@@ -74,7 +74,7 @@ def cancel_current() -> bool:
 
 
 def _pick_pending_steps(video: Video, steps: list[Step]) -> list[Step]:
-    """Bỏ qua bước đã có kết quả — chạy lại batch không phải làm lại từ đầu."""
+    """Skip a step that already has a result — re-running a batch does not redo work from scratch."""
     pending: list[Step] = []
     for step in steps:
         if step == "download" and video.local_path:
@@ -99,10 +99,10 @@ async def prepare_batch(
     steps: list[Step] | None = None,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> BatchJob:
-    """Dựng job và ghi nhận là batch hiện tại, chưa chạy gì.
+    """Build the job and register it as the current batch, running nothing yet.
 
-    Tách khỏi `execute_batch` để API trả trạng thái ban đầu ngay lập tức —
-    n8n không phải giữ kết nối mở suốt thời gian xử lý.
+    Split from `execute_batch` so the API can return the initial state immediately —
+    n8n does not have to keep a connection open for the whole processing time.
     """
     global _current
 
@@ -114,7 +114,7 @@ async def prepare_batch(
             videos = db.query(Video).filter(Video.id.in_(video_ids)).all()
             found = {v.id for v in videos}
             items = [BatchItem(video_id=v.id, title=v.title) for v in videos]
-            # Id không tồn tại vẫn phải báo lại, nếu không người gọi tưởng đã chạy.
+            # A nonexistent id must still be reported back, otherwise the caller thinks it ran.
             items += [
                 BatchItem(
                     video_id=vid,
@@ -137,15 +137,15 @@ async def prepare_batch(
 
 
 async def execute_batch(session_factory, job: BatchJob) -> BatchJob:
-    """Chạy pipeline cho từng video. Video lỗi không chặn các video còn lại."""
-    # Import ở đây để tránh vòng lặp import (pipeline import batch_service).
+    """Run the pipeline for each video. A failing video does not block the remaining videos."""
+    # Imported here to avoid an import cycle (pipeline imports batch_service).
     from app.api import pipeline as pipeline_api
 
     semaphore = asyncio.Semaphore(job.concurrency)
 
     async def process(item: BatchItem) -> None:
         if item.status == "failed":
-            return  # id không tồn tại, đã đánh dấu ở prepare_batch
+            return  # id does not exist, already marked in prepare_batch
 
         async with semaphore:
             if job.cancelled:
@@ -172,7 +172,7 @@ async def execute_batch(session_factory, job: BatchJob) -> BatchJob:
                 item.current_step = step
                 try:
                     await pipeline_api.run_step(step, item.video_id)
-                except Exception as exc:  # noqa: BLE001 — 1 video lỗi không chặn cả batch
+                except Exception as exc:  # noqa: BLE001 — 1 failing video must not block the whole batch
                     logger.exception("Batch: video %s lỗi ở bước %s", item.video_id, step)
                     item.status = "failed"
                     item.error = f"{step}: {exc}"
@@ -187,7 +187,7 @@ async def execute_batch(session_factory, job: BatchJob) -> BatchJob:
 
 
 def list_pending_video_ids(session_factory, limit: int = 50) -> list[int]:
-    """Video chưa chạy hết pipeline — nguồn đầu vào cho batch tiếp theo."""
+    """Videos that have not finished the whole pipeline — the input source for the next batch."""
     with session_factory() as db:
         videos = (
             db.query(Video)

@@ -2,11 +2,11 @@ import { Logo } from '@/assets/logo'
 import { cn } from '@/lib/utils'
 
 type BrandLoaderProps = {
-  /** Dòng mô tả bên dưới; mặc định "Đang tải...". */
+  /** The description line below; defaults to "Đang tải...". */
   label?: string
-  /** 0-100. Có giá trị → thanh tiến trình thật + hiện %; bỏ trống → thanh chạy vô định. */
+  /** 0-100. With a value → a real progress bar + shows %; left empty → an indeterminate bar. */
   percent?: number
-  /** `sm` là dạng gọn nằm trong 1 panel, `lg` dùng cho cả màn hình. */
+  /** `sm` is the compact form inside a panel, `lg` is for the whole screen. */
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }
@@ -76,7 +76,7 @@ export function BrandLoader({
   )
 }
 
-/** Phủ toàn màn hình khi có thao tác buộc người dùng phải đợi. */
+/** Covers the whole screen when an action forces the user to wait. */
 export function LoadingOverlay({
   open,
   ...props
@@ -89,7 +89,7 @@ export function LoadingOverlay({
   )
 }
 
-/** Vùng nội dung đang tải: căn giữa, đủ cao để không nhảy layout. */
+/** A loading content area: centered, tall enough to avoid layout jumps. */
 export function PageLoader({ label }: { label?: string }) {
   return (
     <div className='flex min-h-[40vh] items-center justify-center'>

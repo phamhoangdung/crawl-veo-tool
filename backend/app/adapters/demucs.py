@@ -4,23 +4,23 @@ from pathlib import Path
 
 from app.core.config import is_frozen
 
-# Trùng `DEMUCS_FLAG` ở app/entrypoint.py (không import từ đó: file đó chạy như script).
+# Same as `DEMUCS_FLAG` in app/entrypoint.py (not imported from there: that file runs as a script).
 _FROZEN_DEMUCS_FLAG = "--run-demucs"
 
 
 def _demucs_command() -> list[str]:
     if is_frozen():
-        # Bản đóng gói không có `python -m`; `sys.executable` là chính viedub-backend.exe.
+        # The packaged build has no `python -m`; `sys.executable` is viedub-backend.exe itself.
         return [sys.executable, _FROZEN_DEMUCS_FLAG]
     return [sys.executable, "-m", "demucs"]
 
 
 def separate_vocals(audio_path: Path, output_dir: Path) -> tuple[Path, Path]:
-    """Tách audio thành 2 track: vocals.wav (giọng nói) và no_vocals.wav (nhạc nền/hiệu ứng).
+    """Split audio into 2 tracks: vocals.wav (speech) and no_vocals.wav (background music/effects).
 
-    Chạy Demucs ở subprocess riêng thay vì gọi thẳng API nội bộ — ổn định hơn giữa
-    các phiên bản, và nếu Demucs hết RAM/crash thì không kéo sập cả server.
-    Lần chạy đầu sẽ tải model (~80MB), hơi chậm.
+    Runs Demucs in its own subprocess instead of calling the internal API directly — more stable across
+    versions, and if Demucs runs out of RAM/crashes it does not bring the whole server down.
+    The first run downloads the model (~80MB), which is a bit slow.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(

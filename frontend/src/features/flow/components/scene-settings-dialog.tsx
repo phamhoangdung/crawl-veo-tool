@@ -48,8 +48,8 @@ export function SceneSettingsDialog({
 }) {
   if (!scene) return null
 
-  // `key` buộc remount khi đổi cảnh, nên state khởi tạo thẳng từ props —
-  // không cần useEffect đồng bộ (đó là nguồn của cascading render).
+  // `key` forces a remount when the scene changes, so state is initialized straight from props —
+  // no useEffect sync needed (that is the source of cascading renders).
   return (
     <SceneSettingsForm
       key={scene.id}
@@ -149,7 +149,7 @@ function SceneSettingsForm({
             </Select>
           </div>
 
-          {/* Cảnh đầu không có gì phía trước để nối hay chuyển cảnh từ đó. */}
+          {/* The first scene has nothing before it to chain or transition from. */}
           {!isFirst && (
             <>
               <div className='space-y-1'>

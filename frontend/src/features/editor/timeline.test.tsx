@@ -69,7 +69,7 @@ describe('Timeline', () => {
     dispatchPointer(window, 'pointerup', PX_PER_SECOND * 2)
 
     const clip = useEditorStore.getState().operations.tracks[1].clips[0]
-    expect(clip.end).toBeCloseTo(7, 1) // 5 + 2s kéo
+    expect(clip.end).toBeCloseTo(7, 1) // 5 + 2s of dragging
   })
 
   it('dragging the body of an audio clip moves track_start, not the video track', async () => {
@@ -89,8 +89,8 @@ describe('Timeline', () => {
     const handle = screen.getByTestId('resize-end-1-0').element() as HTMLElement
 
     dispatchPointer(handle, 'pointerdown', 0)
-    // Mô phỏng nhiều sự kiện pointermove như chuột thật di chuyển (60-120Hz) —
-    // trước khi sửa, MỖI sự kiện này đẩy 1 bước lịch sử riêng.
+    // Simulate many pointermove events like a real mouse moving (60-120Hz) —
+    // before the fix, EACH of these events pushed its own history step.
     for (let x = 1; x <= 20; x++) {
       dispatchPointer(window, 'pointermove', x * (PX_PER_SECOND / 10))
     }

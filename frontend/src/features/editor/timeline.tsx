@@ -22,7 +22,7 @@ import { WaveformCanvas } from './waveform-canvas'
 
 const TRACK_HEIGHT = 44
 const RULER_HEIGHT = 20
-/** Bề rộng cột nhãn track — playhead phải bù khoảng này để thẳng hàng với clip. */
+/** Width of the track label column — the playhead must offset by this to line up with clips. */
 const LABEL_WIDTH = 96
 
 function formatTick(seconds: number) {
@@ -35,8 +35,8 @@ const TRACK_ICON: Record<TimelineTrack['type'], typeof VideoIcon> = {
   audio: Music2,
   overlay: Type,
   image: ImageIcon,
-  // Track vùng làm mờ thêm ở phase sau nhưng 2 bảng này chưa được cập nhật —
-  // thiếu mục là clip blur hiện ra không icon, không màu.
+  // The blur-region track was added in a later phase but these 2 tables were not updated —
+  // a missing entry means a blur clip shows with no icon and no color.
   blur: Droplet,
 }
 const TRACK_COLOR: Record<TimelineTrack['type'], string> = {
@@ -76,16 +76,16 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
   const endGesture = useEditorStore((s) => s.endGesture)
   const dragRef = useRef<{ mode: DragMode; startX: number; original: TimelineClip } | null>(null)
 
-  // Listener kéo gắn 1 lần nên không thấy pxPerSecond mới; đồng bộ qua ref để
-  // zoom giữa lúc kéo vẫn tính đúng khoảng cách.
+  // The drag listener is attached once so it does not see the new pxPerSecond; sync via a ref so
+  // zooming in the middle of a drag still computes the distance correctly.
   const pxPerSecondRef = useRef(pxPerSecond)
   useEffect(() => {
     pxPerSecondRef.current = pxPerSecond
   }, [pxPerSecond])
 
-  // 1 listener ổn định gắn 1 lần (không tạo closure mới mỗi lần render) — tránh
-  // pattern "factory trả về handler" mà react-hooks/refs coi là truy cập ref lúc
-  // render (dù thực chất handler chỉ chạy khi có sự kiện chuột thật).
+  // 1 stable listener attached once (no new closure created on every render) — avoids the
+  // "factory returning a handler" pattern that react-hooks/refs treats as accessing a ref during
+  // render (even though the handler really only runs on a real mouse event).
   useEffect(() => {
     function onMove(e: PointerEvent) {
       const drag = dragRef.current
@@ -108,7 +108,7 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
     }
   }, [track.type, trackIndex, clipIndex, updateClipDuringGesture, endGesture])
 
-  /** Chọn clip đồng thời tua video tới đầu clip đó, để xem ngay đang sửa đoạn nào. */
+  /** Select a clip and also seek the video to the start of that clip, to see right away which segment is being edited. */
   function selectAndSeek() {
     select({ trackIndex, clipIndex })
     requestSeek(start)
@@ -122,8 +122,8 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
     beginGesture()
   }
 
-  // Logo hiện suốt video (không có start/end) thì không kéo được: kéo sẽ tạo ra
-  // mốc thời gian mà người dùng không hề yêu cầu.
+  // A logo shown for the whole video (no start/end) cannot be dragged: dragging would create a
+  // time range the user never asked for.
   const isFullSpanImage = track.type === 'image' && (clip.start == null || clip.end == null)
   const canMove = track.type !== 'video' && !isFullSpanImage
 
@@ -167,10 +167,10 @@ function ClipBox({ track, trackIndex, clipIndex, videoLayout, waveformPeaks }: C
 }
 
 interface TimelineProps {
-  /** Waveform của track audio ĐẦU TIÊN (thường là giọng đọc) — đơn giản hoá cho
-   * MVP, chưa tính waveform riêng cho từng track/clip audio khác nhau. */
+  /** Waveform of the FIRST audio track (usually the narration) — simplified for the
+   * MVP, no separate waveform computed yet for each different audio track/clip. */
   waveformPeaks?: number[]
-  /** Giây đang phát ở preview — vẽ vạch playhead. */
+  /** Second currently playing in the preview — draws the playhead line. */
   currentTime?: number
 }
 
@@ -186,7 +186,7 @@ export function Timeline({ waveformPeaks, currentTime = 0 }: TimelineProps) {
   const totalDuration = Math.max(totalVideoDuration(videoTrack?.clips ?? []), 1)
   const timelineWidth = secondsToPx(totalDuration, pxPerSecond) + 40
 
-  /** Bấm vào thước thời gian để tua tới đó. */
+  /** Click on the time ruler to seek there. */
   function seekFromRuler(e: React.PointerEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     requestSeek(Math.max(0, (e.clientX - rect.left) / pxPerSecond))
@@ -200,7 +200,7 @@ export function Timeline({ waveformPeaks, currentTime = 0 }: TimelineProps) {
     )
   }
 
-  // Vạch mốc thời gian: thưa dần khi zoom out để không chi chít chữ.
+  // Time tick marks: sparser as you zoom out so the text is not crowded.
   const tickStep = pxPerSecond >= 80 ? 1 : pxPerSecond >= 30 ? 5 : pxPerSecond >= 12 ? 15 : 60
   const ticks = Array.from(
     { length: Math.floor(totalDuration / tickStep) + 1 },
@@ -210,7 +210,7 @@ export function Timeline({ waveformPeaks, currentTime = 0 }: TimelineProps) {
   return (
     <div className='overflow-x-auto rounded-md border' onPointerDown={() => clearSelection()}>
       <div className='relative' style={{ width: timelineWidth, minWidth: '100%' }}>
-        {/* Thước thời gian — bấm để tua. */}
+        {/* Time ruler — click to seek. */}
         <div className='flex border-b bg-muted/30' style={{ height: RULER_HEIGHT }}>
           <div className='w-24 shrink-0 border-e' />
           <div
@@ -232,7 +232,7 @@ export function Timeline({ waveformPeaks, currentTime = 0 }: TimelineProps) {
           </div>
         </div>
 
-        {/* Playhead phủ toàn bộ track, bỏ qua chuột để không chặn kéo clip. */}
+        {/* The playhead covers all tracks, ignoring the mouse so it does not block dragging clips. */}
         <div
           data-testid='playhead'
           className='pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-red-500'

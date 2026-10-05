@@ -45,7 +45,7 @@ describe('SettingsDubbing — công tắc phân vai người nói', () => {
 
     await screen.getByRole('switch', { name: 'Bật phân vai người nói' }).click()
 
-    // React Query gọi mutationFn(variables, context) — chỉ so tham số đầu.
+    // React Query calls mutationFn(variables, context) — compare only the first argument.
     await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalled())
     expect(mockUpdate.mock.calls[0][0]).toEqual({
       speaker_diarization_enabled: true,

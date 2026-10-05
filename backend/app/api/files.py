@@ -7,7 +7,7 @@ from app.services import file_manager_service, storage_cleanup_service
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
-# MVP: 1 user cố định — xem app/api/crawl.py.
+# MVP: 1 fixed user — see app/api/crawl.py.
 _DEFAULT_USER_ID = 1
 
 
@@ -32,7 +32,7 @@ class StorageSummaryRead(BaseModel):
     storage_root: str
     video_count: int
     total_bytes: int
-    # File còn trên đĩa nhưng không còn video nào trỏ tới.
+    # The file is still on disk but no video points to it any more.
     orphan_bytes: int
 
 
@@ -78,7 +78,7 @@ def delete_video_files(video_id: int, db: Session = Depends(get_db)) -> dict[str
 
 @router.post("/cleanup-orphans")
 def cleanup_orphans(db: Session = Depends(get_db)) -> dict[str, int]:
-    """Xoá file không còn video nào trỏ tới — dọn sau khi xoá bản ghi hoặc job lỗi."""
+    """Delete files no video points to any more — cleanup after deleting a record or a failed job."""
     freed = file_manager_service.delete_orphan_files(db, _DEFAULT_USER_ID)
     return {"freed_bytes": freed}
 
@@ -92,10 +92,10 @@ class CleanupOldJobsRead(BaseModel):
 def cleanup_old_jobs(
     max_age_days: int = storage_cleanup_service.DEFAULT_MAX_AGE_DAYS,
 ) -> CleanupOldJobsRead:
-    """Chạy ngay việc dọn thư mục job cũ, không đợi chu kỳ nền 24h.
+    """Run the cleanup of old job directories right now, without waiting for the 24h background cycle.
 
-    Cùng hàm mà vòng lặp nền gọi — endpoint này chỉ để bấm tay khi ổ đĩa đầy
-    hoặc khi muốn dọn gấp với ngưỡng tuổi khác.
+    The same function the background loop calls — this endpoint is only for manual use when the disk is full
+    or when an urgent cleanup with a different age threshold is wanted.
     """
     if max_age_days < 1:
         raise HTTPException(
@@ -106,7 +106,7 @@ def cleanup_old_jobs(
 
 
 class DashboardStatsRead(BaseModel):
-    """Số liệu tổng quan cho trang chủ — đếm từ DB, không phải số minh hoạ."""
+    """Overview numbers for the home page — counted from the DB, not illustrative numbers."""
 
     total_videos: int
     downloaded: int
@@ -123,11 +123,11 @@ def dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsRead:
     return DashboardStatsRead(**file_manager_service.get_dashboard_stats(db, _DEFAULT_USER_ID))
 
 
-# Đặt CUỐI file: route có path param sẽ bắt nhầm các đường dẫn tĩnh phía trên
-# (/summary, /dashboard-stats) nếu khai báo trước chúng.
+# Placed at the END of the file: a route with a path param would wrongly catch the static paths above
+# (/summary, /dashboard-stats) if declared before them.
 @router.get("/{video_id}", response_model=VideoFilesRead)
 def get_video_files(video_id: int, db: Session = Depends(get_db)) -> VideoFilesRead:
-    """File của 1 video — trang chi tiết cần, không phải nạp cả danh sách."""
+    """Files of 1 video — the detail page needs this, without loading the whole list."""
     entries = file_manager_service.list_video_files(db, _DEFAULT_USER_ID)
     entry = next((e for e in entries if e.video_id == video_id), None)
     if entry is None:

@@ -1,0 +1,42 @@
+# Builds the downloadable AI pack (torch CPU, demucs, speechbrain, faster-whisper...) and
+# uploads it to the release `ai-pack-v<AI_PACK_VERSION>` that the app downloads from on
+# first use (backend/app/core/packs.py). Run manually; only needed when
+# backend/requirements-ai.txt changes (then bump AI_PACK_VERSION in packs.py).
+name: ai-pack
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Pack version (must equal AI_PACK_VERSION in backend/app/core/packs.py)"
+        required: true
+        default: "1"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build pack
+        shell: bash
+        run: |
+          python -m venv backend/.venv
+          node scripts/build-ai-pack.mjs
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="ai-pack-v${{ inputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "AI pack v${{ inputs.version }}" --notes "Downloadable AI pack used by the desktop app."
+          gh release upload "$tag" dist-packs/ai-pack-win64.zip --clobber

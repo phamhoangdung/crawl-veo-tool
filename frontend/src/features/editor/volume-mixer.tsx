@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useEditorStore } from './store'
 
-/** Nhãn theo vai trò track — `role` do gợi ý AI đặt khi dựng timeline. */
+/** Label by track role — `role` is set by the AI suggestion when building the timeline. */
 const ROLE_META: Record<string, { label: string; icon: typeof Mic }> = {
   voice: { label: 'Giọng đọc', icon: Mic },
   music: { label: 'Nhạc nền', icon: Music },
@@ -15,8 +15,8 @@ function volumeLabel(volume: number) {
 }
 
 /**
- * Chỉnh âm lượng từng track audio, luôn hiện sẵn — khác `ClipInspector` phải
- * chọn clip mới thấy. Đây là thao tác dùng thường xuyên nhất khi trộn tiếng.
+ * Adjust the volume of each audio track, always visible — unlike `ClipInspector` where a
+ * clip must be selected first. This is the most frequent action when mixing sound.
  */
 export function VolumeMixer() {
   const operations = useEditorStore((s) => s.operations)
@@ -42,8 +42,8 @@ export function VolumeMixer() {
         const Icon = meta.icon
         const isMuted = volume === 0
 
-        // Chỉnh cả clip trong track: các track audio ở đây đều 1 clip trải dài
-        // toàn video, nên đổi cùng lúc là đúng ý người dùng.
+        // Adjust the whole clip in the track: the audio tracks here each have 1 clip spanning
+        // the whole video, so changing them at once is what the user means.
         const setVolume = (next: number) => {
           track.clips.forEach((_, clipIndex) => {
             updateClip(trackIndex, clipIndex, { volume: next })

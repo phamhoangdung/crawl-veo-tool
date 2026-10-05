@@ -48,8 +48,8 @@ class TestBuildClipTimeline:
         ops = clip_service.build_clip_timeline("video.mp4", segments, start=10, end=20)
         overlay_track = next(t for t in ops["tracks"] if t["type"] == "overlay")
         clip = overlay_track["clips"][0]
-        assert clip["start"] == 0.0  # 8-10 âm, clamp về 0
-        assert clip["end"] == 10.0  # 22-10=12 vượt quá 20-10=10, clamp về 10
+        assert clip["start"] == 0.0  # 8-10 negative, clamped to 0
+        assert clip["end"] == 10.0  # 22-10=12 exceeds 20-10=10, clamped to 10
 
     def test_skips_captions_with_empty_text(self) -> None:
         segments = [{"start": 12, "end": 15, "translated_text": "", "text": ""}]

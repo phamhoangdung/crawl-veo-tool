@@ -4,20 +4,20 @@ import type { TimelineClip } from '@/lib/api'
 import { usePointerDrag } from '@/hooks/use-pointer-drag'
 import { useEditorStore } from './store'
 
-/** Kéo mép nào — 'move' là kéo cả khung. */
+/** Which edge is being dragged — 'move' drags the whole box. */
 type Handle = 'move' | 'se'
 
 /**
- * Vùng làm mờ kéo-thả trên khung preview, để che logo hoặc phụ đề tiếng Trung
- * có sẵn trong video gốc.
+ * Blur region drag-and-drop on the preview frame, to hide a logo or Chinese subtitles
+ * already in the source video.
  *
- * Toạ độ theo TỈ LỆ khung hình [0,1] — khớp đúng công thức backend dùng khi
- * render (`crop=iw*w:ih*h:iw*x:ih*y`), nên vùng che xem trước đúng bằng vùng che
- * trong bản render, dù preview bị scale nhỏ lại.
+ * Coordinates are in frame RATIOS [0,1] — matching exactly the formula the backend uses when
+ * rendering (`crop=iw*w:ih*h:iw*x:ih*y`), so the preview hiding region equals the hiding region
+ * in the render, even when the preview is scaled down.
  */
 export function BlurRegionLayer({ currentTime }: { currentTime: number }) {
-  // Chỉ subscribe đúng track "blur" — xem giải thích ở OverlayLayer (cùng lý
-  // do, cùng cách làm).
+  // Subscribe only to the "blur" track — see the explanation in OverlayLayer (same
+  // reason, same approach).
   const trackIndex = useEditorStore((s) =>
     s.operations.tracks.findIndex((t) => t.type === 'blur')
   )
@@ -45,7 +45,7 @@ export function BlurRegionLayer({ currentTime }: { currentTime: number }) {
 
       if (handle === 'move') {
         updateClipDuringGesture(trackIndex, clipIndex, {
-          // Chặn ở mép: vùng che tràn ra ngoài khung làm ffmpeg crop lỗi.
+          // Clamp at the edge: a hiding region spilling outside the frame makes ffmpeg crop fail.
           x: Math.min(1 - origin.width, Math.max(0, origin.x + dx)),
           y: Math.min(1 - origin.height, Math.max(0, origin.y + dy)),
         })
@@ -58,8 +58,8 @@ export function BlurRegionLayer({ currentTime }: { currentTime: number }) {
       })
     }, endGesture)
 
-    // `beginGesture` phải chạy lúc pointerdown THẬT sự xảy ra, không phải lúc
-    // JSX gọi `beginDrag(...)` để dựng handler (chuyện đó xảy ra mỗi lần render).
+    // `beginGesture` must run when the pointerdown REALLY happens, not when the
+    // JSX calls `beginDrag(...)` to build the handler (that happens on every render).
     return (e: React.PointerEvent) => {
       beginGesture()
       handlePointerDown(e)
@@ -72,7 +72,7 @@ export function BlurRegionLayer({ currentTime }: { currentTime: number }) {
       className='pointer-events-none absolute inset-0 overflow-hidden'
     >
       {track.clips.map((clip, clipIndex) => {
-        // Không có mốc thời gian = che suốt video.
+        // No time range = hide for the whole video.
         const hasRange = clip.start != null && clip.end != null
         if (hasRange && (currentTime < clip.start! || currentTime > clip.end!))
           return null

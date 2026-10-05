@@ -1,5 +1,5 @@
-"""Cài đặt người dùng — Phase 21 (số luồng tải) + Phase 20 (số video tải cùng
-lúc). Xem docstring `services/settings_service.py`."""
+"""User settings — Phase 21 (download thread count) + Phase 20 (number of videos downloading at
+once). See the `services/settings_service.py` docstring."""
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from app.services import settings_service
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-_DEFAULT_USER_ID = 1  # MVP: 1 user cố định, xem app/api/crawl.py.
+_DEFAULT_USER_ID = 1  # MVP: 1 fixed user, see app/api/crawl.py.
 
 
 class AppSettingsRead(BaseModel):
@@ -20,8 +20,8 @@ class AppSettingsRead(BaseModel):
 
 
 class AppSettingsUpdate(BaseModel):
-    # `Field(ge=1, le=8)` chặn CỨNG ở schema — số đo thật cho thấy 16 luồng
-    # chậm hơn 8, cho nhập cao hơn chỉ hại người dùng (xem phase-21).
+    # `Field(ge=1, le=8)` is a HARD cap at the schema — measurements show 16 threads
+    # is slower than 8, letting users enter more only hurts them (see phase-21).
     download_connections: int | None = Field(default=None, ge=1, le=8)
     download_max_videos: int | None = Field(default=None, ge=1, le=10)
     speaker_diarization_enabled: bool | None = None

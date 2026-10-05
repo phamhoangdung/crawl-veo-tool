@@ -26,9 +26,9 @@ function youtubeEmbedUrl(videoId: string) {
   return `https://www.youtube.com/embed/${videoId}`
 }
 
-/** Chỉ để XEM xu hướng lấy ý tưởng — không có checkbox/tải video (khác
- * Bilibili). Người dùng đã xác nhận rõ: "ytb chỉ là để xem xu hướng thôi,
- * chứ ko lấy video về". */
+/** Only for WATCHING trends to get ideas — no checkbox/video download (unlike
+ * Bilibili). The user confirmed clearly: "YouTube is only for watching trends,
+ * not for taking videos". */
 function CategoryVideos({ categoryId }: { categoryId: string | null }) {
   const [previewVideo, setPreviewVideo] = useState<YoutubeVideo | null>(null)
 

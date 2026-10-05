@@ -7,24 +7,24 @@ from app.core.config import storage_dir
 
 logger = logging.getLogger(__name__)
 
-# Lấy từ config chứ không tự ghép đường dẫn: bản đóng gói (Phase 12) để storage
-# trong thư mục dữ liệu người dùng, hard-code `backend/storage` sẽ khiến dọn dẹp
-# im lặng không tìm thấy gì.
+# Taken from config rather than assembling the path ourselves: the packaged build (Phase 12) puts storage
+# in the user data directory, hard-coding `backend/storage` would make cleanup
+# silently find nothing.
 _STORAGE_ROOT = storage_dir()
 _JOB_DIR_PATTERN = "*"  # storage/<job_id>/<video_id>/...
 
-# Mặc định 1 ngày/lần: dọn file quá 30 ngày thì chạy dày hơn cũng không dọn thêm
-# được gì, mà mỗi lần chạy phải quét toàn bộ storage.
+# Default once a day: cleaning files older than 30 days gains nothing when run more often,
+# yet each run has to scan the whole storage.
 CLEANUP_INTERVAL_SECONDS = 24 * 3600
 DEFAULT_MAX_AGE_DAYS = 30
 
 
 def cleanup_old_job_folders(max_age_days: int = 30) -> list[str]:
-    """Xoá thư mục job (`storage/<job_id>/`) cũ hơn `max_age_days` (tính theo mtime).
+    """Delete job directories (`storage/<job_id>/`) older than `max_age_days` (by mtime).
 
-    Chỉ xoá thư mục job (video gốc, audio, dubbed, burned...) — không đụng tới
-    `app.db`, `_zips/`, hay các file/thư mục khác nằm ngoài pattern `<số>/`.
-    Trả về danh sách thư mục đã xoá để log/hiển thị lại cho người dùng.
+    Only deletes job directories (source video, audio, dubbed, burned...) — does not touch
+    `app.db`, `_zips/`, or other files/directories outside the `<number>/` pattern.
+    Returns the list of deleted directories to log/show back to the user.
     """
     if not _STORAGE_ROOT.exists():
         return []
@@ -51,19 +51,19 @@ async def run_periodic_cleanup(
     max_age_days: int = DEFAULT_MAX_AGE_DAYS,
     interval_seconds: float = CLEANUP_INTERVAL_SECONDS,
 ) -> None:
-    """Vòng lặp dọn dẹp chạy nền trong chính process backend.
+    """Cleanup loop running in the background inside the backend process itself.
 
-    Chọn cách này thay vì cron ngoài/APScheduler: tool này được đóng gói thành
-    desktop app (Phase 12) nên không có crontab để cài, còn APScheduler là thêm
-    hẳn một dependency cho đúng một việc mà `asyncio.sleep` làm được.
+    This approach is chosen over external cron/APScheduler: this tool is packaged as a
+    desktop app (Phase 12) so there is no crontab to install, and APScheduler is a whole
+    extra dependency for something `asyncio.sleep` can do.
 
-    Chạy dọn NGAY lần đầu rồi mới ngủ: máy cá nhân thường tắt/mở liên tục, đợi
-    đủ 24h mới dọn lần đầu thì có khi không bao giờ tới lượt.
+    Clean RIGHT AWAY the first time, then sleep: a personal machine is often turned off/on, and waiting
+    a full 24h before the first cleanup may mean it never gets its turn.
     """
     while True:
         try:
-            # Quét toàn bộ storage là việc chạm đĩa nặng — đẩy sang thread khác
-            # để không chặn event loop (mọi request khác sẽ đứng hình).
+            # Scanning the whole storage is heavy disk work — push it to another thread
+            # so the event loop is not blocked (every other request would freeze).
             removed = await asyncio.to_thread(cleanup_old_job_folders, max_age_days)
             if removed:
                 logger.info(
@@ -74,6 +74,6 @@ async def run_periodic_cleanup(
         except asyncio.CancelledError:
             raise
         except Exception:
-            # Lỗi dọn dẹp không được phép giết vòng lặp: lần sau thử lại.
+            # A cleanup error must not be allowed to kill the loop: retry next time.
             logger.exception("Dọn dẹp định kỳ thất bại, sẽ thử lại ở chu kỳ sau")
         await asyncio.sleep(interval_seconds)

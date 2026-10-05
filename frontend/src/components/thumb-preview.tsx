@@ -6,9 +6,9 @@ import {
 } from '@/components/ui/tooltip'
 
 /**
- * Thumb nhỏ trong bảng, hover thì hiện ảnh to. Thumb ở bảng phải nhỏ để vừa
- * nhiều dòng, nhưng nhỏ quá thì không nhìn được nội dung video — tooltip giải
- * quyết cả hai.
+ * A small thumb in a table, showing a large image on hover. A thumb in a table must be small to fit
+ * many rows, but too small and the video content cannot be seen — the tooltip solves
+ * both.
  */
 export function ThumbPreview({
   src,
@@ -17,7 +17,7 @@ export function ThumbPreview({
   src: string | null
   className?: string
 }) {
-  // Không có ảnh thì khỏi tooltip: hiện khung rỗng to lên chẳng để làm gì.
+  // No image means no tooltip: showing a big empty frame serves no purpose.
   if (!src) {
     return <CoverImage src={null} className={className} />
   }

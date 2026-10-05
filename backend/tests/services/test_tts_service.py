@@ -5,8 +5,8 @@ from app.services import tts_service
 
 
 class TestHasSpeakableContent:
-    """Edge-TTS báo "No audio was received" khi văn bản không có gì để đọc —
-    lỗi input chứ không phải lỗi mạng, nên phải lọc trước khi gọi."""
+    """Edge-TTS reports "No audio was received" when the text has nothing to read —
+    an input error, not a network error, so it must be filtered before calling."""
 
     @pytest.mark.parametrize(
         "text",
@@ -23,7 +23,7 @@ class TestHasSpeakableContent:
 class TestEdgeRetry:
     @pytest.mark.anyio
     async def test_fails_fast_on_unspeakable_text(self, tmp_path) -> None:
-        """Không được retry 3 lần với văn bản vốn không đọc được."""
+        """Must not retry 3 times with text that is inherently unreadable."""
         with pytest.raises(
             tts_service.TtsFailedError, match="không có nội dung đọc được"
         ):
@@ -33,7 +33,7 @@ class TestEdgeRetry:
     async def test_retries_on_transient_failure(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Lỗi tạm thời phía dịch vụ thì retry mới có tác dụng."""
+        """A transient error on the service side is where retrying actually helps."""
         import edge_tts
 
         calls = {"count": 0}
@@ -55,8 +55,8 @@ async def _noop() -> None:
 
 
 class TestSynthesizeSpeechVoiceRouting:
-    """Phase 19: `voice` cho biết gán riêng giọng nào cho 1 vai (speaker) —
-    None phải giữ nguyên hành vi mặc định cũ (ElevenLabs pool rồi Edge fallback)."""
+    """Phase 19: `voice` says which voice is assigned to 1 speaker —
+    None must keep the old default behavior (ElevenLabs pool then Edge fallback)."""
 
     @pytest.mark.anyio
     async def test_edge_voice_skips_elevenlabs_entirely(

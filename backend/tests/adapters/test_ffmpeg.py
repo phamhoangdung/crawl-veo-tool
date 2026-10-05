@@ -1,6 +1,6 @@
-"""render_timeline dựng filter_complex ffmpeg động — test bằng ffmpeg thật (không
-mock subprocess), vì mock sẽ không phát hiện được lỗi cú pháp filter_complex, đúng
-loại lỗi dễ gặp nhất khi dựng chuỗi filter bằng tay."""
+"""render_timeline builds the ffmpeg filter_complex dynamically — tested with real ffmpeg (not
+mocking subprocess), because a mock would not catch filter_complex syntax errors, exactly the
+most common kind of error when building filter chains by hand."""
 
 import json
 import re
@@ -111,8 +111,8 @@ class TestRenderTimelineMultiClip:
     def test_fade_transition_shortens_total_duration(
         self, tmp_path: Path, clip_a: Path, clip_b: Path
     ) -> None:
-        """xfade chồng lấn `transition_duration` giây giữa 2 clip — tổng thời lượng
-        phải NGẮN HƠN cộng đơn giản 2 clip (2+2=4s), không phải bằng nó."""
+        """xfade overlaps by `transition_duration` seconds between 2 clips — the total duration
+        must be SHORTER than simply adding the 2 clips (2+2=4s), not equal to it."""
         output = tmp_path / "out.mp4"
         operations = {
             "tracks": [
@@ -165,7 +165,7 @@ class TestRenderTimelineAudioTracks:
 
         info = _probe(output)
         audio_streams = [s for s in info["streams"] if s["codec_type"] == "audio"]
-        assert len(audio_streams) == 1  # đã amix thành 1 track duy nhất
+        assert len(audio_streams) == 1  # already amixed into a single track
 
 
 class TestRenderTimelineCrop:
@@ -197,9 +197,9 @@ class TestRenderTimelineCrop:
 
 class TestRenderTimelineOverlay:
     def test_overlay_text_does_not_break_render(self, tmp_path: Path, clip_a: Path) -> None:
-        """Không verify được nội dung chữ bằng ffprobe (không OCR) — chỉ verify
-        drawtext không làm hỏng lệnh ffmpeg (lỗi cú pháp filter dễ gặp nhất khi
-        dựng chuỗi bằng tay, escape sai dấu ':' hoặc dấu nháy là ví dụ điển hình)."""
+        """The text content cannot be verified with ffprobe (no OCR) — only verifies that
+        drawtext does not break the ffmpeg command (a filter syntax error is the most common kind when
+        building the string by hand, wrongly escaping ':' or quotes being a typical example)."""
         output = tmp_path / "out.mp4"
         operations = {
             "tracks": [
@@ -285,8 +285,8 @@ class TestRenderTimelineOverlay:
     def test_invalid_font_color_is_rejected_before_touching_ffmpeg(
         self, tmp_path: Path, clip_a: Path
     ) -> None:
-        """`font_color` ghép thẳng vào chuỗi filter `-vf` — dấu ':' không được
-        validate sẽ phá cú pháp filter (delimiter option) thay vì báo lỗi rõ."""
+        """`font_color` is pasted straight into the `-vf` filter string — an unvalidated ':'
+        would break the filter syntax (option delimiter) instead of reporting a clear error."""
         output = tmp_path / "out.mp4"
         operations = {
             "tracks": [
@@ -321,7 +321,7 @@ class TestCropVertical:
 
 @pytest.fixture
 def logo_image(tmp_path: Path) -> Path:
-    """Ảnh PNG nhỏ làm logo/watermark."""
+    """A small PNG image used as a logo/watermark."""
     path = tmp_path / "logo.png"
     subprocess.run(
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=green:size=64x64:duration=1",
@@ -333,7 +333,7 @@ def logo_image(tmp_path: Path) -> Path:
 
 
 class TestImageOverlay:
-    """Logo/watermark — chèn ảnh ngoài vào video, phần còn thiếu để re-up chỉn chu."""
+    """Logo/watermark — insert an external image into the video, the missing piece for a polished re-upload."""
 
     def test_renders_logo_without_breaking_video(
         self, clip_a: Path, logo_image: Path, tmp_path: Path
@@ -356,7 +356,7 @@ class TestImageOverlay:
 
         info = _probe(out)
         video_stream = next(s for s in info["streams"] if s["codec_type"] == "video")
-        # Logo không được làm đổi kích thước video nền.
+        # The logo must not change the size of the base video.
         assert video_stream["width"] == 320
         assert video_stream["height"] == 240
 
@@ -389,7 +389,7 @@ class TestImageOverlay:
     def test_logo_limited_to_time_range(
         self, clip_a: Path, logo_image: Path, tmp_path: Path
     ) -> None:
-        """Logo hiện/ẩn theo mốc thời gian — dùng cho intro branding."""
+        """Logo shown/hidden by time range — used for intro branding."""
         out = tmp_path / "out.mp4"
         ffmpeg.render_timeline(
             {
@@ -417,7 +417,7 @@ class TestImageOverlay:
     def test_intro_concat_with_external_music(
         self, clip_a: Path, clip_b: Path, music_clip: Path, tmp_path: Path
     ) -> None:
-        """Intro + video chính + nhạc nền ngoài — luồng re-up điển hình."""
+        """Intro + main video + external background music — the typical re-upload flow."""
         out = tmp_path / "out.mp4"
         ffmpeg.render_timeline(
             {
@@ -453,7 +453,7 @@ class TestImageOverlay:
 
 
 class TestWrapTextToBox:
-    """drawtext KHÔNG tự xuống dòng — câu dài tràn ra ngoài khung và bị cắt mất."""
+    """drawtext does NOT wrap on its own — a long sentence overflows the frame and gets cut off."""
 
     def test_wraps_vietnamese_at_word_boundary(self) -> None:
         result = ffmpeg._wrap_text_to_box("Cảm giác thật tuyệt khi nó chạm vào miệng", 20)
@@ -461,11 +461,11 @@ class TestWrapTextToBox:
         lines = result.split("\n")
         assert len(lines) > 1
         assert all(len(line) <= 20 for line in lines)
-        # Không được cắt giữa từ khi còn chỗ xuống dòng.
+        # Must not cut mid-word while there is still room to wrap.
         assert "Cảm giác thật" in lines[0]
 
     def test_hard_splits_chinese(self) -> None:
-        """Tiếng Trung không có dấu cách giữa chữ nên phải cắt cứng."""
+        """Chinese has no spaces between characters so it must hard-cut."""
         result = ffmpeg._wrap_text_to_box("这么长是不是就在说话", 5)
 
         lines = result.split("\n")
@@ -475,7 +475,7 @@ class TestWrapTextToBox:
         assert ffmpeg._wrap_text_to_box("ngắn", 20) == "ngắn"
 
     def test_zero_width_returns_original(self) -> None:
-        """Chia cho 0 ký tự sẽ lặp vô hạn — phải trả nguyên văn."""
+        """Splitting by 0 characters would loop forever — must return the text verbatim."""
         assert ffmpeg._wrap_text_to_box("abc", 0) == "abc"
 
     def test_word_longer_than_line_is_split(self) -> None:
@@ -500,13 +500,13 @@ class TestProbeVideoWidth:
         assert ffmpeg.probe_video_width(clip_a) == 320
 
     def test_missing_file_falls_back(self) -> None:
-        """Thà wrap hơi lệch còn hơn làm chết cả lần render."""
+        """Better a slightly off wrap than killing the whole render."""
         assert ffmpeg.probe_video_width("/khong/ton/tai.mp4") == 1080
 
 
 class TestRenderTimelineBlur:
-    """Che logo / phụ đề gốc — render bằng ffmpeg thật vì lỗi hay gặp nhất là
-    cú pháp filter (dùng lại nhãn, radius vượt giới hạn)."""
+    """Hide the logo / original subtitles — rendered with real ffmpeg because the most common error is
+    filter syntax (reusing a label, radius over the limit)."""
 
     def test_blur_region_renders(self, tmp_path: Path, clip_a: Path) -> None:
         output = tmp_path / "out.mp4"
@@ -551,8 +551,8 @@ class TestRenderTimelineBlur:
         assert output.exists()
 
     def test_small_region_with_high_strength(self, tmp_path: Path, clip_a: Path) -> None:
-        """boxblur giới hạn radius theo kích thước vùng cắt (vùng nhỏ chỉ cho
-        radius < 18) nên từng lỗi hẳn — gblur không có hạn chế đó."""
+        """boxblur limits the radius by the size of the cropped region (a small region only allows
+        radius < 18) so it used to fail outright — gblur has no such limit."""
         output = tmp_path / "out.mp4"
         operations = {
             "tracks": [
@@ -569,7 +569,7 @@ class TestRenderTimelineBlur:
         assert output.exists()
 
     def test_multiple_blur_regions(self, tmp_path: Path, clip_a: Path) -> None:
-        """Nhiều vùng che (logo góc + phụ đề dưới) phải chồng được lên nhau."""
+        """Several hiding regions (corner logo + bottom subtitles) must be able to overlap each other."""
         output = tmp_path / "out.mp4"
         operations = {
             "tracks": [
@@ -614,7 +614,7 @@ class TestRenderTimelineBlur:
         assert output.exists()
 
     def test_blur_applied_before_overlay_text(self, tmp_path: Path, clip_a: Path) -> None:
-        """Blur phải chạy TRƯỚC drawtext, nếu không mờ luôn chữ mình vừa thêm."""
+        """Blur must run BEFORE drawtext, otherwise it also blurs the text we just added."""
         output = tmp_path / "out.mp4"
         operations = {
             "tracks": [
@@ -664,11 +664,11 @@ class TestRenderTimelineSubtitleBox:
 
 
 class TestBurnSubtitlePosition:
-    """Vị trí phụ đề burn-in — đo trên pixel THẬT, không tin vào tên hằng số.
+    """Burned-in subtitle position — measured on REAL pixels, not trusting the constant names.
 
-    Lý do phải đo: `force_style='Alignment=N'` dùng đánh số SSA v4 chứ không phải
-    sơ đồ bàn phím số của ASS v4+. Số 8 (trông như "giữa-trên" theo numpad) thực
-    ra đặt chữ ra GIỮA khung hình và ffmpeg không báo lỗi gì.
+    Why measure: `force_style='Alignment=N'` uses SSA v4 numbering, not the
+    numpad layout of ASS v4+. The number 8 (which looks like "top-center" on a numpad) actually
+    puts the text in the MIDDLE of the frame and ffmpeg reports no error.
     """
 
     @staticmethod
@@ -686,10 +686,10 @@ class TestBurnSubtitlePosition:
 
     @staticmethod
     def _band_brightness(path: Path, where: str) -> float:
-        """Độ sáng trung bình (YAVG) của dải trên/dưới khung hình tại giây thứ 1.
+        """Average brightness (YAVG) of the top/bottom bands of the frame at second 1.
 
-        Nền đen phẳng cho YAVG=16 (mức đen của dải limited-range); chữ trắng kéo
-        con số của dải chứa nó lên rõ rệt.
+        A flat black background gives YAVG=16 (the black level of the limited-range band); white text pulls
+        the number of the band containing it up noticeably.
         """
         crop = "iw:ih/3:0:0" if where == "top" else "iw:ih/3:0:ih*2/3"
         result = subprocess.run(
@@ -750,9 +750,9 @@ class TestBurnSubtitlePosition:
 
     @staticmethod
     def _saturation(path: Path) -> float:
-        """SATAVG (độ bão hoà màu trung bình) của khung hình tại giây thứ 1 — chữ
-        trắng/xám cho SATAVG ~0, chữ màu (đỏ...) kéo con số lên rõ rệt. Dùng để
-        verify `font_color` thật sự đổi màu chữ mà không cần OCR."""
+        """SATAVG (average color saturation) of the frame at second 1 — white/gray text
+        gives SATAVG ~0, colored text (red...) pulls the number up noticeably. Used to
+        verify `font_color` really changes the text color without OCR."""
         result = subprocess.run(
             [
                 "ffmpeg", "-hide_banner", "-nostats",
@@ -823,7 +823,7 @@ class TestBurnSubtitlePosition:
 
 class TestHexToAssColor:
     def test_converts_rgb_order_to_ass_bgr_order(self) -> None:
-        # R=0x11 G=0x22 B=0x33 → ASS PrimaryColour đảo thứ tự thành BGR.
+        # R=0x11 G=0x22 B=0x33 → ASS PrimaryColour reverses the order into BGR.
         assert ffmpeg._hex_to_ass_color("112233") == "&H00332211&"
 
     def test_strips_leading_hash(self) -> None:
@@ -834,8 +834,8 @@ class TestHexToAssColor:
             ffmpeg._hex_to_ass_color("FFF")
 
     def test_non_hex_characters_raise(self) -> None:
-        """6 ký tự đúng độ dài nhưng không phải hex (vd chứa ':') — kiểm tra độ
-        dài thôi thì lọt qua rồi phá cú pháp filter ffmpeg khi ghép chuỗi."""
+        """6 characters, the right length but not hex (e.g. containing ':') — checking only the
+        length would let it through and break the ffmpeg filter syntax when concatenated."""
         with pytest.raises(ValueError, match="hex 6"):
             ffmpeg._hex_to_ass_color("0:0000")
 

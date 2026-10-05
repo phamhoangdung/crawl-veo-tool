@@ -19,10 +19,10 @@ _client: httpx.AsyncClient | None = None
 
 
 def _get_client() -> httpx.AsyncClient:
-    """1 client dùng chung suốt vòng đời process thay vì mở mới mỗi lần gọi
-    ElevenLabs — tránh bắt tay TLS/dựng connection pool lặp lại khi nhiều đoạn
-    TTS chạy song song (xem docs/performance-optimization/plan.md mục P1).
-    Không đóng lại tường minh, cùng lý do như `translate_service._get_client`.
+    """1 client shared for the whole process lifetime instead of opening a new one on every
+    ElevenLabs call — avoids repeated TLS handshakes/connection-pool setup when many
+    TTS segments run in parallel (see docs/performance-optimization/plan.md, section P1).
+    Not explicitly closed, same reason as `translate_service._get_client`.
     """
     global _client
     if _client is None:
@@ -35,20 +35,20 @@ class TtsFailedError(RuntimeError):
 
 
 def _has_speakable_content(text: str) -> bool:
-    """Có chữ/số để đọc không — chỉ dấu câu thì Edge-TTS không trả về audio nào."""
+    """Whether there is any letter/digit to read — with only punctuation Edge-TTS returns no audio."""
     return bool(re.search(r"[^\W_]", text, flags=re.UNICODE))
 
 
 async def _synthesize_with_edge_retry(
     text: str, output_path: Path, voice: str = edge_tts_adapter.DEFAULT_VOICE
 ) -> None:
-    """Gọi Edge-TTS, retry khi lỗi mạng tạm thời.
+    """Call Edge-TTS, retrying on transient network errors.
 
-    `NoAudioReceived` có hai nguyên nhân rất khác nhau:
-    - Văn bản không đọc được (chỉ dấu câu, hoặc chữ không thuộc ngôn ngữ của
-      giọng — ví dụ giọng tiếng Việt gặp chữ Hán). Đây là lỗi input, **retry vô
-      ích**, nên báo lỗi ngay kèm nội dung để dễ truy nguyên.
-    - Trục trặc tạm thời phía dịch vụ. Trường hợp này retry mới có tác dụng.
+    `NoAudioReceived` has two very different causes:
+    - Text that cannot be read (only punctuation, or characters not in the voice's
+      language — e.g. a Vietnamese voice meeting Han characters). This is an input error, **retrying is
+      useless**, so raise right away with the content for easy tracing.
+    - A transient problem on the service side. Retrying only helps in this case.
     """
     if not _has_speakable_content(text):
         raise TtsFailedError(f"Văn bản không có nội dung đọc được: {text!r}")
@@ -81,17 +81,17 @@ async def synthesize_speech(
     output_path: Path,
     voice: dict[str, str] | None = None,
 ) -> None:
-    """Xoay vòng key ElevenLabs trong pool (Phase 8) khi 1 key hết quota (HTTP 429);
-    hết cả pool (hoặc chưa cấu hình key nào) thì fallback Edge-TTS (free) như trước.
+    """Rotate ElevenLabs keys in the pool (Phase 8) when 1 key is out of quota (HTTP 429);
+    when the whole pool is exhausted (or no key is configured) fall back to Edge-TTS (free) as before.
 
-    `voice`: {"provider": "edge"|"elevenlabs", "voice_id": "..."} — do người dùng
-    gán riêng cho 1 vai (Phase 19, lồng tiếng nhiều giọng). None dùng mặc định
-    như trước (ElevenLabs pool rồi Edge fallback), không phá hành vi cũ.
+    `voice`: {"provider": "edge"|"elevenlabs", "voice_id": "..."} — assigned by the user
+    to one speaker (Phase 19, multi-voice dubbing). None uses the default
+    as before (ElevenLabs pool then Edge fallback), not breaking the old behavior.
 
-    Không ném AllProvidersExhaustedError ở đây (khác translate_service): Edge-TTS
-    free không có khái niệm "hết quota", lỗi của nó (TtsFailedError) đã được
-    dubbing_service xử lý riêng bằng cách bỏ qua đoạn — biến nó thành lỗi "hết quota
-    toàn phần" sẽ sai bản chất và làm job dừng oan khi thực ra chỉ 1 câu không đọc được.
+    Does not raise AllProvidersExhaustedError here (unlike translate_service): free Edge-TTS
+    has no notion of "out of quota", and its error (TtsFailedError) is already handled
+    separately by dubbing_service by skipping the segment — turning it into a "total out-of-quota"
+    error would be wrong in nature and stop the job unfairly when really only 1 sentence could not be read.
     """
     edge_voice = edge_tts_adapter.DEFAULT_VOICE
     if voice and voice.get("provider") == "edge":

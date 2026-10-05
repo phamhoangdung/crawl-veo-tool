@@ -5,7 +5,7 @@ from app.services import progress_service
 
 @pytest.fixture(autouse=True)
 def clean_registry():
-    """Tiến độ lưu ở module-level dict — dọn giữa các test để không rò trạng thái."""
+    """Progress is stored in a module-level dict — clear it between tests so no state leaks."""
     yield
     for progress in progress_service.snapshot():
         progress_service.clear(progress.video_id)
@@ -30,7 +30,7 @@ class TestProgressLifecycle:
         assert progress.percent == 50.0
 
     def test_new_stage_resets_counter(self) -> None:
-        """Mỗi chặng đếm lại từ đầu, nếu không phần trăm chặng sau sẽ vọt quá 100."""
+        """Each stage counts from the start again, otherwise the later stage's percentage would jump past 100."""
         progress_service.start(1, "Video A")
         progress_service.set_stage(1, "video", total=100)
         progress_service.advance(1, 100)
@@ -41,8 +41,8 @@ class TestProgressLifecycle:
         assert progress.total == 50
 
     def test_percent_is_zero_without_total(self) -> None:
-        """Bilibili không luôn trả Content-Length, và transcribe không chia nhỏ được
-        — không được chia cho None."""
+        """Bilibili does not always return Content-Length, and transcribe cannot be split up
+        — must not divide by None."""
         progress_service.start(1, "Video A")
         progress_service.set_stage(1, "video", total=None)
         progress_service.advance(1, 999)
@@ -79,7 +79,7 @@ class TestProgressLifecycle:
         assert progress_service.snapshot() == []
 
     def test_updates_to_unknown_video_are_ignored(self) -> None:
-        """Video đã bị clear giữa chừng không được làm nổ vòng lặp tải."""
+        """A video cleared midway must not blow up the download loop."""
         progress_service.advance(999, 100)
         progress_service.set_stage(999, "video")
         progress_service.finish(999)
@@ -88,7 +88,7 @@ class TestProgressLifecycle:
 
 
 class TestMultipleTaskKinds:
-    """1 video có thể chạy nhiều loại tác vụ; chúng không được ghi đè lẫn nhau."""
+    """1 video can run several kinds of tasks; they must not overwrite each other."""
 
     def test_kinds_tracked_separately(self) -> None:
         progress_service.start(1, "Video A", kind="download")
@@ -100,7 +100,7 @@ class TestMultipleTaskKinds:
 
         assert set(items) == {"download", "translate"}
         assert items["translate"].current == 4
-        # Tác vụ tải không bị ảnh hưởng bởi tiến độ của bước dịch.
+        # The download task is not affected by the translation step's progress.
         assert items["download"].current == 0
 
     def test_finish_only_affects_given_kind(self) -> None:

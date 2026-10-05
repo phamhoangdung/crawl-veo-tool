@@ -1,15 +1,15 @@
-"""Lỗi chuẩn hoá dùng chung giữa các adapter/service liên quan tới AI Account Pool
-(Phase 8) — xem docs/phases/phase-8-ai-account-pool.md."""
+"""Standardized errors shared between adapters/services related to the AI Account Pool
+(Phase 8) — see docs/phases/phase-8-ai-account-pool.md."""
 
 import httpx
 
 
 class ProviderQuotaExceededError(RuntimeError):
-    """1 key cụ thể bị provider từ chối vì rate-limit/hết quota (HTTP 429).
+    """1 specific key rejected by the provider for rate limit/out of quota (HTTP 429).
 
-    Khác với lỗi mạng/lỗi server thường (500...) — lỗi này báo hiệu "key này cần
-    nghỉ", không phải "request này sai", nên service layer bắt riêng để chuyển
-    sang key khác trong pool thay vì raise thẳng lên cho người dùng.
+    Different from ordinary network/server errors (500...) — this error signals "this key needs
+    a rest", not "this request is wrong", so the service layer catches it separately to switch
+    to another key in the pool instead of raising straight up to the user.
     """
 
     def __init__(self, provider: str, original: httpx.HTTPStatusError) -> None:
@@ -19,6 +19,6 @@ class ProviderQuotaExceededError(RuntimeError):
 
 
 class AllProvidersExhaustedError(RuntimeError):
-    """Toàn bộ key trong pool CỘNG provider fallback (free) đều thất bại — job nên
-    tạm dừng (VideoStatus.PAUSED_QUOTA) thay vì fail hẳn, để thử lại khi có key mới
-    hoặc cooldown hết hạn."""
+    """Every key in the pool PLUS the fallback (free) provider failed — the job should
+    pause (VideoStatus.PAUSED_QUOTA) instead of failing outright, to retry when a new key arrives
+    or the cooldown expires."""

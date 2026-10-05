@@ -4,8 +4,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import cả package models để `create_all()` thấy hết bảng — model nào không được
-# module nào import thì bảng của nó sẽ không được tạo.
+# Import the whole models package so `create_all()` sees every table — a model that no
+# module imports will not get its table created.
 from app import models  # noqa: F401
 from app.api import (
     ai_generation,
@@ -48,10 +48,10 @@ app = FastAPI(title="Crawl Video Tool API")
 
 app.add_middleware(
     CORSMiddleware,
-    # Vite tự đổi cổng (5173, 5174...) nếu cổng mặc định đang bận — cho phép mọi
-    # cổng localhost thay vì cố định 1 cổng, tránh lỗi CORS vặt vãnh lúc dev.
-    # Bản đóng gói Tauri chạy webview ở origin tauri.localhost (Windows) hoặc
-    # tauri://localhost (macOS/Linux), không phải localhost:<cổng>.
+    # Vite changes port (5173, 5174...) if the default port is busy — allow any
+    # localhost port instead of pinning one, avoiding petty CORS errors in dev.
+    # The Tauri packaged build runs the webview at origin tauri.localhost (Windows) or
+    # tauri://localhost (macOS/Linux), not localhost:<port>.
     allow_origin_regex=r"http://localhost:\d+|https?://tauri\.localhost|tauri://localhost",
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,30 +96,30 @@ def on_startup() -> None:
         )
 
 
-# Giữ tham chiếu tới task nền: mất tham chiếu thì Python có thể thu gom task
-# giữa chừng, và lúc tắt app không còn gì để huỷ.
+# Keep a reference to the background task: without one Python may garbage-collect the task
+# midway, and on shutdown there is nothing left to cancel.
 _cleanup_task: asyncio.Task | None = None
 _snapshot_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_background_jobs() -> None:
-    """Dọn thư mục job cũ định kỳ ngay trong process backend (Phase 6).
+    """Periodically clean old job directories inside the backend process (Phase 6).
 
-    Handler riêng và `async` có chủ đích: `asyncio.create_task` cần event loop
-    đang chạy, mà handler startup đồng bộ ở trên không đảm bảo điều đó.
+    A separate, `async` handler on purpose: `asyncio.create_task` needs a running
+    event loop, which the synchronous startup handler above does not guarantee.
     """
     global _cleanup_task, _snapshot_task
     _cleanup_task = asyncio.create_task(storage_cleanup_service.run_periodic_cleanup())
-    # Phase 20: ghi snapshot chuyên mục đều đặn, không phụ thuộc ai có mở
-    # trang Báo cáo xu hướng hay không — xem docstring `run_periodic_snapshot`.
+    # Phase 20: write category snapshots regularly, regardless of whether anyone has the
+    # trend report page open — see the `run_periodic_snapshot` docstring.
     _snapshot_task = asyncio.create_task(trending_service.run_periodic_snapshot(SessionLocal))
 
 
 @app.on_event("shutdown")
 async def stop_background_jobs() -> None:
-    """Huỷ hẳn task nền khi tắt: bỏ mặc thì uvicorn đợi task không bao giờ kết
-    thúc, app đóng gói (Phase 12) sẽ treo lúc thoát."""
+    """Cancel the background task for good on shutdown: if left alone uvicorn waits for a task that never
+    ends, and the packaged app (Phase 12) would hang on exit."""
     for task in (_cleanup_task, _snapshot_task):
         if task is None:
             continue
@@ -132,8 +132,8 @@ async def stop_background_jobs() -> None:
 
 @app.on_event("shutdown")
 def stop_worker_pool() -> None:
-    """Không để worker process của `worker_pool` (Phase: tối ưu hiệu năng P2) mồ
-    côi khi server tắt."""
+    """Do not leave the `worker_pool` worker processes (Phase: performance optimization P2) as
+    orphans when the server stops."""
     worker_pool.shutdown()
 
 
@@ -143,7 +143,7 @@ def _ensure_seed_categories() -> None:
 
 
 def _ensure_default_user() -> None:
-    """MVP chỉ có 1 user cố định (id=1) — xem docs/overview/plan.md phần multi-tenant."""
+    """The MVP has a single fixed user (id=1) — see docs/overview/plan.md, multi-tenant section."""
     with SessionLocal() as db:
         if db.get(User, 1) is None:
             db.add(User(id=1))

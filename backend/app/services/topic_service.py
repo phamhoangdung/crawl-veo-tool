@@ -1,16 +1,16 @@
-"""Chủ đề nội dung người dùng theo dõi + điểm "cơ hội khai thác" (Phase 17).
+"""Content topics the user follows + the "exploitation opportunity" score (Phase 17).
 
-Thuật toán tính điểm — cố ý đơn giản, dùng số liệu THẬT, không đoán:
-1. `search.list` tìm ~25 video có view cao nhất trong 30 ngày khớp từ khoá chủ
-   đề (100 unit — tốn nhất, chỉ gọi khi người dùng chủ động bấm "Tính điểm").
-2. `videos.list` theo id lấy view count thật của các video đó (1 unit).
-3. `channels.list` lấy số sub của các kênh đăng — để tính tỉ lệ view/sub.
-4. Điểm = TRUNG VỊ tỉ lệ view/sub của các video mẫu. Tỉ lệ cao (vd 1 video có
-   view gấp 50-100 lần số sub kênh) là dấu hiệu quen thuộc trong giới phân
-   tích YouTube: nội dung/định dạng đó được thuật toán đẩy mạnh bất kể kênh
-   nhỏ hay lớn — tức "dễ khai thác" hơn kiểu nội dung phụ thuộc độ nổi tiếng
-   sẵn có của kênh. Đây là 1 tín hiệu tham khảo, KHÔNG phải điểm số khoa học
-   chính xác — hiển thị kèm số liệu thô để người dùng tự đánh giá thêm.
+Scoring algorithm — deliberately simple, using REAL numbers, no guessing:
+1. `search.list` finds ~25 videos with the most views in 30 days matching the topic
+   keyword (100 units — the most expensive, only called when the user clicks "Compute score").
+2. `videos.list` by id gets the real view count of those videos (1 unit).
+3. `channels.list` gets the subscriber counts of the posting channels — to compute the view/sub ratio.
+4. Score = MEDIAN of the view/sub ratio of the sample videos. A high ratio (e.g. 1 video with
+   views 50-100 times the channel's sub count) is a familiar sign in YouTube
+   analysis: that content/format is pushed hard by the algorithm regardless of whether the channel
+   is small or large — i.e. "easier to exploit" than content that depends on the channel's
+   existing fame. This is one reference signal, NOT a precise scientific
+   score — shown with the raw numbers so the user can judge further themselves.
 """
 
 import statistics
@@ -27,7 +27,7 @@ _LOOKBACK_DAYS = 30
 
 
 class TopicScoreCooldownError(RuntimeError):
-    """Vừa tính điểm gần đây — chặn bấm liên tục làm tốn quota (100 unit/lần)."""
+    """Just computed recently — blocks repeated clicks that waste quota (100 units each)."""
 
 
 def create_topic(db: Session, user_id: int, payload: TopicCreateRequest) -> Topic:

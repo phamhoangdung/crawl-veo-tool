@@ -1,8 +1,8 @@
-"""Kho file dùng chung cho dựng video: logo, watermark, intro/outro, nhạc nền.
+"""Shared file library for video assembly: logos, watermarks, intro/outro, background music.
 
-Khác với file của từng video (nằm trong `storage/<video_id>/`), asset được dùng
-lại cho NHIỀU video — một logo kênh dùng cho mọi video — nên để riêng ở
-`storage/assets/` và không bị xoá khi dọn file của một video.
+Unlike the files of an individual video (in `storage/<video_id>/`), an asset is reused
+by MANY videos — one channel logo used for every video — so it is kept separately in
+`storage/assets/` and not deleted when cleaning up one video's files.
 """
 
 import logging
@@ -17,8 +17,8 @@ from app.core.config import storage_dir
 
 logger = logging.getLogger(__name__)
 
-# Phân loại theo công dụng trên timeline, không theo đuôi file: cùng là .mp4
-# nhưng intro nối vào track video còn logo thì không.
+# Classified by use on the timeline, not by file extension: both are .mp4
+# but an intro joins the video track while a logo does not.
 KIND_IMAGE = "image"
 KIND_VIDEO = "video"
 KIND_AUDIO = "audio"
@@ -29,8 +29,8 @@ _EXTENSIONS: dict[str, set[str]] = {
     KIND_AUDIO: {".mp3", ".wav", ".m4a", ".aac", ".flac"},
 }
 
-# Giới hạn để một file lỡ tay không lấp đầy ổ đĩa. Video rộng tay hơn vì intro
-# 1080p vài giây đã có thể vượt 50 MB.
+# Limit so a careless file does not fill the disk. Video is more generous because an intro
+# of a few seconds at 1080p can already exceed 50 MB.
 MAX_BYTES: dict[str, int] = {
     KIND_IMAGE: 10 * 1024 * 1024,
     KIND_AUDIO: 50 * 1024 * 1024,
@@ -67,10 +67,10 @@ def detect_kind(filename: str) -> str:
 
 
 def _safe_name(filename: str) -> str:
-    """Giữ tên gốc để người dùng nhận ra file, nhưng bỏ ký tự có thể thoát khỏi
-    thư mục assets hoặc phá cú pháp filter của ffmpeg."""
+    """Keep the original name so the user recognizes the file, but strip characters that could escape the
+    assets directory or break the ffmpeg filter syntax."""
     stem = Path(filename).name
-    # Bỏ dấu tiếng Việt: ffmpeg filter_complex xử lý đường dẫn non-ASCII không ổn định.
+    # Strip Vietnamese diacritics: ffmpeg filter_complex handles non-ASCII paths unreliably.
     stem = unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode("ascii")
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
     return stem or "asset"
@@ -88,8 +88,8 @@ def save_asset(filename: str, data: bytes) -> Asset:
         raise AssetError("File rỗng")
 
     safe = _safe_name(filename)
-    # Tiền tố id để 2 file trùng tên không đè lên nhau — người dùng hay có nhiều
-    # phiên bản "logo.png".
+    # Id prefix so 2 files with the same name do not overwrite each other — users often have several
+    # versions of "logo.png".
     asset_id = uuid.uuid4().hex[:12]
     target = assets_dir() / f"{asset_id}__{safe}"
     target.write_bytes(data)
@@ -128,8 +128,8 @@ def delete_asset(asset_id: str) -> bool:
 
 
 def import_from_path(source: str) -> Asset:
-    """Nhập file đã có sẵn trên máy — bản desktop dùng đường này thay vì upload
-    qua HTTP (người dùng chọn file bằng hộp thoại của hệ điều hành)."""
+    """Import a file already on the machine — the desktop build uses this path instead of uploading
+    over HTTP (the user picks the file with the operating system's dialog)."""
     path = Path(source).expanduser()
     if not path.is_file():
         raise AssetError(f"Không tìm thấy file: {source}")
@@ -143,6 +143,6 @@ def import_from_path(source: str) -> Asset:
 
     asset_id = uuid.uuid4().hex[:12]
     target = assets_dir() / f"{asset_id}__{_safe_name(path.name)}"
-    # copy2 giữ mtime — hữu ích khi đối chiếu với file gốc.
+    # copy2 keeps mtime — useful when comparing with the source file.
     shutil.copy2(path, target)
     return Asset(id=asset_id, name=_safe_name(path.name), kind=kind, path=str(target), size=size)

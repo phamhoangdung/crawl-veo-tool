@@ -1,10 +1,10 @@
-"""Gợi ý ứng viên clip ngắn từ transcript — xem docs/phases/phase-11-shorts-crosspost.md.
+"""Suggest short clip candidates from the transcript — see docs/phases/phase-11-shorts-crosspost.md.
 
-Chấm điểm ĐƠN GIẢN (mật độ từ + dấu câu nhấn mạnh), KHÔNG phải mô hình dự đoán viral
-thật. Review thị trường 2026 cho thấy điểm virality của các tool tương tự (Opus
-Clip...) không đáng tin cậy — hàm này chỉ dùng để XẾP THỨ TỰ gợi ý cho người dùng
-tự chọn/kéo-chỉnh trên timeline (Phase 13), không tự động chọn/loại bỏ thay người
-dùng.
+SIMPLE scoring (word density + emphasis punctuation), NOT a real viral prediction
+model. 2026 market reviews show the virality scores of similar tools (Opus
+Clip...) are unreliable — this function is only used to ORDER suggestions for the user
+to pick/drag-adjust on the timeline (Phase 13), never automatically choosing/discarding on the
+user's behalf.
 """
 
 from dataclasses import dataclass
@@ -23,7 +23,7 @@ class ClipCandidate:
 
 
 def _segment_score(text: str, duration: float) -> float:
-    """Điểm càng cao càng "ưu tiên gợi ý trước" — không phải điểm viral tuyệt đối."""
+    """The higher the score, the more it is "suggested first" — not an absolute viral score."""
     if duration <= 0:
         return 0.0
     word_count = len(text.split())
@@ -44,10 +44,10 @@ def suggest_clip_candidates(
     target_duration: float = _DEFAULT_TARGET_DURATION,
     max_candidates: int = 5,
 ) -> list[ClipCandidate]:
-    """Trượt cửa sổ ~`target_duration` giây qua transcript (mỗi segment làm 1 mốc
-    bắt đầu ứng viên), chấm điểm, loại ứng viên chồng lấn quá `_MAX_OVERLAP_RATIO`
-    với ứng viên điểm cao hơn đã chọn, trả về tối đa `max_candidates` theo thứ tự
-    thời gian (không phải thứ tự điểm — để hiển thị tự nhiên trên timeline)."""
+    """Slide a ~`target_duration` second window over the transcript (each segment serves as a
+    candidate start point), score, drop candidates overlapping more than `_MAX_OVERLAP_RATIO`
+    with an already chosen higher-scoring candidate, return at most `max_candidates` in
+    time order (not score order — to display naturally on the timeline)."""
     if not segments:
         return []
 

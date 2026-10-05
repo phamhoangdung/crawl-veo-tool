@@ -16,8 +16,8 @@ _DEFAULT_USER_ID = 1
 def import_video(
     file: UploadFile = File(...), db: Session = Depends(get_db)
 ) -> ImportedVideoRead:
-    """Nhập 1 file video từ máy. Mỗi lần 1 file để giao diện hiện được tiến độ
-    tải lên riêng cho từng file."""
+    """Import 1 video file from disk. One file at a time so the UI can show a separate
+    upload progress for each file."""
     try:
         video = import_service.import_local_video(
             db, _DEFAULT_USER_ID, file.filename or "", file.file

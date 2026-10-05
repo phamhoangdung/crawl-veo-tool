@@ -65,7 +65,7 @@ export function Dashboard() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: getDashboardStats,
-    // Số liệu đổi khi tác vụ chạy xong — làm mới định kỳ cho khỏi lệch.
+    // The numbers change when a task finishes — refresh periodically to avoid drift.
     refetchInterval: 10_000,
   })
 

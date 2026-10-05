@@ -1,8 +1,8 @@
-"""Quản lý file dùng chung cho dựng video (logo, intro/outro, nhạc nền).
+"""Manage shared files for video assembly (logo, intro/outro, background music).
 
-Hai đường nhập: upload qua HTTP (bản web) và nhập từ đường dẫn có sẵn trên máy
-(bản desktop — người dùng chọn file bằng hộp thoại hệ điều hành, không cần đẩy
-cả file 500 MB qua HTTP).
+Two ways in: upload over HTTP (web build) and importing from an existing path on the machine
+(desktop build — the user picks the file with the OS dialog, with no need to push
+a whole 500 MB file over HTTP).
 """
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -55,7 +55,7 @@ def import_asset(payload: ImportRequest) -> AssetRead:
 
 @router.get("/{asset_id}/file")
 def download_asset(asset_id: str) -> FileResponse:
-    """Trả file để frontend xem trước (ảnh logo, nghe thử nhạc nền)."""
+    """Return the file so the frontend can preview it (logo image, background music preview)."""
     asset = asset_service.get_asset(asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy asset")

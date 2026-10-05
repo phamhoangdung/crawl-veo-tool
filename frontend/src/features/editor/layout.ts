@@ -1,17 +1,17 @@
 import type { CropBox, TimelineClip, TimelineTrack } from '@/lib/api'
 
 /**
- * Clip có mốc thời gian chắc chắn tồn tại.
+ * A clip whose timestamps definitely exist.
  *
- * `TimelineClip.start/end` là optional vì clip ảnh (logo hiện suốt video) và
- * vùng làm mờ được phép bỏ trống. Nhưng clip trên track **video/audio/overlay**
- * thì luôn có: backend từ chối lưu timeline thiếu chúng (xem
- * `timeline_service.validate_operations`), và chỉ ba loại track đó mới đi qua
- * các hàm tính toán hình học ở đây.
+ * `TimelineClip.start/end` are optional because image clips (a logo shown for the whole video) and
+ * blur regions may leave them empty. But clips on **video/audio/overlay** tracks
+ * always have them: the backend refuses to save a timeline missing them (see
+ * `timeline_service.validate_operations`), and only those three track kinds go through
+ * the geometry functions here.
  *
- * Khai báo bất biến này một lần, thay vì rải `!` ở ~20 chỗ — rải `!` thì mỗi chỗ
- * là một lời khẳng định riêng lẻ không ai kiểm được, còn ở đây nó có tên, có lý
- * do, và sửa một chỗ là xong nếu bất biến đổi.
+ * Declare this invariant once, instead of scattering `!` in ~20 places — each scattered `!`
+ * is a separate assertion nobody can check, while here it has a name, a
+ * reason, and fixing one place is enough if the invariant changes.
  */
 export type TimedClip = TimelineClip & { start: number; end: number }
 
@@ -23,12 +23,12 @@ export const DEFAULT_PX_PER_SECOND = 40
 export const MIN_PX_PER_SECOND = 5
 export const MAX_PX_PER_SECOND = 400
 
-/** Giữ tên cũ cho code/test đã dùng; zoom truyền tỉ lệ riêng qua tham số. */
+/** Keep the old name for code/tests already using it; zoom passes its own scale through a parameter. */
 export const PX_PER_SECOND = DEFAULT_PX_PER_SECOND
 export const MIN_CLIP_DURATION = 0.1
 
-/** Crop dọc 9:16 mặc định, canh giữa theo chiều ngang — điểm bắt đầu hợp lý cho
- * hầu hết video ngang trước khi user tự kéo chỉnh lại (Phase 11). */
+/** Default 9:16 vertical crop, horizontally centered — a sensible starting point for
+ * most landscape videos before the user drags to adjust again (Phase 11). */
 export function defaultVerticalCrop(videoWidth: number, videoHeight: number): CropBox {
   const width = Math.round((videoHeight * 9) / 16)
   const clampedWidth = Math.min(width, videoWidth)
@@ -56,11 +56,11 @@ export interface LayoutedClip {
 }
 
 /**
- * Vị trí clip video trên timeline tổng (output) — các clip nối tiếp nhau, clip có
- * `transition_in: 'fade'` chồng lấn `transition_duration` giây với clip ngay
- * trước — khớp đúng cách backend tính `cumulative_duration` ở
- * `app/adapters/ffmpeg.py::render_timeline`, để UI hiển thị đúng vị trí thật sẽ
- * render ra, không lệch với kết quả cuối.
+ * Position of video clips on the overall (output) timeline — clips follow one another, a clip with
+ * `transition_in: 'fade'` overlaps by `transition_duration` seconds with the clip right
+ * before it — matching exactly how the backend computes `cumulative_duration` in
+ * `app/adapters/ffmpeg.py::render_timeline`, so the UI shows the real position that will be
+ * rendered, not drifting from the final result.
  */
 export function computeVideoTrackLayout(clips: TimelineClip[]): LayoutedClip[] {
   const result: LayoutedClip[] = []
@@ -85,8 +85,8 @@ export function totalVideoDuration(clips: TimelineClip[]): number {
   return layout.length > 0 ? layout[layout.length - 1].outputEnd : 0
 }
 
-/** Vị trí hiển thị 1 clip theo loại track — video dùng layout đã tính (vị trí suy
- * ra từ thứ tự), audio/overlay dùng vị trí tự khai báo trực tiếp trong clip. */
+/** Display position of 1 clip by track kind — video uses the computed layout (position inferred
+ * from order), audio/overlay use the position declared directly in the clip. */
 export function getClipOutputRange(
   track: TimelineTrack,
   clipIndex: number,
@@ -104,20 +104,20 @@ export function getClipOutputRange(
     return { start, end: start + ((clip.end ?? 0) - (clip.start ?? 0)) }
   }
   if (track.type === 'image' && (clip.start == null || clip.end == null)) {
-    // Logo không khai báo mốc thời gian nghĩa là hiện suốt video — vẽ kín chiều
-    // dài timeline thay vì để undefined lọt xuống phép trừ thành NaN.
+    // A logo that declares no time range means it shows for the whole video — draw it across the full
+    // timeline length instead of letting undefined slip down into a subtraction and become NaN.
     const videoEnd = videoLayout.at(-1)?.outputEnd ?? 0
     return { start: 0, end: videoEnd }
   }
-  // overlay + image có mốc thời gian
+  // overlay + image have time ranges
   return { start: clip.start ?? 0, end: clip.end ?? 0 }
 }
 
 export type DragMode = 'move' | 'resize-start' | 'resize-end'
 
 /**
- * Tính patch cần áp cho 1 clip khi kéo — thuần hàm, không đụng DOM/state, để test
- * độc lập với tương tác chuột thật (khó test tin cậy qua giả lập pointer event).
+ * Compute the patch to apply to 1 clip when dragging — a pure function, touching no DOM/state, so it can be tested
+ * independently of real mouse interaction (hard to test reliably via simulated pointer events).
  */
 export function applyDragToClip(
   rawClip: TimelineClip,
@@ -145,7 +145,7 @@ export function applyDragToClip(
     const newStart = Math.max(0, clip.start + deltaSeconds)
     return { start: newStart, end: newStart + duration }
   }
-  // Track video: vị trí output do thứ tự clip quyết định, không có ý nghĩa "di
-  // chuyển thân clip" độc lập — chỉ hỗ trợ resize 2 đầu (đổi đoạn trim nguồn).
+  // Video track: the output position is decided by clip order, there is no independent
+  // "move the clip body" meaning — only resizing the 2 ends is supported (changing the source trim range).
   return {}
 }

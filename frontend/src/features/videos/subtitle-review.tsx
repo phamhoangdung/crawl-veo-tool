@@ -13,9 +13,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-/** Tách riêng + bọc `memo`: `activeIndex` đổi mỗi lần video phát tiếp (nhiều
- * lần/giây qua `onTimeUpdate`) — không tách thì MỌI hàng render lại theo, dù
- * chỉ 1 hàng thật sự đổi trạng thái tô sáng. */
+/** Split out + wrapped in `memo`: `activeIndex` changes every time the video plays on (many
+ * times per second via `onTimeUpdate`) — if not split, EVERY row re-renders along, even though
+ * only 1 row really changed its highlight state. */
 const SegmentButton = memo(function SegmentButton({
   segment,
   isActive,
@@ -49,8 +49,8 @@ const SegmentButton = memo(function SegmentButton({
 })
 
 /**
- * Soát phụ đề theo ngữ cảnh: video chạy bên trái, danh sách câu bên phải tự cuộn
- * và tô sáng câu đang phát. Chỉ để ĐỌC — sửa thì mở SubtitleEditor.
+ * Review subtitles in context: the video plays on the left, the sentence list on the right auto-scrolls
+ * and highlights the sentence being played. READ-only — to edit, open SubtitleEditor.
  */
 export function SubtitleReview({
   videoId,
@@ -75,8 +75,8 @@ export function SubtitleReview({
     [segments, currentTime]
   )
 
-  // Ảo hoá: video dài ra hàng trăm câu, dựng hết cả list = hàng trăm node
-  // cùng lúc dù chỉ vài chục cái lọt trong khung nhìn thấy.
+  // Virtualization: a long video has hundreds of sentences, building the whole list = hundreds of nodes
+  // at once even though only a few dozen fall within the visible frame.
   const rowVirtualizer = useVirtualizer({
     count: segments.length,
     getScrollElement: () => listRef.current,
@@ -84,26 +84,26 @@ export function SubtitleReview({
     overscan: 8,
   })
 
-  // `ResizeObserver` của virtualizer có thể đo ra 0 hàng ở lần đo đầu tiên nếu
-  // container chưa kịp có kích thước cuối cùng lúc đó (xem SubtitleEditor —
-  // cùng bẫy, xảy ra rõ nhất với danh sách dài). Ép 1 lần re-render ngay sau
-  // mount để virtualizer đo lại đúng.
+  // The virtualizer's `ResizeObserver` may measure 0 rows on the first measurement if the
+  // container does not yet have its final size at that moment (see SubtitleEditor —
+  // the same trap, most visible with long lists). Force 1 re-render right after
+  // mount so the virtualizer measures again correctly.
   const [, forceRemeasure] = useState(0)
   useEffect(() => {
     forceRemeasure((n) => n + 1)
   }, [])
 
-  // Cuộn câu đang phát vào giữa khung. Tắt được vì người dùng có thể muốn đọc
-  // chỗ khác trong lúc video vẫn chạy. Dùng `scrollToIndex` của virtualizer
-  // (không phải `list.children[activeIndex]`) vì khi ảo hoá, con thật sự trong
-  // DOM không còn khớp 1-1 với index của mảng segments nữa.
+  // Scroll the sentence being played into the middle of the frame. Can be turned off because the user may want to read
+  // elsewhere while the video keeps playing. Uses the virtualizer's `scrollToIndex`
+  // (not `list.children[activeIndex]`) because with virtualization, the children actually in the
+  // DOM no longer match 1-to-1 with the index of the segments array.
   useEffect(() => {
     if (!autoScroll || activeIndex < 0) return
     rowVirtualizer.scrollToIndex(activeIndex, { align: 'center', behavior: 'smooth' })
   }, [activeIndex, autoScroll, rowVirtualizer])
 
-  // useCallback: giữ identity ổn định để `SegmentButton` (bọc `memo`) không bị
-  // buộc render lại mỗi khi cha render lại vì 1 prop hàm mới mỗi lần.
+  // useCallback: keep a stable identity so `SegmentButton` (wrapped in `memo`) is not
+  // forced to re-render every time the parent re-renders because of a new function prop each time.
   const seekTo = useCallback((seconds: number) => {
     const video = videoRef.current
     if (!video) return
@@ -132,10 +132,10 @@ export function SubtitleReview({
 
       <CardContent className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start'>
         <div className='flex flex-col gap-3'>
-          {/* Khoá theo CHIỀU CAO chứ không chỉ bề rộng: video dọc 9:16 mà chỉ đặt
-              w-full thì cao gấp ~1.8 lần bề rộng cột, đẩy phần còn lại ra ngoài
-              màn hình. object-contain giữ nguyên tỉ lệ gốc — video dọc và ngang
-              dùng chung khung này, chỉ khác phần nền đen hai bên. */}
+          {/* Lock by HEIGHT, not just width: a vertical 9:16 video with only
+              w-full is ~1.8 times taller than the column width, pushing the rest off the
+              screen. object-contain keeps the original ratio — vertical and landscape videos
+              share this frame, differing only in the black background on the two sides. */}
           <video
             ref={videoRef}
             src={`${API_BASE_URL}/api/library/${videoId}/stream?variant=${variant}`}
@@ -144,7 +144,7 @@ export function SubtitleReview({
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
           />
 
-          {/* Câu đang phát, hiện to để đọc được khi mắt đang nhìn video. */}
+          {/* The sentence being played, shown large to be readable while the eyes are on the video. */}
           <div className='min-h-20 rounded-lg border bg-muted/40 p-3'>
             {activeIndex >= 0 ? (
               <>

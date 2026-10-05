@@ -13,16 +13,16 @@ import {
 import { Label } from '@/components/ui/label'
 import { useEditorStore } from './store'
 
-/** Vùng che mặc định: góc trên phải, nơi Bilibili/Douyin thường đóng logo. */
+/** Default hiding region: top-right corner, where Bilibili/Douyin usually stamp their logo. */
 const DEFAULT_LOGO_REGION = { x: 0.72, y: 0.03, width: 0.25, height: 0.12 }
 
-/** Phụ đề gốc thường nằm giữa-dưới khung. */
+/** The original subtitles usually sit at the bottom-center of the frame. */
 const DEFAULT_SUBTITLE_REGION = { x: 0.1, y: 0.82, width: 0.8, height: 0.14 }
 
 export function SubtitleBoxPanel() {
-  // Chỉ subscribe đúng track "overlay" — trước đây lấy cả `s.operations` khiến
-  // panel này render lại mỗi khi bất kỳ track nào đổi (vd kéo watermark),
-  // dù chỉ cần biết mỗi track phụ đề.
+  // Subscribe only to the "overlay" track — previously it took all of `s.operations`, making
+  // this panel re-render whenever any track changed (e.g. dragging a watermark),
+  // though it only needs to know about the subtitle track.
   const overlayIndex = useEditorStore((s) =>
     s.operations.tracks.findIndex((t) => t.type === 'overlay')
   )
@@ -32,14 +32,14 @@ export function SubtitleBoxPanel() {
   const addClipToTrack = useEditorStore((s) => s.addClipToTrack)
   const updateTrackClips = useEditorStore((s) => s.updateTrackClips)
 
-  // Font cố định (không đổi lúc chạy) — không cần refetch lại mỗi lần mở editor.
+  // The fonts are fixed (do not change at runtime) — no need to refetch every time the editor opens.
   const { data: fonts } = useQuery({
     queryKey: ['fonts'],
     queryFn: getFonts,
     staleTime: Infinity,
   })
-  // Khung phụ đề + kiểu chữ áp cho CẢ track: từng câu một kiểu khác nhau thì
-  // phụ đề nhảy loạn giữa các câu.
+  // The subtitle box + text style apply to the WHOLE track: sentences with different
+  // styles would make the subtitles jump around between sentences.
   const currentBoxWidth = overlayTrack?.clips[0]?.box_width ?? 0
   const currentFontFamily = overlayTrack?.clips[0]?.font_family ?? ''
   const currentFontColor = overlayTrack?.clips[0]?.font_color ?? 'FFFFFF'

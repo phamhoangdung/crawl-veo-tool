@@ -6,14 +6,14 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ContentSection } from '../components/content-section'
 
-/** `<select>` gốc thay vì Radix `Select` — chỉ là "chọn 1 số trong danh sách
- * cố định", không cần các tính năng nâng cao (tìm kiếm, nhóm...) của Radix, và
- * tránh phụ thuộc thêm 1 component chỉ cho đúng 2 ô chọn này. Cùng class với
- * `Input` để đồng bộ giao diện.
+/** A native `<select>` instead of the Radix `Select` — it is just "pick 1 number from a
+ * fixed list", with no need for the advanced features (search, grouping...) of Radix, and it
+ * avoids depending on 1 more component for exactly these 2 pickers. Same classes as
+ * `Input` to keep the look consistent.
  *
- * `aria-label` thay vì 1 `<Label>` ẩn riêng: `CardTitle` phía trên đã hiện
- * đúng tên trường bằng mắt, thêm `<Label>` sr-only cùng chữ sẽ tạo 2 phần tử
- * trùng accessible name — vướng khi test truy vấn theo text/role. */
+ * `aria-label` instead of a separate hidden `<Label>`: the `CardTitle` above already shows
+ * the field name visually, adding an sr-only `<Label>` with the same text would create 2 elements
+ * with the same accessible name — a nuisance when tests query by text/role. */
 function NumberSelect({
   value,
   options,
@@ -55,13 +55,13 @@ const CONNECTIONS_OPTIONS = [1, 2, 4, 8]
 const MAX_VIDEOS_OPTIONS = [1, 2, 3, 5, 10]
 
 /**
- * Cài đặt tốc độ tải video — Phase 21. Trang đầu tiên của tool có cài đặt
- * thật lưu qua `PUT /api/settings` (các trang khác trong /settings vẫn là
- * demo của template shadcn-admin, không đụng vào).
+ * Download speed settings — Phase 21. The first page of the tool with settings
+ * really saved via `PUT /api/settings` (the other pages in /settings are still
+ * demos of the shadcn-admin template, untouched).
  *
- * 2 cài đặt đặt cạnh nhau CÓ CHỦ Ý: "Số luồng mỗi video" là trần cho CẢ APP,
- * không phải cho từng video — đặt 8 rồi tải 3 video cùng lúc KHÔNG phải 24
- * kết nối, cả 3 video tự chia nhau đúng 8 (xem giải thích trong card).
+ * The 2 settings sit side by side ON PURPOSE: "Threads per video" is a ceiling for the WHOLE APP,
+ * not for each video — setting 8 then downloading 3 videos at once is NOT 24
+ * connections, the 3 videos share exactly 8 (see the explanation in the card).
  */
 export function SettingsDownloads() {
   const queryClient = useQueryClient()

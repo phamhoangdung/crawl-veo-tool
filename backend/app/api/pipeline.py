@@ -55,7 +55,7 @@ def _to_detail(video: Video) -> VideoDetailRead:
 
 @router.get("/{video_id}", response_model=VideoDetailRead)
 def get_video_detail(video_id: int, db: Session = Depends(get_db)) -> VideoDetailRead:
-    """Đầy đủ thông tin cho trang chi tiết (khác _to_detail chỉ trả trạng thái)."""
+    """Full info for the detail page (unlike _to_detail which only returns the state)."""
     video = _get_video_or_404(db, video_id)
     detail = _to_detail(video)
     detail.title = video.title
@@ -72,10 +72,10 @@ def get_video_detail(video_id: int, db: Session = Depends(get_db)) -> VideoDetai
 async def download_video(
     video_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
 ) -> VideoDetailRead:
-    """Khởi động tải rồi trả về ngay.
+    """Start the download and return right away.
 
-    Tải chạy nền để UI không bị treo và người dùng rời trang vẫn theo dõi được
-    qua `GET /api/downloads/progress`.
+    The download runs in the background so the UI does not freeze, and the user can leave the page and still follow it
+    via `GET /api/downloads/progress`.
     """
     video = _get_video_or_404(db, video_id)
 
@@ -92,14 +92,14 @@ async def download_video(
 
 
 def _clear_error(db: Session, video: Video) -> None:
-    """Bước vừa chạy xong thì lỗi của lần thất bại trước không còn đúng nữa."""
+    """Once a step has just finished, the error from the previous failure is no longer valid."""
     if video.error_message is not None:
         video.error_message = None
         db.commit()
 
 
 def _run_transcribe(video_id: int) -> None:
-    """Chạy nền: faster-whisper mất vài phút, không thể giữ request mở suốt thời gian đó."""
+    """Run in the background: faster-whisper takes minutes, a request cannot stay open for that long."""
     with SessionLocal() as db:
         video = db.get(Video, video_id)
         if video is None:
@@ -177,8 +177,8 @@ async def translate_video(
 
 
 def _run_diarize(video_id: int) -> None:
-    """Chạy nền: trích embedding giọng nói cho từng đoạn + cluster mất vài giây
-    đến vài phút tuỳ độ dài video, không giữ request mở suốt thời gian đó."""
+    """Run in the background: extracting voice embeddings per segment + clustering takes a few seconds
+    to a few minutes depending on video length, and a request cannot stay open for that long."""
     with SessionLocal() as db:
         video = db.get(Video, video_id)
         if video is None:
@@ -201,8 +201,8 @@ def _run_diarize(video_id: int) -> None:
 def diarize_video(
     video_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
 ) -> VideoDetailRead:
-    """Nhận diện có bao nhiêu người nói khác nhau, gắn nhãn cho từng đoạn thoại
-    — không bắt buộc, bỏ qua bước này thì `/dub` vẫn chạy bằng 1 giọng chung."""
+    """Detect how many different speakers there are and label each dialogue segment
+    — optional, skipping this step still lets `/dub` run with 1 shared voice."""
     video = _get_video_or_404(db, video_id)
     if not settings_service.get_speaker_diarization_enabled(db, _DEFAULT_USER_ID):
         raise HTTPException(
@@ -225,8 +225,8 @@ def diarize_video(
 async def get_available_voices(
     video_id: int, db: Session = Depends(get_db)
 ) -> list[VoiceOption]:
-    """Giọng Edge-TTS (luôn có) + giọng ElevenLabs thật của user nếu đã cấu hình
-    key — dùng để đổ vào dropdown gán giọng theo vai."""
+    """Edge-TTS voices (always present) + the user's real ElevenLabs voices if a
+    key is configured — used to fill the per-speaker voice assignment dropdown."""
     _get_video_or_404(db, video_id)
     voices = await voice_service.list_available_voices(db, _DEFAULT_USER_ID)
     return [VoiceOption(**v) for v in voices]
@@ -236,7 +236,7 @@ async def get_available_voices(
 def update_speaker_voices(
     video_id: int, speaker_voices: dict[str, VoiceRef], db: Session = Depends(get_db)
 ) -> VideoDetailRead:
-    """Lưu giọng đọc đã gán cho từng vai — `/dub` đọc lại map này khi chạy."""
+    """Save the voice assigned to each speaker — `/dub` reads this map back when it runs."""
     video = _get_video_or_404(db, video_id)
     video.speaker_voices_json = {
         label: ref.model_dump() for label, ref in speaker_voices.items()
@@ -249,7 +249,7 @@ def update_speaker_voices(
 def update_transcript(
     video_id: int, segments: list[TranscriptSegment], db: Session = Depends(get_db)
 ) -> VideoDetailRead:
-    """Lưu transcript đã người dùng sửa tay — dùng thay hoặc sau bước /translate."""
+    """Save the transcript hand-edited by the user — used instead of or after the /translate step."""
     video = _get_video_or_404(db, video_id)
     video.transcript_json = [segment.model_dump() for segment in segments]
     db.commit()
@@ -307,7 +307,7 @@ def _burn_subtitles_for(
     font_color: str = "FFFFFF",
     bold: bool = False,
 ) -> None:
-    """Ghép phụ đề cứng vào bản đã lồng tiếng (ưu tiên) hoặc bản gốc nếu chưa dub."""
+    """Burn subtitles into the dubbed version (preferred) or the original if not dubbed yet."""
     source_path = Path(video.dubbed_path or video.local_path)
     video_dir = source_path.parent
 
@@ -338,8 +338,8 @@ def _run_burn(
     font_color: str = "FFFFFF",
     bold: bool = False,
 ) -> None:
-    """Chạy nền: ffmpeg re-encode để burn phụ đề có thể mất vài phút với video
-    dài, không thể giữ request mở suốt thời gian đó (khác hành vi cũ)."""
+    """Run in the background: ffmpeg re-encoding to burn subtitles can take minutes on a long
+    video, a request cannot stay open for that long (unlike the old behavior)."""
     with SessionLocal() as db:
         video = db.get(Video, video_id)
         if video is None:
@@ -368,14 +368,14 @@ def burn_subtitles(
     bold: bool = False,
     db: Session = Depends(get_db),
 ) -> VideoDetailRead:
-    """Ghép phụ đề cứng vào video, chạy nền — trước đây chạy đồng bộ trong request,
-    giữ cả 1 thread của threadpool suốt thời gian ffmpeg re-encode (xem
-    docs/performance-optimization/plan.md mục P0).
+    """Burn subtitles into the video, running in the background — previously it ran synchronously in the request,
+    holding a whole threadpool thread for the entire ffmpeg re-encode (see
+    docs/performance-optimization/plan.md, section P0).
 
-    `position="top"` dùng khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc
-    định thì hai lớp chữ chồng lên nhau, không đọc được lớp nào. Lỗi `position`
-    không hợp lệ giờ báo qua `video.error_message`/tiến độ thay vì HTTP 422 ngay
-    lập tức, nhất quán với các bước khác trong pipeline.
+    `position="top"` is for when the source video already has burned-in subtitles at the bottom — left at the
+    default, the two text layers overlap and neither is readable. An invalid `position`
+    error is now reported via `video.error_message`/progress instead of an immediate HTTP 422,
+    consistent with the other pipeline steps.
     """
     video = _get_video_or_404(db, video_id)
     if progress_service.is_running(video_id, "burn"):
@@ -389,10 +389,10 @@ def burn_subtitles(
 
 
 async def run_step(step: str, video_id: int) -> None:
-    """Chạy 1 bước pipeline và **ném lỗi ra ngoài** nếu hỏng.
+    """Run 1 pipeline step and **raise the error out** if it fails.
 
-    Khác các hàm `_run_*` (chạy nền, nuốt lỗi vì không ai bắt được): batch cần
-    biết bước nào hỏng để đánh dấu đúng video và bỏ qua các bước sau của nó.
+    Unlike the `_run_*` functions (background, swallowing errors because nobody can catch them): batch needs to
+    know which step failed to mark the right video and skip that video's later steps.
     """
     with SessionLocal() as db:
         video = db.get(Video, video_id)
@@ -413,10 +413,10 @@ async def run_step(step: str, video_id: int) -> None:
                 video.local_path = str(output_path)
                 video.status = VideoStatus.DOWNLOADED
             elif step == "transcribe":
-                # to_thread: run_step chạy trực tiếp trên event loop chính (được
-                # await từ batch_service), gọi thẳng hàm chặn ở đây sẽ đứng cả
-                # server suốt thời gian faster-whisper chạy — xem
-                # docs/performance-optimization/plan.md mục P0.
+                # to_thread: run_step runs directly on the main event loop (awaited
+                # from batch_service), calling a blocking function directly here would freeze the whole
+                # server for as long as faster-whisper runs — see
+                # docs/performance-optimization/plan.md, section P0.
                 await asyncio.to_thread(dubbing_service.run_transcribe, db, video)
             elif step == "translate":
                 await dubbing_service.run_translate(

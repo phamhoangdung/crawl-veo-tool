@@ -1,6 +1,6 @@
-"""Xem xu hướng YouTube — CHỈ xem, không tải video (xem docstring
-`app.adapters.youtube.client`). Dùng chung pool API key với các provider khác
-(Phase 8) để có rotation/failover nếu sau này thêm nhiều key YouTube.
+"""Watch YouTube trends — watch ONLY, no video download (see the docstring of
+`app.adapters.youtube.client`). Shares the API key pool with the other providers
+(Phase 8) to get rotation/failover if more YouTube keys are added later.
 """
 
 from sqlalchemy.orm import Session
@@ -21,8 +21,8 @@ from app.services import api_key_service
 
 
 async def run_with_key(db: Session, user_id: int, action):
-    """Lấy 1 key YouTube trong pool, chạy `action(client)`, ghi nhận thành
-    công/thất bại để pool biết key nào cần nghỉ (giống translate_service)."""
+    """Take 1 YouTube key from the pool, run `action(client)`, record
+    success/failure so the pool knows which key needs a rest (like translate_service)."""
     picked = api_key_service.pick_decrypted_key(db, user_id, "youtube")
     if picked is None:
         raise YouTubeNotConfiguredError()

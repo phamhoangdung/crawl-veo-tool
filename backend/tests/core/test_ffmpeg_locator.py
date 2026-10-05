@@ -11,7 +11,7 @@ EXE = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
 
 @pytest.fixture
 def clean_env(monkeypatch, tmp_path):
-    """PATH rỗng (không thấy ffmpeg thật của máy dev) + không có nơi cài nào."""
+    """Empty PATH (no real ffmpeg of the dev machine visible) + no install location anywhere."""
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setattr(ffmpeg_locator, "_registry_path_dirs", lambda: [])
     monkeypatch.setattr(ffmpeg_locator, "_known_install_dirs", lambda: [])
@@ -60,6 +60,6 @@ def test_ensure_ffmpeg_available_raises_only_when_truly_missing(clean_env) -> No
 
 
 def test_real_registry_lookup_does_not_crash() -> None:
-    """Gọi thật (không mock) — chỉ cần trả về danh sách hợp lệ, không nổ."""
+    """A real call (no mock) — it only needs to return a valid list, not blow up."""
     assert isinstance(ffmpeg_locator._registry_path_dirs(), list)
     assert isinstance(ffmpeg_locator.find_ffmpeg_dir(), (Path, type(None)))

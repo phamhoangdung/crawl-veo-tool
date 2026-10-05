@@ -1,5 +1,5 @@
-"""Kiểm tra định kỳ xem API Bilibili còn hoạt động đúng như adapter đang giả định không —
-phát hiện sớm khi Bilibili đổi API thay vì để job crawl thật fail rồi mới biết."""
+"""Periodically check whether the Bilibili API still behaves as the adapter assumes —
+detect early when Bilibili changes its API instead of finding out only after a real crawl job fails."""
 
 from app.adapters.bilibili.client import BilibiliApiError, BilibiliClient
 
@@ -18,7 +18,7 @@ async def check_bilibili_downloader() -> dict:
                 checks[name] = {"ok": True, "detail": f"{len(result)} kết quả"}
             except BilibiliApiError as exc:
                 checks[name] = {"ok": False, "detail": f"Bilibili API error {exc.code}: {exc}"}
-            except Exception as exc:  # noqa: BLE001 — health-check cần bắt mọi lỗi để báo cáo, không để crash
+            except Exception as exc:  # noqa: BLE001 — the health check must catch every error to report it, not crash
                 checks[name] = {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
     all_ok = all(c["ok"] for c in checks.values())

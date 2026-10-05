@@ -37,8 +37,8 @@ async def test_matched_duration_skips_stretch_when_close_enough(
 
     mock_stretch.assert_not_called()
     assert clip is not None
-    # File tạm đã nạp vào bộ nhớ (`clip`) thì dọn ngay — xem
-    # docs/performance-optimization/plan.md mục P1.
+    # Temp files already loaded into memory (`clip`) are cleaned up right away — see
+    # docs/performance-optimization/plan.md, section P1.
     assert not raw_path.exists()
 
 
@@ -76,7 +76,7 @@ async def test_matched_duration_stretches_when_duration_mismatched(
     called_factor = mock_stretch.call_args[0][2]
     assert called_factor == pytest.approx(2.0, abs=0.01)
     assert clip is not None
-    # File tạm (raw lẫn stretched) đã nạp vào bộ nhớ thì dọn ngay.
+    # Temp files (both raw and stretched) already loaded into memory are cleaned up right away.
     assert not stretched_path.exists()
     assert not (tmp_path / "segment_0_raw.mp3").exists()
 
@@ -103,7 +103,7 @@ async def test_matched_duration_returns_none_when_tts_fails(tmp_path, dummy_sess
 
 @pytest.mark.asyncio
 async def test_matched_duration_forwards_voice_to_tts(tmp_path, dummy_session):
-    """Phase 19: giọng gán riêng cho 1 vai phải tới đúng `tts_service.synthesize_speech`."""
+    """Phase 19: a voice assigned to 1 speaker must reach the right `tts_service.synthesize_speech`."""
     captured: dict = {}
 
     async def fake_synthesize(_db, _user_id, _text, output_path, voice=None):

@@ -3,7 +3,7 @@ import { ScrollText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SystemLogsDialog } from '@/components/system-logs-dialog'
 
-/** Nút mở "Nhật ký hệ thống" trên header — thay cho menu avatar (tạm ẩn). */
+/** Button that opens the "Nhật ký hệ thống" (System log) on the header — replaces the avatar menu (temporarily hidden). */
 export function SystemLogsButton() {
   const [open, setOpen] = useState(false)
   return (

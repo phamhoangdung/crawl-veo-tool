@@ -27,7 +27,7 @@ def db() -> Session:
 
 @pytest.fixture(autouse=True)
 def storage(tmp_path, monkeypatch) -> Path:
-    """Tách hẳn thư mục output khỏi storage thật để test không rác vào máy."""
+    """Keep the output directory fully separate from the real storage so the test does not litter the machine."""
     out = tmp_path / "generated"
     refs = tmp_path / "refs"
     out.mkdir()
@@ -39,7 +39,7 @@ def storage(tmp_path, monkeypatch) -> Path:
 
 @pytest.fixture
 def fake_adapter(monkeypatch) -> dict:
-    """Đếm số lần adapter thực sự được gọi — dùng để chứng minh cache KHÔNG gọi API."""
+    """Count how many times the adapter was really called — used to prove the cache does NOT call the API."""
     calls = {"image": 0, "video": 0}
 
     async def fake_image(prompt, output_path, **kwargs):
@@ -76,8 +76,8 @@ class TestGenerateKeyframe:
     async def test_rejects_prompt_mentioning_unknown_reference(
         self, db: Session, fake_adapter
     ) -> None:
-        """Sai tên ref phải chặn TRƯỚC khi gọi API — nếu để đi qua, người dùng trả
-        tiền cho ảnh sinh ra thiếu nhân vật mình cần."""
+        """A wrong ref name must be blocked BEFORE calling the API — if let through, the user pays
+        for a generated image missing the character they need."""
         with pytest.raises(service.GenerationError, match="khong_co"):
             await service.generate_keyframe(db, 1, "@khong_co at the counter")
 
@@ -87,8 +87,8 @@ class TestGenerateKeyframe:
     async def test_second_identical_call_reuses_asset_without_calling_adapter(
         self, db: Session, fake_adapter
     ) -> None:
-        """Dedupe là cơ chế chống đốt tiền chính: refresh trang rồi bấm lại không
-        được tính phí lần nữa."""
+        """Dedupe is the main anti-money-burning mechanism: refreshing the page and clicking again must not
+        be charged a second time."""
         ref = _make_ref(db)
         prompt = f"@{ref.name} at the counter"
 
@@ -113,8 +113,8 @@ class TestGenerateKeyframe:
     async def test_cache_ignored_when_file_was_cleaned_up(
         self, db: Session, fake_adapter
     ) -> None:
-        """storage_cleanup_service có thể xoá file nhưng record còn — coi như chưa
-        cache, nếu không người dùng nhận về asset trỏ tới file không tồn tại."""
+        """storage_cleanup_service may delete the file while the record remains — treat as not
+        cached, otherwise the user gets back an asset pointing at a nonexistent file."""
         ref = _make_ref(db)
         prompt = f"@{ref.name} at the counter"
         first = await service.generate_keyframe(db, 1, prompt)
@@ -142,8 +142,8 @@ class TestGenerateVideoClip:
 
     @pytest.mark.asyncio
     async def test_end_keyframe_changes_cache_key(self, db: Session, fake_adapter) -> None:
-        """start→end (frame-to-frame) là yêu cầu khác với chỉ start — không được
-        trả về cùng 1 clip đã cache."""
+        """start→end (frame-to-frame) is a different request from start only — it must not
+        return the same cached clip."""
         ref = _make_ref(db)
         a = await service.generate_keyframe(db, 1, f"@{ref.name} scene a")
         b = await service.generate_keyframe(db, 1, f"@{ref.name} scene b")
@@ -179,14 +179,14 @@ class TestCostGuards:
         with pytest.raises(service.CostThresholdExceededError):
             service._guard_cost(db, 1, 3.2, False)
 
-        service._guard_cost(db, 1, 3.2, True)  # xác nhận rồi thì cho qua
+        service._guard_cost(db, 1, 3.2, True)  # once confirmed, let it through
 
     def test_under_threshold_passes(self, db: Session) -> None:
         service._guard_cost(db, 1, 0.5, False)
 
     def test_monthly_budget_blocks_even_when_confirmed(self, db: Session) -> None:
-        """Hạn mức tháng là chốt cứng, khác ngưỡng mỗi lần gọi (chỉ là cảnh báo) —
-        đây là thứ duy nhất chặn được agent chạy tự động qua đêm."""
+        """The monthly budget is a hard stop, unlike the per-call threshold (only a warning) —
+        it is the only thing that can stop an agent running automatically overnight."""
         db.add(
             GeneratedAsset(
                 user_id=1,
@@ -224,8 +224,8 @@ class TestCostGuards:
 
 class TestKenBurns:
     def test_creates_free_video_asset_from_image(self, db: Session, monkeypatch) -> None:
-        """Đường miễn phí: phải lưu như 1 GeneratedAsset video bình thường để dùng
-        được ở thư viện video nền và timeline editor, nhưng chi phí bằng 0."""
+        """The free path: must be stored like a normal video GeneratedAsset so it can be used
+        in the background video library and timeline editor, but at zero cost."""
         rendered: dict = {}
 
         def fake_ken_burns(image_path, output_path, **kwargs):
@@ -264,7 +264,7 @@ class TestKenBurns:
 class TestOutputNaming:
     @pytest.mark.asyncio
     async def test_prefix_numbers_assets_sequentially(self, db: Session, fake_adapter) -> None:
-        """Đặt tên theo tập (EP001_001, EP001_002...) để quản lý output theo dự án."""
+        """Name by episode (EP001_001, EP001_002...) to manage output per project."""
         ref = _make_ref(db)
 
         first = await service.generate_keyframe(
@@ -293,8 +293,8 @@ class TestExportToAssetLibrary:
     async def test_copies_clip_into_shared_store(
         self, db: Session, fake_adapter, tmp_path, monkeypatch
     ) -> None:
-        """Kho dùng chung (`asset_service`) là nguồn của AssetPicker trong Timeline
-        Editor — export xong thì clip ghép được như mọi file khác."""
+        """The shared library (`asset_service`) is the source of the AssetPicker in the Timeline
+        Editor — once exported, the clip can be assembled like any other file."""
         store = tmp_path / "assets"
         store.mkdir()
         monkeypatch.setattr(service.asset_service, "assets_dir", lambda: store)
@@ -309,7 +309,7 @@ class TestExportToAssetLibrary:
 
         assert imported.kind == "video"
         assert Path(imported.path).exists()
-        # Bản gốc phải còn để cache `request_hash` tiếp tục có hiệu lực.
+        # The original must remain so the `request_hash` cache stays valid.
         assert Path(clip.asset.file_path).exists()
 
     def test_rejects_unknown_asset(self, db: Session) -> None:

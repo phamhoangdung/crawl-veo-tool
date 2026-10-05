@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * Gọi `onReachEnd` khi phần tử sentinel lọt vào tầm nhìn.
+ * Call `onReachEnd` when the sentinel element enters the viewport.
  *
- * Trả về callback ref để gắn vào một phần tử đặt cuối danh sách. Dùng
- * IntersectionObserver thay vì nghe sự kiện scroll để tránh chạy handler mỗi
- * khung hình.
+ * Returns a callback ref to attach to an element placed at the end of the list. Uses
+ * IntersectionObserver instead of listening to scroll events to avoid running the handler on every
+ * frame.
  */
 export function useInfiniteScroll({
   enabled,
@@ -16,11 +16,11 @@ export function useInfiniteScroll({
   onReachEnd: () => void
   rootMargin?: string
 }) {
-  // Dùng state (không phải ref) để effect chạy lại khi sentinel gắn vào DOM —
-  // ở lần render đầu, effect chạy trước khi ref kịp có giá trị.
+  // Use state (not a ref) so the effect re-runs when the sentinel attaches to the DOM —
+  // on the first render, the effect runs before the ref has a value.
   const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null)
 
-  // Giữ callback trong ref để observer không phải tạo lại mỗi lần render.
+  // Keep the callback in a ref so the observer does not have to be recreated on every render.
   const onReachEndRef = useRef(onReachEnd)
   useEffect(() => {
     onReachEndRef.current = onReachEnd

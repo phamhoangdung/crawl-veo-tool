@@ -1,11 +1,11 @@
-"""Dự án video nhiều cảnh (Phase 15).
+"""Multi-scene video projects (Phase 15).
 
-Giải quyết nút thắt của AI Studio (Phase 14): mỗi clip sinh ra là một đơn vị rời,
-không có thứ tự cảnh và không ghép được thành video hoàn chỉnh.
+Solves the AI Studio bottleneck (Phase 14): every generated clip is a loose unit,
+with no scene order and no way to assemble it into a finished video.
 
-Ràng buộc cố ý: chuỗi cảnh **tuyến tính**, không phân nhánh. `ffmpeg.render_timeline`
-nhận đúng 1 track video, nên cho phép nhánh sẽ dựng được graph mà renderer không
-diễn đạt nổi. Ép tuyến tính ở đây là tính năng, không phải hạn chế.
+Deliberate constraint: the scene chain is **linear**, with no branching. `ffmpeg.render_timeline`
+accepts exactly 1 video track, so allowing branches would build a graph the renderer cannot
+express. Forcing linearity here is a feature, not a limitation.
 """
 
 import logging
@@ -44,7 +44,7 @@ def create_project(
     db.commit()
     db.refresh(project)
 
-    # Cần id trước mới đặt được prefix — dùng id để 2 dự án không đè tên file nhau.
+    # The id is needed first to set the prefix — using the id keeps 2 projects from overwriting each other's file names.
     project.output_prefix = f"project_{project.id}"
     db.commit()
 
@@ -56,7 +56,7 @@ def create_project(
                 prompt=prompt,
                 canvas_x=index * 320.0,
                 canvas_y=0.0,
-                # Cảnh đầu không có gì để nối vào.
+                # The first scene has nothing to chain to.
                 chain_from_previous=index > 0,
             )
         )
@@ -100,9 +100,9 @@ def delete_project(db: Session, user_id: int, project_id: int) -> bool:
         return False
     for scene in list_scenes(db, project_id):
         db.delete(scene)
-    # Không có `relationship()` giữa Scene và GenerationProject (chỉ có FK cột
-    # trên Scene) nên SQLAlchemy không biết thứ tự phụ thuộc — flush trước để
-    # chắc chắn DELETE scenes chạy trước DELETE project, tránh vi phạm FK.
+    # There is no `relationship()` between Scene and GenerationProject (only an FK column
+    # on Scene) so SQLAlchemy does not know the dependency order — flush first to
+    # make sure DELETE scenes runs before DELETE project, avoiding an FK violation.
     db.flush()
     db.delete(project)
     db.commit()
@@ -120,7 +120,7 @@ def get_scene(db: Session, user_id: int, scene_id: int) -> Scene | None:
     scene = db.get(Scene, scene_id)
     if scene is None:
         return None
-    # Kiểm chủ sở hữu qua dự án — Scene không giữ user_id riêng.
+    # Check the owner through the project — Scene has no user_id of its own.
     if get_project(db, user_id, scene.project_id) is None:
         return None
     return scene
@@ -188,8 +188,8 @@ def delete_scene(db: Session, user_id: int, scene_id: int) -> None:
     db.delete(scene)
     db.commit()
 
-    # Đánh lại order_index liên tục 0..n-1, nếu không thứ tự sẽ có lỗ và
-    # `build_operations` xuất clip sai thứ tự.
+    # Renumber order_index continuously 0..n-1, otherwise the order will have gaps and
+    # `build_operations` would output clips in the wrong order.
     for index, remaining in enumerate(list_scenes(db, project_id)):
         remaining.order_index = index
         remaining.chain_from_previous = remaining.chain_from_previous and index > 0
@@ -237,10 +237,10 @@ def save_canvas(
 def _resolve_start_keyframe(
     db: Session, user_id: int, scene: Scene, previous: Scene | None
 ) -> int | None:
-    """Keyframe mở đầu cảnh này khi bật nối frame.
+    """The keyframe opening this scene when frame chaining is on.
 
-    Thứ tự ưu tiên: khung cuối clip cảnh trước → keyframe cảnh trước → không có
-    (phía gọi sẽ sinh mới từ prompt).
+    Priority order: last frame of the previous scene's clip → previous scene's keyframe → none
+    (the caller will generate a new one from the prompt).
     """
     if not scene.chain_from_previous or previous is None:
         return None
@@ -256,7 +256,7 @@ def _resolve_start_keyframe(
 async def generate_scene(
     db: Session, user_id: int, scene_id: int, *, confirm_expensive: bool = False
 ) -> Scene:
-    """Sinh keyframe (nếu chưa có) rồi tạo clip cho 1 cảnh."""
+    """Generate the keyframe (if missing) then create the clip for 1 scene."""
     scene = _require_scene(db, user_id, scene_id)
     project = _require_project(db, user_id, scene.project_id)
     scenes = list_scenes(db, scene.project_id)
@@ -311,8 +311,8 @@ async def generate_scene(
             scene.error = None
             db.commit()
     except Exception as exc:
-        # Ghi lỗi vào cảnh để UI chỉ đúng cảnh nào hỏng, rồi raise tiếp cho
-        # phía gọi xử lý (worker render cần biết để dừng).
+        # Record the error on the scene so the UI points at exactly which scene broke, then re-raise for
+        # the caller to handle (the render worker needs to know in order to stop).
         scene.status = SceneStatus.FAILED
         scene.error = str(exc)[:500]
         db.commit()
@@ -323,10 +323,10 @@ async def generate_scene(
 
 
 def estimate_project_cost(db: Session, project: GenerationProject) -> dict:
-    """Ước tính chi phí dựng cả dự án — chỉ tính cảnh CHƯA có clip.
+    """Estimate the cost of building the whole project — only counting scenes WITHOUT a clip yet.
 
-    Cảnh đã sinh rồi thì bấm dựng lại không tốn thêm (clip tái dùng), nên gộp
-    chúng vào ước tính sẽ doạ người dùng bằng con số không có thật.
+    Scenes already generated cost nothing to rebuild (the clip is reused), so including
+    them in the estimate would scare the user with a figure that is not real.
     """
     scenes = list_scenes(db, project.id)
     pending = [s for s in scenes if s.clip_asset_id is None]
@@ -336,8 +336,8 @@ def estimate_project_cost(db: Session, project: GenerationProject) -> dict:
     free_scenes = 0
 
     for scene in pending:
-        # Nối frame lấy khung cuối clip cảnh trước (ffmpeg, miễn phí) nên chỉ
-        # cảnh phải sinh keyframe mới mới tốn tiền ảnh.
+        # Frame chaining takes the last frame of the previous scene's clip (ffmpeg, free) so only
+        # scenes that must generate a new keyframe cost image money.
         if scene.keyframe_asset_id is None and not scene.chain_from_previous:
             image_cost += cost_service.estimate_image_cost(
                 ai_generation_service.DEFAULT_IMAGE_MODEL
@@ -367,10 +367,10 @@ def estimate_project_cost(db: Session, project: GenerationProject) -> dict:
 
 
 def build_operations(db: Session, project: GenerationProject) -> dict:
-    """Dựng cấu trúc timeline từ các cảnh, theo shape `ffmpeg.render_timeline`.
+    """Build the timeline structure from the scenes, in the shape of `ffmpeg.render_timeline`.
 
-    Chỉ 1 track video, các clip nối tiếp theo `order_index` — đúng ràng buộc
-    tuyến tính. Transition lấy từ cảnh đích (cạnh đi vào cảnh đó).
+    Only 1 video track, clips joined in `order_index` order — matching the
+    linear constraint. The transition comes from the destination scene (the edge entering that scene).
     """
     scenes = list_scenes(db, project.id)
     if not scenes:
@@ -395,7 +395,7 @@ def build_operations(db: Session, project: GenerationProject) -> dict:
             "start": 0.0,
             "end": asset.duration_seconds or scene.duration_seconds,
         }
-        # Cảnh đầu không có gì phía trước để chuyển cảnh từ đó.
+        # The first scene has nothing before it to transition from.
         if position > 0:
             clip["transition_in"] = scene.transition_in
             if scene.transition_in == "fade":

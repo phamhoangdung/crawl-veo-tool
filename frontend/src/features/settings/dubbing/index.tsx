@@ -8,10 +8,10 @@ import { Switch } from '@/components/ui/switch'
 import { ContentSection } from '../components/content-section'
 
 /**
- * Cài đặt lồng tiếng. Hiện chỉ có công tắc "Phân vai người nói": mặc định TẮT
- * vì kết quả chưa ổn định (video 1 người dẫn vẫn có thể ra hàng chục "người
- * nói"). Tắt thì ẩn bước phân vai + tab Giọng đọc, và lồng tiếng dùng 1 giọng
- * chung. Lưu qua `PUT /api/settings` như trang Tải xuống.
+ * Dubbing settings. Currently only the "Speaker separation" switch: OFF by default
+ * because results are not stable yet (a video with 1 host can still come out as dozens of
+ * "speakers"). When off, it hides the speaker step + the Voices tab, and dubbing uses 1 shared
+ * voice. Saved via `PUT /api/settings` like the Downloads page.
  */
 export function SettingsDubbing() {
   const queryClient = useQueryClient()

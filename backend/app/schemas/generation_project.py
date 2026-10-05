@@ -50,7 +50,7 @@ class SceneCreateRequest(BaseModel):
 
 
 class SceneUpdateRequest(BaseModel):
-    """Mọi field optional: PATCH từng phần, chỉ gửi thứ cần đổi."""
+    """Every field is optional: partial PATCH, send only what changes."""
 
     prompt: str | None = None
     duration_seconds: float | None = Field(default=None, gt=0, le=60)
@@ -82,7 +82,7 @@ class RenderStartResponse(BaseModel):
 
 
 class ExportToLibraryResponse(BaseModel):
-    """`asset_id` là id trong kho dùng chung (chuỗi), khác id dự án (số)."""
+    """`asset_id` is the id in the shared library (a string), unlike the project id (a number)."""
 
     asset_id: str
     name: str
@@ -91,9 +91,9 @@ class ExportToLibraryResponse(BaseModel):
 
 class ProjectCostEstimate(BaseModel):
     total_scenes: int
-    # Chỉ cảnh chưa có clip mới tốn tiền — cảnh đã sinh thì tái dùng, miễn phí.
+    # Only scenes without a clip cost money — already-generated scenes are reused for free.
     pending_scenes: int
-    # Cảnh dùng ảnh tĩnh + chuyển động camera (ffmpeg) — không tốn phí.
+    # The scene uses a still image + camera motion (ffmpeg) — no cost.
     free_scenes: int
     image_cost_usd: float
     video_cost_usd: float

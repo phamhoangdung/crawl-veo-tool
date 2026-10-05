@@ -1,11 +1,11 @@
-"""Sinh ảnh keyframe và video clip bằng AI (Phase 14).
+"""Generate keyframe images and video clips with AI (Phase 14).
 
-Ba cơ chế kiểm soát chi phí nằm ở đây, vì sinh video đắt hơn dịch/TTS hàng trăm
-lần (xem "Chiến lược giảm chi phí" trong phase-14-ai-video-generation.md):
+Three cost-control mechanisms live here, because video generation is hundreds of times more expensive than
+translation/TTS (see "Chiến lược giảm chi phí" in phase-14-ai-video-generation.md):
 
-1. Dedupe theo `request_hash` — cùng yêu cầu thì trả asset cũ, không gọi API lại.
-2. Hạn mức tháng — chặn trước khi gọi, kể cả khi agent chạy qua MCP.
-3. Đường Ken Burns miễn phí — cảnh không cần chuyển động thật thì dùng ffmpeg.
+1. Dedupe by `request_hash` — the same request returns the old asset, with no API call.
+2. Monthly budget — blocks before calling, even when an agent runs through MCP.
+3. The free Ken Burns path — a scene that needs no real motion uses ffmpeg.
 """
 
 import hashlib
@@ -50,8 +50,8 @@ class GenerationError(RuntimeError):
 
 
 class CostThresholdExceededError(RuntimeError):
-    """Vượt ngưỡng chi phí cho 1 lần gọi — khác hạn mức tháng: đây là cảnh báo
-    người dùng có thể bỏ qua bằng `confirm_expensive=True`, không phải chốt cứng."""
+    """Exceeded the cost threshold for 1 call — unlike the monthly budget: this is a warning
+    the user can bypass with `confirm_expensive=True`, not a hard stop."""
 
     def __init__(self, estimated_usd: float, threshold_usd: float) -> None:
         super().__init__(
@@ -92,7 +92,7 @@ def _find_cached(db: Session, user_id: int, request_hash: str) -> GeneratedAsset
         .order_by(GeneratedAsset.created_at.desc())
     ).scalars().first()
 
-    # File có thể đã bị dọn (storage_cleanup_service) dù record còn — coi như chưa cache.
+    # The file may have been cleaned up (storage_cleanup_service) even though the record remains — treat as not cached.
     if asset is not None and not Path(asset.file_path).exists():
         return None
     return asset
@@ -135,11 +135,11 @@ def _guard_cost(
 
 
 async def _call_falai_with_pool(db: Session, user_id: int, call) -> None:
-    """Gọi fal.ai bằng key lấy từ pool, gặp 429 thì xoay sang key khác (Phase 8).
+    """Call fal.ai with a key taken from the pool, rotating to another key on 429 (Phase 8).
 
-    `call(api_key)` phải là coroutine tự ghi file kết quả. Cùng khuôn với
-    `translate_service.translate_text`, chỉ khác: ở đây KHÔNG có provider free nào
-    để fallback — sinh video không có nhà nào cho miễn phí.
+    `call(api_key)` must be a coroutine that writes the result file itself. Same mold as
+    `translate_service.translate_text`, the only difference: here there is NO free provider
+    to fall back to — no vendor offers video generation for free.
     """
     tried_key_ids: set[int] = set()
     last_quota_error: ProviderQuotaExceededError | None = None
@@ -172,12 +172,12 @@ async def _call_falai_with_pool(db: Session, user_id: int, call) -> None:
 
 @dataclass
 class _Plan:
-    """Phần "quyết định" của một lần sinh: dùng lại được gì, tốn bao nhiêu.
+    """The "decision" part of one generation: what can be reused, how much it costs.
 
-    Tách khỏi phần thực thi để chạy được TRƯỚC khi nhận job chạy nền — nếu không,
-    cửa kiểm ngưỡng chi phí sẽ nổ bên trong background task, nơi người dùng không
-    còn cách nào xác nhận "vẫn muốn chạy". Tức là một cái van an toàn tiền bạc bị
-    vô hiệu hoá mà không ai thấy.
+    Split from the execution part so it can run BEFORE accepting a background job — otherwise,
+    the cost-threshold gate would blow up inside the background task, where the user has
+    no way left to confirm "I still want to run it". That is a money safety valve
+    disabled without anyone noticing.
     """
 
     references: list
@@ -229,16 +229,16 @@ def precheck_keyframe(
     character_ref_id: int | None = None,
     confirm_expensive: bool = False,
 ) -> None:
-    """Chạy đúng các cửa kiểm mà `generate_keyframe` sẽ chạy, nhưng không sinh gì.
+    """Run exactly the gates `generate_keyframe` will run, but generate nothing.
 
-    Ném cùng loại lỗi (`CostThresholdExceededError`, `MonthlyBudgetExceededError`,
-    `GenerationError`) để endpoint bất đồng bộ trả đúng mã HTTP như bản đồng bộ.
+    Raises the same kinds of errors (`CostThresholdExceededError`, `MonthlyBudgetExceededError`,
+    `GenerationError`) so the asynchronous endpoint returns the same HTTP code as the synchronous version.
     """
     plan = _plan_keyframe(
         db, user_id, prompt, model=model, character_ref_id=character_ref_id
     )
     if plan.cached is not None:
-        return  # dùng lại kết quả cũ thì không tốn gì, không cần hỏi xác nhận
+        return  # reusing an old result costs nothing, no confirmation needed
     _guard_cost(db, user_id, plan.estimated_usd, confirm_expensive)
 
 
@@ -358,7 +358,7 @@ def precheck_video_clip(
     duration_seconds: float = 5.0,
     confirm_expensive: bool = False,
 ) -> None:
-    """Xem `precheck_keyframe`. Quan trọng hơn ở đây vì sinh video là khâu đắt nhất."""
+    """See `precheck_keyframe`. More important here because video generation is the most expensive step."""
     plan, _start, _end = _plan_video_clip(
         db,
         user_id,
@@ -463,10 +463,10 @@ def make_ken_burns_clip(
     motion: str = "zoom_in",
     output_prefix: str | None = None,
 ) -> GenerationResult:
-    """Đường miễn phí thay cho sinh video AI: 1 ảnh tĩnh + chuyển động camera.
+    """The free path replacing AI video generation: 1 still image + camera motion.
 
-    Không cần dedupe/hạn mức vì chi phí bằng 0 — nhưng vẫn lưu `GeneratedAsset`
-    để clip dùng được ở thư viện video nền và timeline editor như clip AI.
+    No dedupe/budget needed since the cost is zero — but a `GeneratedAsset` is still stored
+    so the clip can be used in the background video library and timeline editor like an AI clip.
     """
     image_asset = _require_image_asset(db, user_id, keyframe_asset_id)
 
@@ -508,11 +508,11 @@ def extract_last_frame_asset(
     clip_asset_id: int,
     output_prefix: str | None = None,
 ) -> GenerationResult:
-    """Trích khung cuối 1 clip thành `GeneratedAsset` kiểu IMAGE.
+    """Extract the last frame of a clip into an IMAGE-type `GeneratedAsset`.
 
-    Dùng cho nối frame giữa các cảnh (Phase 15): khung cuối cảnh N làm keyframe
-    mở đầu cảnh N+1 để nhân vật/bối cảnh liền mạch. Miễn phí (ffmpeg cục bộ) và
-    idempotent nhờ `request_hash` — nối lại nhiều lần không tạo file mới.
+    Used for frame chaining between scenes (Phase 15): the last frame of scene N serves as the keyframe
+    opening scene N+1 so the character/setting stay continuous. Free (local ffmpeg) and
+    idempotent thanks to `request_hash` — chaining again many times creates no new file.
     """
     clip = get_asset(db, user_id, clip_asset_id)
     if clip is None:
@@ -553,11 +553,11 @@ def extract_last_frame_asset(
 
 
 def export_to_asset_library(db: Session, user_id: int, asset_id: int) -> asset_service.Asset:
-    """Đưa ảnh/clip đã sinh vào kho file dùng chung (`asset_service`, Phase 9).
+    """Put a generated image/clip into the shared file library (`asset_service`, Phase 9).
 
-    Kho đó là nguồn của `AssetPicker` trong Timeline Editor (Phase 13), nên sau
-    bước này clip dùng được để ghép như mọi file khác. Copy chứ không move: bản
-    trong `storage/generated/` vẫn là nguồn để `request_hash` cache còn hiệu lực.
+    That library is the source of the `AssetPicker` in the Timeline Editor (Phase 13), so after
+    this step the clip can be assembled like any other file. Copy rather than move: the copy
+    in `storage/generated/` remains the source so the `request_hash` cache stays valid.
     """
     asset = get_asset(db, user_id, asset_id)
     if asset is None:

@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-// Phase 20: gộp "Xu hướng" + "Tìm & tải" thành 1 màn Khám phá — giữ route cũ
-// làm redirect để link/bookmark cũ không vỡ, xem
+// Phase 20: merged "Trends" + "Find & download" into 1 Discovery screen — keep the old route
+// as a redirect so old links/bookmarks do not break, see
 // docs/phases/phase-20-discovery-workspace.md.
 export const Route = createFileRoute('/_authenticated/trending/')({
   beforeLoad: () => {

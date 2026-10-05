@@ -5,7 +5,7 @@ import '@/styles/index.css'
 import { translateText } from '@/lib/api'
 import { TranslatedTitle } from './translated-title'
 
-// ESM không cho spy vào export trong browser mode — phải mock ở tầng module.
+// ESM does not allow spying on exports in browser mode — must mock at the module level.
 vi.mock('@/lib/api', () => ({ translateText: vi.fn() }))
 const mockTranslate = vi.mocked(translateText)
 
@@ -23,7 +23,7 @@ describe('TranslatedTitle', () => {
     await wrap(<TranslatedTitle title={ZH} />)
     await new Promise((r) => setTimeout(r, 100))
 
-    // Mở trang là dịch sẵn 40 tiêu đề thì đốt quota cho dòng không ai xem.
+    // Opening the page and pre-translating 40 titles burns quota on rows nobody looks at.
     expect(mockTranslate).not.toHaveBeenCalled()
   })
 
@@ -52,8 +52,8 @@ describe('TranslatedTitle', () => {
       </div>
     )
 
-    // Danh sách video re-up rất hay trùng tiêu đề — queryKey theo nội dung nên
-    // cả hai dòng dùng chung 1 kết quả.
+    // A list of re-uploaded videos very often has duplicate titles — the queryKey is by content so
+    // both rows share 1 result.
     await screen.getByText(ZH).first().hover()
     await vi.waitFor(() => expect(mockTranslate).toHaveBeenCalledTimes(1))
 
@@ -72,15 +72,15 @@ describe('TranslatedTitle', () => {
   })
 
   it('báo lỗi rõ khi dịch thất bại', async () => {
-    // Trả về undefined thay vì throw: vitest browser mode coi MỌI lỗi ném ra
-    // trong trang là test đỏ, kể cả lỗi đã được TanStack Query xử lý. Đây vẫn
-    // đi đúng nhánh "không có data" mà người dùng gặp khi hết quota.
+    // Return undefined instead of throwing: vitest browser mode treats EVERY error thrown
+    // in the page as a failed test, even errors already handled by TanStack Query. This still
+    // goes through the "no data" branch the user meets when out of quota.
     mockTranslate.mockResolvedValue(undefined as never)
     const screen = await wrap(<TranslatedTitle title={ZH} />)
     await screen.getByText(ZH).first().hover()
     await new Promise((r) => setTimeout(r, 150))
 
-    // Không hiện bản dịch rác, và nguyên văn vẫn còn để người dùng tự đọc.
+    // Do not show garbage translation, and the original remains for the user to read.
     await expect.element(screen.getByText(ZH).first()).toBeInTheDocument()
   })
 })

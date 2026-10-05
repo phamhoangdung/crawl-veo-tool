@@ -32,7 +32,7 @@ describe('computeVideoTrackLayout', () => {
     ]
     const layout = computeVideoTrackLayout(clips)
     expect(layout[0]).toMatchObject({ outputStart: 0, outputEnd: 5 })
-    // clip 2 bắt đầu SỚM HƠN 1s so với hard-cut (5s) vì chồng lấn transition
+    // clip 2 starts 1s EARLIER than a hard cut (5s) because of the transition overlap
     expect(layout[1]).toMatchObject({ outputStart: 4, outputEnd: 7 })
   })
 
@@ -89,7 +89,7 @@ describe('applyDragToClip', () => {
     const c = clip({ start: 2, end: 5 })
     expect(applyDragToClip(c, 'video', 'resize-start', 1)).toEqual({ start: 3 })
     expect(applyDragToClip(c, 'video', 'resize-start', -10)).toEqual({ start: 0 })
-    // Không cho start vượt quá end - MIN_CLIP_DURATION
+    // Do not let start exceed end - MIN_CLIP_DURATION
     expect(applyDragToClip(c, 'video', 'resize-start', 10)).toEqual({ start: 4.9 })
   })
 
@@ -138,7 +138,7 @@ describe('getClipOutputRange — track ảnh (logo/watermark)', () => {
   ])
 
   it('logo không có mốc thời gian trải suốt chiều dài video', () => {
-    // Trước đây trả về undefined rồi thành NaN khi tính bề rộng — clip biến mất.
+    // Previously returned undefined and then became NaN when computing the width — the clip vanished.
     const track = { type: 'image' as const, clips: [{ source: 'logo.png', x: 0.85 }] }
 
     expect(getClipOutputRange(track, 0, videoLayout)).toEqual({ start: 0, end: 10 })

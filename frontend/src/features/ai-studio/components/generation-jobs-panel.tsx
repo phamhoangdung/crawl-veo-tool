@@ -17,15 +17,15 @@ function elapsedLabel(job: {
 }
 
 /**
- * Các lần sinh trong phiên chạy này của backend. Có bảng này thì rời trang giữa
- * chừng rồi quay lại vẫn thấy job chạy tới đâu — trước đây chỉ có dòng chữ "có
- * thể rời trang" mà không có chỗ nào để quay lại xem.
+ * The generations in this backend run. With this table, leaving the page midway and
+ * coming back still shows how far each job got — previously there was only the text "you
+ * can leave the page" with nowhere to come back and look.
  */
 export function GenerationJobsPanel() {
   const { data: jobs } = useQuery({
     queryKey: ['ai-studio', 'jobs'],
     queryFn: listGenerationJobs,
-    // Chỉ hỏi dồn khi còn job đang chạy; xong hết rồi thì thôi.
+    // Poll densely only while jobs are still running; stop once all are done.
     refetchInterval: (query) =>
       query.state.data?.some((j) => j.status === 'running') ? 2000 : false,
   })

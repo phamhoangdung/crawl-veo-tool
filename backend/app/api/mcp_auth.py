@@ -1,14 +1,14 @@
-"""Kiểm tra scope cho request đến từ agent ngoài qua MCP — Phase 14.
+"""Scope checking for requests coming from external agents through MCP — Phase 14.
 
-Hai loại client dùng chung endpoint `/api/ai-studio`:
+Two kinds of clients share the `/api/ai-studio` endpoint:
 
-- **Web UI cục bộ**: không gửi token (chỉ chạy trên máy người dùng, sau này lên
-  multi-tenant sẽ có auth riêng — xem docs/overview/plan.md). Cho qua.
-- **Agent ngoài qua MCP**: gửi `Authorization: Bearer sk_local_...`. Có token thì
-  BẮT BUỘC token còn hiệu lực và có đúng scope, nếu không thì từ chối.
+- **Local web UI**: sends no token (it only runs on the user's machine; once multi-tenant
+  arrives it will have its own auth — see docs/overview/plan.md). Let it through.
+- **External agent via MCP**: sends `Authorization: Bearer sk_local_...`. With a token, the token
+  MUST be valid and have the right scope, otherwise it is rejected.
 
-Nhờ vậy scope thực sự có tác dụng với agent mà không phải bắt UI cục bộ tự sinh
-token — nhưng token sai/đã thu hồi thì không bao giờ được lọt qua như "không có
+This way scope really takes effect for agents without forcing the local UI to generate
+a token itself — but a wrong/revoked token never slips through as "no
 token".
 """
 
@@ -28,12 +28,12 @@ def _bearer_token(request: Request) -> str | None:
 
 
 def require_scope(scope: str):
-    """Tạo dependency kiểm tra 1 scope cụ thể."""
+    """Create a dependency that checks 1 specific scope."""
 
     def dependency(request: Request, db: Session = Depends(get_db)) -> None:
         token = _bearer_token(request)
         if token is None:
-            return  # web UI cục bộ
+            return  # local web UI
 
         record = mcp_token_service.authenticate(db, token)
         if record is None:

@@ -7,16 +7,16 @@ from app.core import worker_pool
 
 @pytest.fixture(autouse=True)
 def _fake_worker_pool():
-    """Đè tên trùng với fixture giả toàn cục (`conftest.py`, cùng tên nên pytest
-    ưu tiên bản trong module này) — file này test chính process pool thật
-    (Phase: tối ưu hiệu năng P2), không phải bản mock chạy đồng bộ."""
+    """Shadows the global fake fixture of the same name (`conftest.py`, same name so pytest
+    prefers the one in this module) — this file tests the real process pool itself
+    (Phase: performance optimization P2), not the synchronous mock version."""
     yield
     worker_pool.shutdown()
 
 
 def _square(x: int) -> int:
-    """Module-level: `ProcessPoolExecutor` cần hàm picklable theo đường dẫn
-    import, hàm lồng/lambda sẽ lỗi."""
+    """Module-level: `ProcessPoolExecutor` needs a function picklable by import path,
+    nested functions/lambdas would fail."""
     return x * x
 
 
@@ -42,7 +42,7 @@ class TestSubmit:
     def test_pool_recreated_after_worker_dies(self) -> None:
         with pytest.raises(BrokenProcessPool):
             worker_pool.submit(_die).result(timeout=60)
-        # Callback chạy ngay sau khi future hoàn tất; lần gọi tiếp phải dùng pool mới.
+        # The callback runs right after the future completes; the next call must use a new pool.
         assert worker_pool.submit(_square, 5).result(timeout=60) == 25
 
     def test_kwargs_forwarded(self) -> None:

@@ -9,19 +9,19 @@ import {
 
 export const TASKS_QUERY_KEY = ['tasks'] as const
 
-/** Trạng thái kết nối SSE, giữ trong cache để mọi component đọc được. */
+/** SSE connection state, kept in the cache so every component can read it. */
 const STREAM_STATUS_KEY = ['tasks', 'stream-connected'] as const
 
 /**
- * Mở kết nối Server-Sent Events nhận tiến độ tác vụ.
+ * Open a Server-Sent Events connection to receive task progress.
  *
- * **Chỉ gọi ở MỘT nơi** (`TaskMonitor`, vốn có mặt trên mọi trang) — mỗi lần gọi
- * là một kết nối tới server. Component khác dùng `useTaskProgress()` để đọc dữ
- * liệu.
+ * **Call it in only ONE place** (`TaskMonitor`, which is present on every page) — every call
+ * is a connection to the server. Other components use `useTaskProgress()` to read the
+ * data.
  *
- * SSE chỉ đẩy khi dữ liệu thực sự đổi nên không tốn request như polling. Khi kết
- * nối lỗi (backend chưa chạy, proxy chặn stream...), `useTaskProgress` tự quay
- * về polling để không mất theo dõi tiến độ.
+ * SSE only pushes when the data really changes so it costs no requests like polling. When the
+ * connection fails (backend not running, a proxy blocking the stream...), `useTaskProgress` falls back
+ * to polling by itself so progress tracking is not lost.
  */
 export function useTaskProgressStream() {
   const queryClient = useQueryClient()
@@ -37,12 +37,12 @@ export function useTaskProgressStream() {
         const previous =
           queryClient.getQueryData<TaskProgress[]>(TASKS_QUERY_KEY) ?? []
 
-        // Ghi thẳng vào cache: mọi component đọc key này đều cập nhật theo.
+        // Write straight into the cache: every component reading this key updates along.
         queryClient.setQueryData(TASKS_QUERY_KEY, tasks)
 
-        // Tác vụ chạy nền nên khi nó xong, dữ liệu trong DB đã đổi mà cache của
-        // frontend thì chưa. Không làm mới ở đây thì UI vẫn thấy transcript cũ
-        // và nút bước tiếp theo tiếp tục bị khoá.
+        // A task runs in the background so when it finishes, the data in the DB has changed but the
+        // frontend cache has not. Without refreshing here the UI would still see the old transcript
+        // and the next step button would stay locked.
         for (const task of tasks) {
           const before = previous.find(
             (t) => t.video_id === task.video_id && t.kind === task.kind
@@ -55,12 +55,12 @@ export function useTaskProgressStream() {
           queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
         }
       } catch {
-        // Gói tin hỏng thì bỏ qua; gói kế tiếp mang trạng thái đầy đủ.
+        // A corrupt packet is skipped; the next packet carries the full state.
       }
     }
 
     source.onerror = () => {
-      // EventSource tự kết nối lại; đánh dấu mất kết nối để polling đỡ lưng.
+      // EventSource reconnects by itself; mark the connection as lost so polling can back it up.
       queryClient.setQueryData(STREAM_STATUS_KEY, false)
     }
 
@@ -71,12 +71,12 @@ export function useTaskProgressStream() {
   }, [queryClient])
 }
 
-/** SSE có đang nhận dữ liệu không — dùng để quyết định có cần poll dự phòng. */
+/** Whether SSE is receiving data — used to decide whether fallback polling is needed. */
 export function useStreamConnected() {
   const { data } = useQuery({
     queryKey: STREAM_STATUS_KEY,
     queryFn: () => false,
-    // Giá trị do stream ghi vào, không bao giờ fetch.
+    // A value written by the stream, never fetched.
     enabled: false,
     initialData: false,
   })
@@ -84,8 +84,8 @@ export function useStreamConnected() {
 }
 
 /**
- * Đọc tiến độ tác vụ. Dữ liệu do `useTaskProgressStream` đẩy vào cache; polling
- * chỉ chạy khi SSE mất kết nối.
+ * Read task progress. The data is pushed into the cache by `useTaskProgressStream`; polling
+ * only runs when SSE is disconnected.
  */
 export function useTaskProgress() {
   const streamConnected = useStreamConnected()
@@ -101,8 +101,8 @@ export function useTaskProgress() {
 }
 
 /**
- * Tiến độ của MỘT video (tuỳ chọn lọc theo loại tác vụ) — để hiện thanh % ngay
- * tại dòng đó thay vì bắt người dùng mở panel Tác vụ ra đối chiếu.
+ * Progress of ONE video (optionally filtered by task kind) — to show the % bar right
+ * on that row instead of making the user open the Tasks panel to cross-reference.
  */
 export function useVideoTaskProgress(videoId: number, kind?: TaskKind) {
   const tasks = useTaskProgress()

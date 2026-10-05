@@ -40,8 +40,8 @@ const KIND_ICONS: Record<TaskKind, typeof Download> = {
   diarize: Users,
   dub: Mic,
   burn: AudioLines,
-  // Dựng video dự án nhiều cảnh (Phase 16) — thiếu mục này thì job đó hiện
-  // trong thanh tác vụ mà không có icon.
+  // Building a multi-scene project video (Phase 16) — without this entry that job shows
+  // in the task bar with no icon.
   render_project: Clapperboard,
 }
 
@@ -52,7 +52,7 @@ function formatBytes(bytes: number) {
   return `${bytes} B`
 }
 
-/** Dòng mô tả tiến độ — tải đếm theo byte, các bước khác đếm theo số câu. */
+/** Progress description line — downloads count in bytes, other steps count in sentences. */
 function describeProgress(task: TaskProgress) {
   if (task.stage === 'failed') return task.error ?? 'Thất bại'
   if (task.stage === 'done') return 'Hoàn tất'
@@ -137,8 +137,8 @@ function TaskRow({ task }: { task: TaskProgress }) {
               : isDone
                 ? 'bg-green-500'
                 : 'bg-primary transition-[width] duration-300',
-            // Chặng không đo được (transcribe, demucs) — chạy sọc động thay vì
-            // thanh đứng im ở 0%.
+            // A stage that cannot be measured (transcribe, demucs) — animated stripes instead of
+            // a bar standing still at 0%.
             task.is_running && !task.total && 'animate-pulse'
           )}
           style={{
@@ -160,13 +160,13 @@ function TaskRow({ task }: { task: TaskProgress }) {
 }
 
 /**
- * Icon trên topbar theo dõi mọi tác vụ đang chạy (tải, tách lời thoại, dịch,
- * lồng tiếng). Tác vụ chạy nền nên người dùng phải thấy được từ bất kỳ trang nào.
+ * Icon on the top bar tracking every running task (download, transcribe, translate,
+ * dub). Tasks run in the background so the user must be able to see them from any page.
  */
 export function TaskMonitor() {
   const queryClient = useQueryClient()
 
-  // Nơi duy nhất mở SSE — component này có mặt trên mọi trang.
+  // The only place that opens SSE — this component is present on every page.
   useTaskProgressStream()
   const tasks = useTaskProgress()
 

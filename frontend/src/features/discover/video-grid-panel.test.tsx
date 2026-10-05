@@ -6,8 +6,8 @@ import type { TaskProgress, TrendingVideo } from '@/lib/api'
 import { TASKS_QUERY_KEY } from '@/hooks/use-task-progress'
 import { SelectedVideosCart, VideoCard } from './video-grid-panel'
 
-// Mock router: VideoCard dùng <Link to='/videos/$videoId' params={...}> —
-// nội suy `$param` giống hành vi thật để href assert được chính xác.
+// Mock the router: VideoCard uses <Link to='/videos/$videoId' params={...}> —
+// interpolate `$param` like the real behavior so the href can be asserted exactly.
 vi.mock('@tanstack/react-router', async (orig) => ({
   ...(await orig<typeof import('@tanstack/react-router')>()),
   Link: ({

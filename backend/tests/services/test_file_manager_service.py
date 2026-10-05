@@ -13,12 +13,12 @@ from app.services import file_manager_service
 
 @pytest.fixture
 def db() -> Session:
-    """DB in-memory riêng cho mỗi test — xoá file là thao tác phá huỷ, phải cách ly."""
+    """A separate in-memory DB per test — deleting files is destructive, so it must be isolated."""
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
-    # Commit user trước: pragma foreign_keys=ON (đăng ký toàn cục ở core/db.py)
-    # áp dụng cả ở đây, nên Job không thể chèn cùng lượt với User nó tham chiếu.
+    # Commit the user first: pragma foreign_keys=ON (registered globally in core/db.py)
+    # applies here too, so a Job cannot be inserted in the same pass as the User it references.
     session.add(User(id=1))
     session.commit()
     session.add(
@@ -70,7 +70,7 @@ class TestListVideoFiles:
         assert {f.variant for f in entries[0].files} == {"original", "dubbed"}
 
     def test_marks_missing_file_as_not_exists(self, db: Session, tmp_path: Path) -> None:
-        """DB trỏ tới file người dùng đã xoá tay — phải báo thiếu, không nổ."""
+        """The DB points to a file the user deleted by hand — must report it missing, not blow up."""
         video = _make_video(db, tmp_path)
         Path(video.local_path).unlink()
 
@@ -90,7 +90,7 @@ class TestDeleteVariant:
         assert video.dubbed_path is None
 
     def test_deleting_original_resets_status(self, db: Session, tmp_path: Path) -> None:
-        """Mất file gốc thì các bước sau không chạy được — phải về lại queued."""
+        """Losing the source file means later steps cannot run — it must go back to queued."""
         video = _make_video(db, tmp_path)
 
         file_manager_service.delete_variant(db, 1, "original")

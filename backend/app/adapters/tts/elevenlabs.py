@@ -4,7 +4,7 @@ import httpx
 
 _ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
-# Giọng multilingual mặc định có sẵn trên mọi tài khoản ElevenLabs.
+# Default multilingual voice available on every ElevenLabs account.
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
 

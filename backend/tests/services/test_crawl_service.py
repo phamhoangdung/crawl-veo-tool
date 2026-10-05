@@ -5,7 +5,7 @@ from app.services import crawl_service
 
 
 class TestLooksChinese:
-    """Từ khoá đã là tiếng Trung thì không dịch lại — tránh gọi API thừa."""
+    """A keyword that is already Chinese is not translated again — avoids a spare API call."""
 
     @pytest.mark.parametrize("text", ["美食", "美食 vlog", "中国菜"])
     def test_detects_chinese(self, text: str) -> None:
@@ -17,7 +17,7 @@ class TestLooksChinese:
 
 
 class TestNormalizeCoverUrl:
-    """Search API trả ảnh thiếu scheme ('//i2.hdslb.com/...') — phải ép về https."""
+    """The search API returns an image missing the scheme ('//i2.hdslb.com/...') — it must be forced to https."""
 
     @pytest.mark.parametrize(
         ("raw", "expected"),
@@ -36,12 +36,12 @@ class TestNormalizeCoverUrl:
 class TestTranslateKeywordToChinese:
     @pytest.fixture(autouse=True)
     def _clear_keyword_cache(self) -> None:
-        """Cache là dict module-level (xem crawl_service) — dọn giữa các test để không rò rỉ."""
+        """The cache is a module-level dict (see crawl_service) — clear it between tests so nothing leaks."""
         crawl_service._keyword_translation_cache.clear()
 
     @pytest.fixture
     def real_db(self):
-        """Cache từ khoá giờ nằm trong DB (bền qua restart) nên cần session thật."""
+        """The keyword cache now lives in the DB (durable across restarts) so a real session is needed."""
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
@@ -61,7 +61,7 @@ class TestTranslateKeywordToChinese:
     async def test_caches_successful_translation(
         self, real_db, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Dịch xong 1 lần thì lần sau dùng cache, không gọi lại API — đỡ tốn quota & đỡ rate limit."""
+        """Once translated, later calls use the cache without calling the API again — saves quota & avoids the rate limit."""
         call_count = 0
 
         async def fake_translate(*args: object, **kwargs: object) -> str:
@@ -82,7 +82,7 @@ class TestTranslateKeywordToChinese:
     async def test_translation_survives_restart(
         self, real_db, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Từ khoá đã dịch phải còn sau restart — cache RAM mất, cache DB thì không."""
+        """A translated keyword must survive a restart — the RAM cache is lost, the DB cache is not."""
         call_count = 0
 
         async def fake_translate(*args: object, **kwargs: object) -> str:
@@ -93,7 +93,7 @@ class TestTranslateKeywordToChinese:
         monkeypatch.setattr(crawl_service.translate_service, "translate_text", fake_translate)
 
         await crawl_service.translate_keyword_to_chinese(real_db, 1, "ẩm thực")
-        # Mô phỏng restart: cache trong RAM biến mất.
+        # Simulate a restart: the in-RAM cache disappears.
         crawl_service._keyword_translation_cache.clear()
         result = await crawl_service.translate_keyword_to_chinese(real_db, 1, "ẩm thực")
 
@@ -112,7 +112,7 @@ class TestTranslateKeywordToChinese:
     async def test_falls_back_to_original_on_failure(
         self, dummy_session: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Dịch hỏng không được làm chết cả job — search nguyên văn còn hơn không search."""
+        """A failed translation must not kill the job — searching verbatim beats not searching."""
 
         async def boom(*args: object, **kwargs: object) -> str:
             raise RuntimeError("provider down")
@@ -134,8 +134,8 @@ class TestTranslateKeywordToChinese:
 
 
 class TestSearchReturnsFullResults:
-    """Kết quả search phải là ĐÚNG những gì Bilibili trả về — video đã có trong
-    thư viện vẫn hiện, chỉ được đánh dấu để không tải lại."""
+    """The search result must be EXACTLY what Bilibili returned — videos already in the
+    library still show, only marked so they are not downloaded again."""
 
     @pytest.fixture
     def db(self):
@@ -152,7 +152,7 @@ class TestSearchReturnsFullResults:
         session = sessionmaker(bind=engine)()
         session.add(User(id=1))
         session.commit()
-        # Video cần job_id NOT NULL — job cũ đại diện cho lần crawl trước.
+        # The video needs a NOT NULL job_id — the old job represents the previous crawl.
         session.add(
             Job(
                 id=99,
@@ -181,7 +181,7 @@ class TestSearchReturnsFullResults:
         from app.models.job import Platform
         from app.models.video import Video, VideoStatus
 
-        # 2 trong 3 video đã có sẵn trong thư viện.
+        # 2 of the 3 videos are already in the library.
         for bvid in ("BV1", "BV2"):
             db.add(
                 Video(
@@ -205,7 +205,7 @@ class TestSearchReturnsFullResults:
 
         assert job.total_found == 3
         assert job.already_in_library == 2
-        # Cả 3 đều hiện, không lọc bớt cái nào.
+        # All 3 show, none filtered out.
         assert len(job.result_videos) == 3
         marked = [v.platform_video_id for v in job.result_videos if v.already_in_library]
         assert sorted(marked) == ["BV1", "BV2"]
@@ -214,7 +214,7 @@ class TestSearchReturnsFullResults:
     async def test_all_existing_still_shows_every_video(
         self, db, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Ca người dùng gặp: trước đây tìm ra 20 video mà hiện 0."""
+        """The case users hit: previously it found 20 videos but showed 0."""
         from app.adapters.bilibili.client import BilibiliClient
         from app.models.job import Platform
         from app.models.video import Video, VideoStatus
@@ -241,12 +241,12 @@ class TestSearchReturnsFullResults:
 
         job = await crawl_service.create_bilibili_crawl_job(db, 1, "匹克球")
 
-        # Hiện đủ 20 video, không còn ra 0 nữa.
+        # All 20 videos show, no more coming out as 0.
         assert len(job.result_videos) == 20
         assert job.total_found == 20
         assert job.already_in_library == 20
         assert all(v.already_in_library for v in job.result_videos)
-        # Không thêm bản ghi trùng (bảng có UniqueConstraint).
+        # No duplicate record added (the table has a UniqueConstraint).
         from app.models.video import Video
 
         assert db.query(Video).count() == 20
@@ -270,10 +270,10 @@ class TestSearchReturnsFullResults:
 
 
 class TestCreateJobFromSelection:
-    """Phase 20 — tick chọn hàng loạt ở màn Khám phá. Trước đây video đã tồn
-    tại bị `continue` bỏ qua hẳn khỏi kết quả trả về; giờ phải trả ĐỦ danh
-    sách đã chọn (giống `create_bilibili_crawl_job`) để router biết chính xác
-    video nào cần bắn tải nền."""
+    """Phase 20 — bulk selection on the Discovery screen. Previously an existing video
+    was skipped with `continue` and dropped from the returned result; now it must return the FULL
+    selected list (like `create_bilibili_crawl_job`) so the router knows exactly which
+    videos need a background download."""
 
     @pytest.fixture
     def db(self):
@@ -326,12 +326,12 @@ class TestCreateJobFromSelection:
             db, 1, self._selected(["BV1", "BV2", "BV3"])
         )
 
-        # Cả 3 đều có mặt, kể cả BV1 đã tồn tại từ trước — trước đây bị bỏ qua.
+        # All 3 are present, including BV1 which already existed — previously it was skipped.
         assert [v.platform_video_id for v in job.result_videos] == ["BV1", "BV2", "BV3"]
         assert job.result_videos[0].already_in_library is True
         assert job.result_videos[1].already_in_library is False
         assert job.result_videos[2].already_in_library is False
-        # Không tạo trùng video đã có (UniqueConstraint platform+platform_video_id).
+        # No duplicate for an existing video (UniqueConstraint platform+platform_video_id).
         assert db.query(Video).filter(Video.platform_video_id == "BV1").count() == 1
 
     @pytest.mark.anyio

@@ -1,13 +1,13 @@
-"""Theo dõi các lần sinh ảnh/clip chạy nền (Phase 14).
+"""Track image/clip generations running in the background (Phase 14).
 
-Vì sao cần: sinh 1 clip bằng provider thật mất 1-5 phút. Gọi đồng bộ thì trình
-duyệt treo suốt thời gian đó, và chỉ cần người dùng lỡ tay F5 là mất dấu kết quả
-— trong khi tiền thì đã tiêu rồi. Job store giữ lại kết quả để quay lại xem được.
+Why it is needed: generating 1 clip with a real provider takes 1-5 minutes. Calling synchronously freezes the
+browser for that whole time, and all it takes is the user accidentally hitting F5 to lose track of the result
+— while the money is already spent. The job store keeps the result so it can be viewed again later.
 
-Giữ trong bộ nhớ như `progress_service`: job dở dang không tiếp tục được sau khi
-restart, nên lưu DB cũng không cứu được gì. Khác `progress_service` ở chỗ job ở
-đây KHÔNG gắn với video hay dự án nào — một lần sinh ảnh lẻ ở AI Studio không có
-chủ thể nào để neo vào.
+Kept in memory like `progress_service`: a half-done job cannot continue after a
+restart, so storing it in the DB would save nothing. Unlike `progress_service`, a job here
+is NOT tied to any video or project — a one-off image generation in AI Studio has no
+subject to anchor to.
 """
 
 import threading
@@ -19,8 +19,8 @@ from typing import Literal
 JobKind = Literal["keyframe", "clip"]
 JobStatus = Literal["running", "done", "failed"]
 
-# Giữ lại lịch sử gần đây thôi — đây là bộ nhớ tạm, không phải sổ cái. Chi phí
-# thật đã ghi vào bảng `GeneratedAsset`, mất job cũ không mất dữ liệu nào.
+# Keep only recent history — this is scratch memory, not a ledger. The real cost
+# was already written to the `GeneratedAsset` table, losing an old job loses no data.
 _MAX_JOBS = 50
 
 
@@ -28,7 +28,7 @@ _MAX_JOBS = 50
 class GenerationJob:
     id: str
     kind: JobKind
-    # Prompt rút gọn, để nhận ra job nào là job nào trong danh sách.
+    # Shortened prompt, to recognize which job is which in the list.
     label: str
     status: JobStatus = "running"
     asset_id: int | None = None
@@ -41,7 +41,7 @@ class GenerationJob:
 
 
 _lock = threading.Lock()
-# dict giữ thứ tự chèn (Python 3.7+), nên job cũ nhất luôn là phần tử đầu.
+# dict keeps insertion order (Python 3.7+), so the oldest job is always the first element.
 _jobs: dict[str, GenerationJob] = {}
 
 
@@ -50,7 +50,7 @@ def create(kind: JobKind, label: str) -> GenerationJob:
         job = GenerationJob(id=uuid.uuid4().hex, kind=kind, label=label[:120])
         _jobs[job.id] = job
         while len(_jobs) > _MAX_JOBS:
-            # `next(iter(...))` là job cũ nhất — xoá từ đầu chứ không xoá bừa.
+            # `next(iter(...))` is the oldest job — delete from the front, not at random.
             del _jobs[next(iter(_jobs))]
         return job
 
@@ -91,12 +91,12 @@ def get(job_id: str) -> GenerationJob | None:
 
 
 def list_recent() -> list[GenerationJob]:
-    """Mới nhất trước — đúng thứ tự người dùng muốn nhìn khi quay lại trang."""
+    """Newest first — the order users want to see when coming back to the page."""
     with _lock:
         return list(reversed(_jobs.values()))
 
 
 def clear() -> None:
-    """Chỉ dùng trong test: dict ở tầng module sống xuyên suốt nhiều test."""
+    """Test use only: the module-level dict lives across many tests."""
     with _lock:
         _jobs.clear()

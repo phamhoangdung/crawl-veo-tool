@@ -31,9 +31,9 @@ function voiceKey(voice: VoiceRef) {
   return `${voice.provider}::${voice.voice_id}`
 }
 
-/** Tab "Giọng đọc" — chọn giọng riêng cho từng vai đã phát hiện được ở bước
- * "Phân vai người nói". Vai nào không gán thì `dubVideo` dùng giọng mặc định
- * chung, không bắt buộc phải điền hết. */
+/** The "Voices" tab — pick a separate voice for each speaker detected in the
+ * "Speaker separation" step. A speaker that is not assigned makes `dubVideo` use the shared default
+ * voice, filling in everything is not mandatory. */
 export function SpeakerVoices({ videoId, segments, speakerVoices }: Props) {
   const queryClient = useQueryClient()
 
@@ -42,8 +42,8 @@ export function SpeakerVoices({ videoId, segments, speakerVoices }: Props) {
     queryFn: () => getAvailableVoices(videoId),
   })
 
-  // Tối đa 2 câu mẫu mỗi vai — đủ để người dùng nhận ra "đây là ai" mà không
-  // phải cuộn qua cả bảng phụ đề.
+  // At most 2 sample sentences per speaker — enough for the user to recognize "who is this" without
+  // having to scroll through the whole subtitle table.
   const speakers = useMemo(() => {
     const bySpeaker = new Map<string, TranscriptSegment[]>()
     for (const segment of segments) {

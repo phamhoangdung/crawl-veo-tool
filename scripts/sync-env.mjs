@@ -1,5 +1,5 @@
-// Nguồn duy nhất là .env ở root. Script này copy đúng biến cần thiết vào
-// backend/.env và frontend/.env trước mỗi lần `npm run dev` (xem "predev").
+// The single source is the root .env. This script copies exactly the variables needed into
+// backend/.env and frontend/.env before every `npm run dev` (see "predev").
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

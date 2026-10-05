@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai-studio", tags=["ai-studio"])
 
-# MVP: 1 user cố định — cùng quy ước với app/api/api_keys.py.
+# MVP: 1 fixed user — same convention as app/api/api_keys.py.
 _DEFAULT_USER_ID = 1
 
 
@@ -140,7 +140,7 @@ def delete_character_reference(reference_id: int, db: Session = Depends(get_db))
 
 @router.get("/assets/{asset_id}/file")
 def get_asset_file(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:
-    """Trả file để frontend xem trước ảnh keyframe / phát video clip."""
+    """Return the file so the frontend can preview the keyframe image / play the video clip."""
     asset = ai_generation_service.get_asset(db, _DEFAULT_USER_ID, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy asset")
@@ -158,7 +158,7 @@ def get_asset_file(asset_id: int, db: Session = Depends(get_db)) -> FileResponse
 def export_asset_to_library(
     asset_id: int, db: Session = Depends(get_db)
 ) -> ExportToLibraryResponse:
-    """Đưa clip/ảnh đã sinh vào kho file dùng chung để ghép trong Timeline Editor."""
+    """Put the generated clip/image into the shared file library for assembly in the Timeline Editor."""
     try:
         imported = ai_generation_service.export_to_asset_library(db, _DEFAULT_USER_ID, asset_id)
     except ai_generation_service.GenerationError as exc:
@@ -282,7 +282,7 @@ async def generate_video_clip(
 def generate_ken_burns(
     payload: KenBurnsRequest, db: Session = Depends(get_db)
 ) -> GenerationResponse:
-    """Đường miễn phí: 1 ảnh tĩnh + chuyển động camera, không gọi API nào."""
+    """The free path: 1 still image + camera motion, no API call."""
     try:
         result = ai_generation_service.make_ken_burns_clip(
             db,
@@ -298,11 +298,11 @@ def generate_ken_burns(
 
 
 def _precheck(run) -> None:
-    """Chạy cửa kiểm chi phí NGAY trong request và trả đúng mã HTTP như bản đồng bộ.
+    """Run the cost gate RIGHT in the request and return the same HTTP code as the synchronous version.
 
-    Không làm việc này thì ngưỡng "$1/lần gọi" sẽ nổ bên trong background task,
-    nơi người dùng không còn cách nào bấm xác nhận — van an toàn tiền bạc coi như
-    bị vô hiệu hoá, mà lại không có dấu hiệu gì báo là nó đã hỏng.
+    Without this, the "$1 per call" threshold would blow up inside the background task,
+    where the user has no way left to click confirm — the money safety valve would be
+    disabled, with no sign that it had broken.
     """
     try:
         run()
@@ -331,15 +331,15 @@ def _job_to_read(job: generation_job_service.GenerationJob) -> GenerationJobRead
 
 
 async def _run_generation_job(job_id: str, run) -> None:
-    """Chạy một lần sinh rồi ghi kết quả vào job store.
+    """Run one generation and write the result into the job store.
 
-    Mở session RIÊNG: session của request đã đóng khi request trả về, dùng lại
-    sẽ lỗi "session is closed" đúng lúc kết quả đắt tiền vừa sinh xong.
+    Opens its OWN session: the request's session was closed when the request returned, and reusing it
+    would raise "session is closed" exactly when the expensive result has just been generated.
     """
     try:
         with SessionLocal() as db:
             result = await run(db)
-    except Exception as exc:  # noqa: BLE001 — mọi lỗi đều phải về tới UI qua job
+    except Exception as exc:  # noqa: BLE001 — every error must reach the UI through the job
         logger.exception("Job sinh nội dung %s thất bại", job_id)
         generation_job_service.finish_error(job_id, str(exc))
         return
@@ -363,8 +363,8 @@ def generate_keyframe_async(
     background: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> GenerationJobRead:
-    """Nhận job rồi trả ngay. Bản đồng bộ `/generate/keyframe` vẫn giữ nguyên cho
-    MCP và script — agent gọi tuần tự thì chờ luôn là đơn giản hơn."""
+    """Accept the job and return right away. The synchronous `/generate/keyframe` stays as is for
+    MCP and scripts — an agent calling sequentially is simpler just waiting."""
     _precheck(
         lambda: ai_generation_service.precheck_keyframe(
             db,
@@ -439,7 +439,7 @@ def generate_video_clip_async(
     dependencies=[Depends(require_scope("assets:read"))],
 )
 def list_generation_jobs() -> list[GenerationJobRead]:
-    """Lịch sử các lần sinh trong phiên chạy này — rời trang rồi quay lại vẫn thấy."""
+    """History of generations in this run — leave the page and come back and you still see them."""
     return [_job_to_read(j) for j in generation_job_service.list_recent()]
 
 

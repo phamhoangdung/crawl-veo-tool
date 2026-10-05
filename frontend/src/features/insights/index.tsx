@@ -8,11 +8,11 @@ import { TopicsPanel } from '@/features/topics'
 import { CategoryChart } from './category-chart'
 
 /**
- * Báo cáo xu hướng (Phase 20) — trước đây biểu đồ "Chủ đề đang được quan
- * tâm" nằm chắn ngay đầu màn Khám phá (~410px, đẩy cả lưới video xuống dưới
- * màn hình), giờ tách thành trang riêng chỉ mở khi cần. Gộp luôn "Chủ đề
- * quan tâm" (trước là trang `/topics` riêng) vì cùng bản chất "xem để quyết
- * định làm gì".
+ * Trend report (Phase 20) — previously the "Topics of interest" chart
+ * sat blocking the very top of the Discovery screen (~410px, pushing the whole video grid below the
+ * screen), now split into its own page opened only when needed. It also merges "Topics of
+ * interest" (previously a separate `/topics` page) because it is the same "look to decide
+ * what to make" in nature.
  */
 export function Insights() {
   const { data: followedRids } = useQuery({

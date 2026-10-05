@@ -3,8 +3,8 @@ import { API_BASE_URL } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 /**
- * Bilibili trả cover_url dạng `http://`. Ép sang https để không bị chặn
- * mixed-content khi trang chạy qua HTTPS; CDN của họ phục vụ cả hai.
+ * Bilibili returns cover_url as `http://`. Force https so it is not blocked as
+ * mixed content when the page runs over HTTPS; their CDN serves both.
  */
 function toHttps(url: string) {
   return url.startsWith('http://')
@@ -13,9 +13,9 @@ function toHttps(url: string) {
 }
 
 /**
- * Ảnh cover Bilibili tải thẳng được nhờ referrerPolicy="no-referrer" (CDN chặn
- * hotlink theo Referer: gửi kèm localhost sẽ bị 403). Nếu vẫn bị chặn, đổi sang
- * proxy của backend — nơi đặt được Referer hợp lệ.
+ * Bilibili cover images can be loaded directly thanks to referrerPolicy="no-referrer" (the CDN blocks
+ * hotlinking by Referer: sending localhost along gets a 403). If it is still blocked, switch to the
+ * backend proxy — where a valid Referer can be set.
  */
 export function CoverImage({
   src,
@@ -30,7 +30,7 @@ export function CoverImage({
     return <div className={cn('aspect-video bg-muted', className)} />
   }
 
-  // Ảnh bìa của video nhập từ máy do backend phục vụ (đường dẫn tương đối).
+  // The cover image of a video imported from disk is served by the backend (relative path).
   if (src.startsWith('/')) {
     return (
       <img

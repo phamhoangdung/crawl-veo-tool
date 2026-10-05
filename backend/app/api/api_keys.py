@@ -8,7 +8,7 @@ from app.services import api_key_service
 
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 
-# MVP: 1 user cố định — xem docs/overview/plan.md phần multi-tenant.
+# MVP: 1 fixed user — see docs/overview/plan.md, multi-tenant section.
 _DEFAULT_USER_ID = 1
 
 
@@ -34,8 +34,8 @@ def list_api_keys(db: Session = Depends(get_db)) -> list[ApiKeyRead]:
 
 @router.post("", response_model=ApiKeyRead)
 def add_api_key(payload: ApiKeyAddRequest, db: Session = Depends(get_db)) -> ApiKeyRead:
-    """Thêm 1 key mới vào pool của provider (Phase 8) — không upsert, mỗi lần gọi là
-    1 key riêng để rotation có nhiều key cùng provider mà chọn."""
+    """Add 1 new key to the provider's pool (Phase 8) — not an upsert, every call is
+    a separate key so rotation has several keys of the same provider to choose from."""
     record = api_key_service.add_key(
         db, _DEFAULT_USER_ID, payload.provider, payload.api_key, payload.label
     )

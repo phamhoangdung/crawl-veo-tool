@@ -1,14 +1,14 @@
-"""MCP server cho agent ngoài (Claude Code/Codex) điều khiển AI Studio — Phase 14.
+"""MCP server for external agents (Claude Code/Codex) to drive AI Studio — Phase 14.
 
-Chạy qua stdio, do agent tự spawn (`python -m app.mcp_server`), KHÔNG phải service
-nền riêng. Mỗi tool chỉ gọi REST API cục bộ đang chạy — không nhúng business logic,
-để UI và agent luôn đi qua cùng một đường (xem research Phần 6.2).
+Runs over stdio, spawned by the agent itself (`python -m app.mcp_server`), NOT a separate background
+service. Each tool only calls the local REST API that is running — no business logic embedded,
+so the UI and the agent always go through the same path (see research Part 6.2).
 
-Cấu hình qua biến môi trường:
-  MCP_TOKEN     — token `sk_local_...` tạo ở trang API Keys (bắt buộc)
-  MCP_API_BASE  — mặc định http://127.0.0.1:8000
+Configuration via environment variables:
+  MCP_TOKEN     — the `sk_local_...` token created on the API Keys page (required)
+  MCP_API_BASE  — defaults to http://127.0.0.1:8000
 
-Chạy thử:  MCP_TOKEN=sk_local_xxx python -m app.mcp_server
+Quick try:  MCP_TOKEN=sk_local_xxx python -m app.mcp_server
 """
 
 import logging
@@ -20,12 +20,12 @@ from mcp.server.mcpserver import MCPServer
 
 logger = logging.getLogger(__name__)
 
-# Log ra stderr: stdout là kênh truyền protocol MCP, in gì vào đó là làm hỏng phiên.
+# Log to stderr: stdout is the MCP protocol channel, printing anything there breaks the session.
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
 server = MCPServer("crawl-veo-ai-studio")
 
-_TIMEOUT_SECONDS = 600.0  # sinh video có thể mất vài phút
+_TIMEOUT_SECONDS = 600.0  # video generation can take a few minutes
 
 
 def _api_base() -> str:
@@ -61,9 +61,9 @@ def _extract_detail(response: httpx.Response) -> str:
 
 @server.tool()
 async def list_character_references() -> list:
-    """Liệt kê các bộ ảnh tham chiếu nhân vật/cảnh đã có.
+    """List the existing character/scene reference image sets.
 
-    Tên (`name`) của mỗi bộ dùng làm mention trong prompt: `@ten_bo_anh`.
+    The name (`name`) of each set is used as a mention in prompts: `@set_name`.
     """
     return await _request("GET", "/character-references")
 
@@ -72,9 +72,9 @@ async def list_character_references() -> list:
 async def estimate_generation_cost(
     asset_type: str, model: str | None = None, duration_seconds: float = 5.0
 ) -> dict:
-    """Ước tính chi phí (USD) trước khi sinh. Gọi tool này TRƯỚC khi sinh video.
+    """Estimate the cost (USD) before generating. Call this tool BEFORE generating a video.
 
-    asset_type: "image" hoặc "video".
+    asset_type: "image" or "video".
     """
     params: dict[str, object] = {"asset_type": asset_type, "duration_seconds": duration_seconds}
     if model:
@@ -90,12 +90,12 @@ async def generate_keyframe(
     output_prefix: str | None = None,
     confirm_expensive: bool = False,
 ) -> dict:
-    """Sinh 1 ảnh keyframe từ prompt (rẻ hơn sinh video ~50-100 lần).
+    """Generate 1 keyframe image from a prompt (~50-100x cheaper than generating video).
 
-    Gọi `@ten_bo_anh` trong prompt để đính kèm ảnh tham chiếu, ví dụ:
+    Use `@set_name` in the prompt to attach reference images, for example:
     "@hero @prop_bag medium shot, 50mm, standing at the bank counter".
 
-    Trả về `from_cache=true` nếu yêu cầu y hệt đã sinh trước đó (không tốn phí).
+    Returns `from_cache=true` if the identical request was generated before (no cost).
     """
     payload = {
         "prompt": prompt,
@@ -117,11 +117,11 @@ async def generate_video_clip(
     output_prefix: str | None = None,
     confirm_expensive: bool = False,
 ) -> dict:
-    """Sinh video clip từ ảnh keyframe đã có. ĐẮT — ước tính chi phí trước khi gọi.
+    """Generate a video clip from an existing keyframe image. EXPENSIVE — estimate the cost before calling.
 
-    Truyền `keyframe_end_asset_id` để nội suy chuyển động giữa 2 ảnh (kiểm soát
-    tốt hơn, khớp cảnh trước/sau). Nếu cảnh không cần chuyển động thật, dùng
-    `make_ken_burns_clip` (miễn phí) thay cho tool này.
+    Pass `keyframe_end_asset_id` to interpolate motion between 2 images (better
+    control, matching the previous/next scene). If the scene needs no real motion, use
+    `make_ken_burns_clip` (free) instead of this tool.
     """
     payload = {
         "prompt": prompt,
@@ -142,10 +142,10 @@ async def make_ken_burns_clip(
     motion: str = "zoom_in",
     output_prefix: str | None = None,
 ) -> dict:
-    """Tạo clip MIỄN PHÍ từ 1 ảnh tĩnh bằng chuyển động camera chậm (ffmpeg).
+    """Create a FREE clip from 1 still image using slow camera motion (ffmpeg).
 
-    Dùng cho cảnh không cần chuyển động thật (người nói, cảnh nền) — đây là cách
-    giảm chi phí lớn nhất so với sinh video AI.
+    Use it for scenes that need no real motion (a talking head, a background scene) — this is the biggest way
+    to cut cost compared with AI video generation.
     motion: "zoom_in" | "zoom_out" | "pan_right".
     """
     payload = {
@@ -159,14 +159,14 @@ async def make_ken_burns_clip(
 
 @server.tool()
 async def list_generated_assets(asset_type: str | None = None) -> list:
-    """Liệt kê ảnh/video đã sinh. asset_type: "image" | "video" | bỏ trống = tất cả."""
+    """List generated images/video. asset_type: "image" | "video" | empty = all."""
     params = {"asset_type": asset_type} if asset_type else {}
     return await _request("GET", "/assets", params=params)
 
 
 @server.tool()
 async def get_budget_status() -> dict:
-    """Xem đã chi bao nhiêu trong tháng và còn lại bao nhiêu trong hạn mức."""
+    """See how much was spent this month and how much remains of the budget."""
     return await _request("GET", "/budget")
 
 

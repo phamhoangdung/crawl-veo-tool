@@ -10,7 +10,7 @@ export interface EditorShortcutHandlers {
   onNudge: (deltaSeconds: number) => void
 }
 
-/** Đang gõ trong ô nhập thì phím tắt phải nhường cho việc gõ. */
+/** While typing in an input field, shortcuts must yield to the typing. */
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
@@ -18,8 +18,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Phím tắt kiểu editor video quen thuộc. Chỉ hoạt động khi `enabled` — editor
- * nằm trong tab, không nên bắt phím khi người dùng đang ở tab khác.
+ * Familiar video-editor style shortcuts. Only active when `enabled` — the editor
+ * lives in a tab and should not capture keys while the user is on another tab.
  */
 export function useEditorShortcuts(handlers: EditorShortcutHandlers, enabled = true) {
   useEffect(() => {
@@ -60,7 +60,7 @@ export function useEditorShortcuts(handlers: EditorShortcutHandlers, enabled = t
           break
         case 'ArrowLeft':
           e.preventDefault()
-          // Shift để nhảy xa hơn — tinh chỉnh từng frame vs lướt nhanh.
+          // Shift to jump further — frame-by-frame fine tuning vs fast scrubbing.
           handlers.onNudge(e.shiftKey ? -5 : -1 / 30)
           break
         case 'ArrowRight':

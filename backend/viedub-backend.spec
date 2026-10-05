@@ -1,46 +1,52 @@
 # -*- mode: python ; coding: utf-8 -*-
-from pathlib import Path
+# Slim backend: the heavy parts (torch/demucs/speechbrain/faster-whisper/... and ffmpeg)
+# are NOT bundled. They are downloaded on first use as "packs" (app/core/packs.py);
+# the AI pack is built by scripts/build-ai-pack.mjs.
 
-from PyInstaller.utils.hooks import collect_all
+# Everything that ships in the AI pack must be excluded here, otherwise PyInstaller
+# would still bundle it (it is installed in the build venv) and the installer stays big.
+AI_PACK_MODULES = [
+    'torch', 'torchaudio', 'torchvision', 'demucs', 'speechbrain', 'faster_whisper',
+    'ctranslate2', 'av', 'onnxruntime', 'sklearn', 'scipy', 'numpy', 'hyperpyyaml',
+    'sentencepiece', 'tokenizers', 'huggingface_hub', 'hf_xet', 'julius', 'lameenc',
+    'openunmix', 'dora', 'treetable', 'einops', 'diffq', 'numba', 'llvmlite', 'sphn',
+]
 
-# Demucs không được import trực tiếp ở đâu trong app (chạy qua cờ --run-demucs của
-# entrypoint), nên PyInstaller không tự thấy — phải gom tay cả code lẫn file cấu hình
-# model (demucs/remote/*.yaml). SpeechBrain nạp module động qua hyperpyyaml.
-extra_datas, extra_binaries, extra_hidden = [], [], []
-for pkg in ('demucs', 'speechbrain', 'faster_whisper'):  # faster_whisper: file VAD silero .onnx
-    d, b, h = collect_all(pkg)
-    extra_datas += d
-    extra_binaries += b
-    extra_hidden += h
-
-# torch_cpu.dll cần vcruntime140_threads.dll (VC++ 2022 Redistributable). PyInstaller
-# không tự gom file này và Windows không có sẵn -> máy chưa cài VC++ sẽ lỗi khi
-# nạp torch (phân vai người nói, Demucs). Kèm theo app (app-local, được phép).
-import os
-_vc_threads = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' / 'vcruntime140_threads.dll'
-if not _vc_threads.is_file():
-    raise SystemExit(f'Thiếu {_vc_threads} — cài Visual C++ Redistributable 2022 trên máy build.')
-extra_binaries.append((str(_vc_threads), '.'))
-
-# ffmpeg/ffprobe đóng gói kèm để máy người dùng không cần tự cài. Chạy
-# `npm run desktop:fetch-ffmpeg` để có thư mục này (không commit vào git).
-ffmpeg_dir = Path('vendor/ffmpeg')
-if not (ffmpeg_dir / 'ffmpeg.exe').is_file():
-    raise SystemExit('Thiếu backend/vendor/ffmpeg — chạy: npm run desktop:fetch-ffmpeg')
+# Stdlib modules that the downloadable AI pack (torch, demucs, speechbrain, scipy,
+# sklearn, ...) imports but the slim backend itself never touches, so PyInstaller would
+# otherwise leave them out. Cheap: they are small and compress well.
+STDLIB_FOR_AI_PACK = [
+    'timeit', 'unittest', 'unittest.mock', 'doctest', 'pdb', 'bdb', 'cmd', 'code', 'codeop',
+    'cProfile', 'profile', 'pstats', 'trace', 'tracemalloc', 'sched', 'tokenize', 'difflib',
+    'pydoc', 'runpy', 'inspect', 'dis', 'opcode', 'ast', 'textwrap', 'fractions',
+    'statistics', 'decimal', 'secrets', 'graphlib', 'zoneinfo', 'tomllib', 'csv',
+    'configparser', 'optparse', 'getpass', 'locale', 'platform', 'gzip', 'bz2', 'lzma',
+    'zipfile', 'zipimport', 'tarfile', 'sqlite3', 'ctypes', 'ctypes.util', 'uuid', 'shlex',
+    'wave', 'colorsys', 'sndhdr', 'imghdr', 'pickletools', 'copyreg', 'numbers',
+    'multiprocessing.pool', 'multiprocessing.shared_memory', 'multiprocessing.managers',
+    'concurrent.futures', 'xml.etree.ElementTree', 'xml.dom.minidom', 'html.parser',
+    'http.client', 'http.server', 'email.mime.text', 'urllib.request', 'urllib.parse',
+    'logging.handlers', 'queue', 'heapq', 'bisect', 'array', 'mmap', 'select', 'selectors',
+    'socketserver', 'ssl', 'hashlib', 'hmac', 'binascii', 'base64', 'struct', 'pprint',
+    'contextvars', 'weakref', 'gc', 'abc', 'typing', 'enum', 'functools', 'itertools',
+    'operator', 'collections.abc', 'importlib.metadata', 'importlib.resources',
+    'importlib.util', 'pkgutil', 'site', 'sysconfig', 'tempfile', 'shutil', 'glob',
+    'fnmatch', 'stat', 'filecmp', 'signal', 'faulthandler', 'readline', 'curses',
+    'turtle', 'webbrowser', 'smtplib', 'ftplib', 'telnetlib', 'xmlrpc.client', 'json.tool',
+]
 
 a = Analysis(
     ['app/entrypoint.py'],
     pathex=[],
-    binaries=extra_binaries,
-    datas=[
-        ('app/resources/fonts', 'app/resources/fonts'),
-        (str(ffmpeg_dir), 'ffmpeg'),
-    ] + extra_datas,
-    hiddenimports=extra_hidden,
+    binaries=[],
+    datas=[('app/resources/fonts', 'app/resources/fonts')],
+    hiddenimports=STDLIB_FOR_AI_PACK,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # GUI/notebook/test libraries are never used by the backend.
+    excludes=AI_PACK_MODULES
+    + ['tkinter', 'matplotlib', 'IPython', 'jupyter', 'notebook', 'pytest', 'sphinx'],
     noarchive=False,
     optimize=0,
 )
@@ -55,7 +61,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -68,7 +74,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='viedub-backend',
 )

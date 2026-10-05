@@ -1,9 +1,9 @@
-"""Ký WBI cho các API cần chữ ký của Bilibili (search, playurl...).
+"""WBI signing for Bilibili APIs that need a signature (search, playurl...).
 
-Cơ chế: Bilibili trộn 2 khoá (img_key, sub_key) lấy từ endpoint `nav` qua 1 bảng
-hoán vị cố định (mixin_key_table) thành 1 mixin_key 32 ký tự, dùng để md5-sign
-query string của mỗi request kèm timestamp (wts). Khoá đổi theo ngày nên cache
-vài giờ là đủ, không cần fetch lại mỗi request.
+Mechanism: Bilibili mixes 2 keys (img_key, sub_key) taken from the `nav` endpoint through a fixed
+permutation table (mixin_key_table) into a 32-character mixin_key, used to md5-sign
+each request's query string together with a timestamp (wts). The keys change daily so caching
+for a few hours is enough, with no need to refetch on every request.
 """
 
 import hashlib

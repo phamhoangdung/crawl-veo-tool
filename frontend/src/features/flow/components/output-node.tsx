@@ -11,7 +11,7 @@ export interface OutputNodeData extends Record<string, unknown> {
   blockingReason: string | null
   estimatedCostUsd: number | null
   freeScenes: number
-  /** Số cảnh chưa có clip — 0 nghĩa là dựng lại chỉ ghép, không tốn phí. */
+  /** Number of scenes without a clip yet — 0 means rebuilding only joins, at no cost. */
   pendingScenes: number
   isExporting: boolean
   onRender: () => void
@@ -53,7 +53,7 @@ function OutputNodeInner({ data }: { data: OutputNodeData }) {
       {estimatedCostUsd !== null && (
         <p className='mb-2 text-[10px]'>
           {pendingScenes === 0 ? (
-            // Mọi cảnh đã có clip: dựng lại chỉ ghép, không sinh gì nên không tốn phí.
+            // Every scene already has a clip: rebuilding only joins, generating nothing so it costs nothing.
             <span className='text-muted-foreground'>
               Mọi cảnh đã có clip — dựng lại không tốn phí.
             </span>

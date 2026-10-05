@@ -1,5 +1,5 @@
-"""Danh mục font đóng gói sẵn cho phụ đề/watermark text — dùng chung cho
-Timeline Editor (track overlay) và luồng ghép phụ đề cứng (burn_subtitles).
+"""Catalog of bundled fonts for subtitles/watermark text — shared by the
+Timeline Editor (overlay track) and the burned-in subtitle flow (burn_subtitles).
 """
 
 from fastapi import APIRouter, HTTPException
@@ -23,7 +23,7 @@ def list_fonts() -> list[FontRead]:
 
 @router.get("/{font_id}/file")
 def download_font_file(font_id: str) -> FileResponse:
-    """Trả file .ttf để frontend xem trước font bằng `@font-face` trước khi render."""
+    """Return the .ttf file so the frontend can preview the font via `@font-face` before rendering."""
     try:
         font = font_service.get_font(font_id)
     except font_service.FontNotFoundError:

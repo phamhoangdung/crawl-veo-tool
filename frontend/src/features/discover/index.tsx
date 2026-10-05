@@ -29,14 +29,14 @@ import { VideoGridPanel } from './video-grid-panel'
 import { YoutubePanel } from './youtube-panel'
 
 /**
- * Màn Khám phá (Phase 20) — gộp "Xu hướng" + "Tìm & tải" thành 1 màn hình.
+ * Discovery screen (Phase 20) — merges "Trends" + "Find & download" into 1 screen.
  *
- * Trước đây 2 trang tách rời: Trending chỉ xem/tick chọn rồi "thêm vào hàng
- * đợi" (không màn hình nào hiển thị lại được, xem
- * docs/phases/phase-20-discovery-workspace.md mục Khảo sát điểm 1), Crawl
- * mới thực sự tải được nhưng lại ghi DB ngay lúc search (nguồn gốc bug "tìm
- * lần 2 ra 0 video" ở phase-1). Giờ 1 lưới duy nhất: trống ô tìm = xem xếp
- * hạng, có từ khoá = tìm tự do, mọi thẻ đều tải được ngay tại chỗ.
+ * Previously 2 separate pages: Trending only viewed/ticked and then "added to the
+ * queue" (no screen could show it again, see
+ * docs/phases/phase-20-discovery-workspace.md, Survey point 1), while Crawl
+ * really downloaded but wrote to the DB right at search time (the origin of the bug "searching
+ * a second time returns 0 videos" in phase-1). Now 1 single grid: empty search box = view the
+ * ranking, with a keyword = free search, and every card can be downloaded right in place.
  */
 export function Discover() {
   const queryClient = useQueryClient()
@@ -49,9 +49,9 @@ export function Discover() {
   const [tab, setTab] = useState('all')
   const [rankingDays, setRankingDays] = useState<RankingDays>(3)
 
-  // Chuyên mục chưa dịch (name === name_zh) được backend tự dịch NỀN mỗi lần
-  // gọi GET /categories — poll nhẹ trong lúc còn mục chưa dịch để tên tiếng
-  // Việt tự hiện ra dần, không cần bấm lại "Quét chuyên mục".
+  // Categories not yet translated (name === name_zh) are translated in the BACKGROUND by the backend on every
+  // call to GET /categories — poll lightly while untranslated entries remain so the Vietnamese
+  // names appear gradually by themselves, with no need to click "Scan categories" again.
   const { data: categories } = useQuery({
     queryKey: CATEGORIES_QUERY_KEY,
     queryFn: getTrendingCategories,
@@ -62,8 +62,8 @@ export function Discover() {
     },
   })
 
-  // Lựa chọn lưu ở DB (không phải localStorage) để giữ nguyên khi đóng gói
-  // thành app desktop và khi mở từ máy khác.
+  // The selection is stored in the DB (not localStorage) to survive packaging
+  // as a desktop app and opening from another machine.
   const { data: followedRids } = useQuery({
     queryKey: FOLLOWED_CATEGORIES_QUERY_KEY,
     queryFn: getFollowedCategories,
@@ -89,7 +89,7 @@ export function Discover() {
   const selectedRids = followedRids ?? []
   const activeCategories =
     categories?.filter((c) => selectedRids.includes(c.rid)) ?? []
-  // Tab đang chọn có thể biến mất (bỏ theo dõi chuyên mục) — rơi về "Tất cả".
+  // The selected tab may disappear (unfollowing a category) — fall back to "All".
   const activeTab =
     tab === 'all' ||
     tab === 'followed-channels' ||
@@ -136,10 +136,10 @@ export function Discover() {
                 )}
               </>
             )}
-            {/* Báo cáo xu hướng (biểu đồ chuyên mục + chủ đề quan tâm) chuyển
-                sang trang phụ, chỉ mở khi cần — trước đây biểu đồ chiếm ~410px
-                đầu màn hình, đẩy cả lưới video xuống dưới màn hình phải cuộn
-                mới thấy. */}
+            {/* The trend report (category chart + topics of interest) moved
+                to a secondary page, only opened when needed — previously the chart took ~410px
+                at the top of the screen, pushing the whole video grid below the screen so you had to scroll
+                to see it. */}
             <Button asChild variant='outline' size='sm'>
               <Link to='/insights'>
                 Báo cáo xu hướng
@@ -233,8 +233,8 @@ export function Discover() {
                           {category.name}
                         </TabsTrigger>
                       ))}
-                      {/* Phase 22 — quyết định đã chốt: 1 chip lọc trong hàng chip
-                        chuyên mục, không thêm mục điều hướng riêng. */}
+                      {/* Phase 22 — decision made: 1 filter chip in the category
+                        chip row, no separate navigation entry added. */}
                       <TabsTrigger value='followed-channels'>
                         Kênh đã theo dõi
                       </TabsTrigger>

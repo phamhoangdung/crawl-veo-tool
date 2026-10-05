@@ -1,22 +1,22 @@
-"""Douyin: resolve link share + tải video không watermark.
+"""Douyin: resolve share links + download videos without watermark.
 
-Cơ chế resolve (theo cơ chế công khai của Douyin, không phải tài liệu chính thức):
-1. Link share dạng `https://v.douyin.com/xxxxx/` redirect sang URL chứa aweme_id.
-2. `get_video_detail()` gọi thẳng endpoint detail — dùng cho "Thăm dò" (xem
-   `douyin_service.probe_share_url`), không dùng để tự bóc tách link tải nữa.
+Resolve mechanism (per Douyin's public behavior, not official documentation):
+1. A share link like `https://v.douyin.com/xxxxx/` redirects to a URL containing the aweme_id.
+2. `get_video_detail()` calls the detail endpoint directly — used for "probing" (see
+   `douyin_service.probe_share_url`), no longer used to extract the download link ourselves.
 
-Phần tải (`download_no_watermark`) **giao cho yt-dlp** thay vì tự bóc tách JSON —
-xem nghiên cứu 2026-09-15 trong docs/phases/phase-3-multiprovider-douyin.md:
-yt-dlp có sẵn extractor Douyin (`DouyinIE`, dùng chung code với TikTok, gọi đúng
-endpoint `aweme/v1/web/aweme/detail/` như `get_video_detail()` ở dưới), do cộng
-đồng bảo trì mỗi khi Douyin đổi cơ chế chống bot — đỡ việc tự dò lại endpoint.
+The download part (`download_no_watermark`) is **delegated to yt-dlp** instead of parsing JSON ourselves —
+see the 2026-09-15 research in docs/phases/phase-3-multiprovider-douyin.md:
+yt-dlp already has a Douyin extractor (`DouyinIE`, sharing code with TikTok, calling the same
+endpoint `aweme/v1/web/aweme/detail/` as `get_video_detail()` below), maintained by the
+community whenever Douyin changes its anti-bot mechanism — saves re-probing the endpoint ourselves.
 
-**Đã verify bằng lệnh gọi thật (2026-09-15, yt-dlp 2026.8.19, không cookie):**
-lỗi trả về đúng "Fresh cookies (not necessarily logged in) are needed" — tức
-yt-dlp KHÔNG né được việc cần cookie, chỉ đỡ việc tự viết code bóc JSON. Điểm
-quan trọng: cookie này không cần đăng nhập tài khoản (`s_v_web_id` là cookie ẩn
-danh chống bot, sinh ra khi trình duyệt chạy JS challenge lúc mở trang) — khác
-với hiểu nhầm ban đầu là "cần cookie đăng nhập Douyin".
+**Verified with a real call (2026-09-15, yt-dlp 2026.8.19, no cookie):**
+the error returned is exactly "Fresh cookies (not necessarily logged in) are needed" — i.e.
+yt-dlp does NOT avoid the need for a cookie, it only saves writing the JSON parsing code. The important
+point: this cookie does not require logging into an account (`s_v_web_id` is an anonymous
+anti-bot cookie, generated when the browser runs the JS challenge while opening the page) — unlike
+the initial misunderstanding that a Douyin login cookie is required.
 """
 
 import re
@@ -36,7 +36,7 @@ _AWEME_ID_RE = re.compile(r"/(?:video|note)/(\d+)")
 
 
 class DouyinCookieExpiredError(RuntimeError):
-    """Cookie thiếu/hết hạn — 401/403 lặp lại, hoặc yt-dlp báo "fresh cookies needed"."""
+    """Cookie missing/expired — repeated 401/403, or yt-dlp reports "fresh cookies needed"."""
 
 
 class DouyinClient:
@@ -56,7 +56,7 @@ class DouyinClient:
         await self.aclose()
 
     async def resolve_share_url(self, share_url: str) -> str:
-        """Theo redirect của link share ngắn (v.douyin.com/...) để lấy aweme_id."""
+        """Follow the redirect of a short share link (v.douyin.com/...) to get the aweme_id."""
         response = await self._client.get(share_url)
         match = _AWEME_ID_RE.search(str(response.url))
         if not match:
@@ -74,11 +74,11 @@ class DouyinClient:
         return response.json()
 
     def download_no_watermark(self, aweme_id: str, dest_path: Path, *, cookie: str) -> dict[str, Any]:
-        """Tải video không watermark bằng yt-dlp. Đồng bộ (blocking) — gọi qua
-        `asyncio.to_thread` ở tầng service, không gọi trực tiếp trong code async.
+        """Download the video without watermark using yt-dlp. Synchronous (blocking) — call it via
+        `asyncio.to_thread` at the service layer, not directly in async code.
 
-        `dest_path` nên có sẵn đuôi `.mp4` — Douyin trả sẵn 1 luồng đã mux, không
-        cần ghép video/audio riêng như Bilibili (DASH).
+        `dest_path` should already end in `.mp4` — Douyin returns an already-muxed stream, so there is no
+        need to merge video/audio separately like Bilibili (DASH).
         """
         video_url = f"https://www.douyin.com/video/{aweme_id}"
         ydl_opts: dict[str, Any] = {

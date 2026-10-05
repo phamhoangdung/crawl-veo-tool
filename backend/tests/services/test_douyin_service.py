@@ -1,8 +1,8 @@
-"""Test phần Douyin KIỂM CHỨNG ĐƯỢC: phân loại trạng thái cấu hình và lỗi.
+"""Test the VERIFIABLE part of Douyin: classifying configuration states and errors.
 
-Không test phần bóc tách link không watermark — phần đó cố ý chưa viết, vì hình
-dạng JSON của Douyin chỉ biết được khi gọi thật bằng cookie hợp lệ (xem docstring
-của `app/services/douyin_service.py`).
+Does not test the no-watermark link extraction — that part is deliberately unwritten, because the JSON
+shape of Douyin can only be known by a real call with a valid cookie (see the docstring
+of `app/services/douyin_service.py`).
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -25,8 +25,8 @@ class TestIsConfigured:
         assert douyin_service.is_configured() is False
 
     def test_whitespace_only_cookie_is_not_configured(self, monkeypatch) -> None:
-        """Dán nhầm khoảng trắng vào .env vẫn phải coi là chưa cấu hình, không thì
-        sẽ gửi header Cookie rỗng rồi nhận lỗi khó hiểu từ Douyin."""
+        """Accidentally pasting whitespace into .env must still count as not configured, otherwise
+        an empty Cookie header would be sent and a confusing error received from Douyin."""
         monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("   \n "))
         assert douyin_service.is_configured() is False
 
@@ -41,13 +41,13 @@ class TestProbe:
         monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings(""))
         with pytest.raises(douyin_service.DouyinNotConfiguredError) as exc:
             await douyin_service.probe_share_url("https://v.douyin.com/abc/")
-        # Thông báo phải nói rõ làm gì tiếp, không chỉ "thiếu cookie".
+        # The message must say clearly what to do next, not just "cookie missing".
         assert "DOUYIN_COOKIE" in str(exc.value)
 
     @pytest.mark.asyncio
     async def test_expired_cookie_propagates_distinctly(self, monkeypatch) -> None:
-        """Cookie hết hạn KHÁC chưa có cookie: một bên phải đi lấy lại, bên kia
-        là lần đầu cấu hình. Gộp chung thì UI không hướng dẫn đúng được."""
+        """An expired cookie is DIFFERENT from no cookie: one side must go get it again, the other
+        is a first-time configuration. Lumping them together stops the UI from giving the right guidance."""
         monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("sessionid=cu"))
         with patch.object(douyin_service, "DouyinClient") as client_cls:
             client = client_cls.return_value.__aenter__.return_value
@@ -80,8 +80,8 @@ class TestProbe:
 
     @pytest.mark.asyncio
     async def test_handles_alternative_aweme_list_shape(self, monkeypatch) -> None:
-        """Douyin từng trả metadata ở `aweme_list[0]` thay vì `aweme_detail` —
-        đoán một dạng rồi trả về rỗng sẽ khiến probe vô dụng đúng lúc cần nó nhất."""
+        """Douyin once returned metadata at `aweme_list[0]` instead of `aweme_detail` —
+        guessing one shape and returning empty would make the probe useless exactly when it is needed most."""
         monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("sessionid=ok"))
         with patch.object(douyin_service, "DouyinClient") as client_cls:
             client = client_cls.return_value.__aenter__.return_value
@@ -107,9 +107,9 @@ class TestProbe:
 
 
 class TestDownloadVideo:
-    """`download_video` giao phần bóc tách/tải cho yt-dlp — test ở đây chỉ kiểm
-    tra wiring (resolve trước, cookie truyền đúng), không test yt-dlp thật (xem
-    tests/adapters/test_douyin_client.py cho phần đó)."""
+    """`download_video` delegates extraction/download to yt-dlp — the test here only checks
+    the wiring (resolve first, cookie passed correctly), it does not test real yt-dlp (see
+    tests/adapters/test_douyin_client.py for that part)."""
 
     @pytest.mark.asyncio
     async def test_without_cookie_raises_with_actionable_hint(self, monkeypatch, tmp_path) -> None:
@@ -159,9 +159,9 @@ class TestDownloadVideo:
 
 
 class TestSearchVideos:
-    """`search_videos` cần cookie ĐĂNG NHẬP thật, khác `probe_share_url`/
-    `download_video` — xem docstring `douyin_service`. Test wiring, không gọi
-    mạng thật (xem tests/adapters/test_douyin_search.py cho phần đó)."""
+    """`search_videos` needs a REAL login cookie, unlike `probe_share_url`/
+    `download_video` — see the `douyin_service` docstring. Tests the wiring, no real
+    network calls (see tests/adapters/test_douyin_search.py for that part)."""
 
     @pytest.mark.asyncio
     async def test_without_any_cookie_raises_not_configured(self, monkeypatch) -> None:
@@ -173,9 +173,9 @@ class TestSearchVideos:
     async def test_anonymous_cookie_configured_still_raises_login_required(
         self, monkeypatch
     ) -> None:
-        """`is_configured()` chỉ kiểm tra cookie có giá trị, không phân biệt được
-        ẩn danh hay đăng nhập — lỗi phải lộ ra ở tầng gọi API thật, không phải bị
-        `is_configured()` nuốt mất."""
+        """`is_configured()` only checks that the cookie has a value, it cannot tell
+        anonymous from logged-in — the error must surface at the real API call layer, not be
+        swallowed by `is_configured()`."""
         monkeypatch.setattr(douyin_service, "get_settings", lambda: _settings("s_v_web_id=anon"))
         with patch.object(douyin_service, "probe_search", new_callable=AsyncMock) as mock_probe:
             mock_probe.side_effect = DouyinLoginRequiredError("请先登录，再继续搜索吧")

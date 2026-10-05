@@ -7,20 +7,20 @@ from app.core.config import get_settings
 from app.models.generated_asset import GeneratedAsset
 from app.services import api_key_service
 
-# Giá ước tính (USD) — chỉ để cảnh báo trước khi chạy batch lớn, KHÔNG chính xác
-# 100% so với hoá đơn thật (giá provider có thể đổi, không tính discount/tier).
+# Estimated prices (USD) — only to warn before running a large batch, NOT 100%
+# accurate versus the real bill (provider prices may change, discounts/tiers not counted).
 _OPENAI_TRANSLATE_USD_PER_1K_CHARS = 0.002
 _ELEVENLABS_TTS_USD_PER_1K_CHARS = 0.30
 
-# Ước tính thô: tốc độ nói trung bình quy ra số ký tự/giây, áp dụng chung cho nhiều ngôn ngữ.
+# Rough estimate: average speaking rate converted to characters/second, applied across languages.
 _AVG_CHARS_PER_SECOND_SPEECH = 3.0
 
 _WARNING_THRESHOLD_USD = 1.0
 
 
-# Phase 14 — giá ước tính sinh ảnh/video (USD). Chênh nhau tới ~10x giữa model
-# rẻ nhất và Veo, nên chọn model theo từng cảnh là đòn giảm chi phí lớn nhất sau
-# việc dùng ảnh tĩnh + Ken Burns. Giá thay đổi theo thời gian — chỉ để cảnh báo.
+# Phase 14 — estimated image/video generation prices (USD). Up to ~10x difference between the
+# cheapest model and Veo, so choosing the model per scene is the biggest cost-cutting lever after
+# using still images + Ken Burns. Prices change over time — only for warnings.
 _IMAGE_MODEL_USD: dict[str, float] = {
     "fake-image": 0.0,
     "nano-banana": 0.01,
@@ -39,10 +39,10 @@ _KEN_BURNS_MODEL = "ffmpeg-ken-burns"
 
 
 class MonthlyBudgetExceededError(RuntimeError):
-    """Đã chi hết hạn mức tháng — chặn trước khi gọi API thay vì để đốt tiếp.
+    """The monthly budget is fully spent — block before calling the API instead of burning more.
 
-    Quan trọng nhất ở đường MCP: agent chạy tự động qua đêm là lúc không ai ngồi
-    xem, nên hạn mức là chốt an toàn cuối cùng.
+    Most important on the MCP path: an agent running automatically overnight is when nobody is
+    watching, so the budget is the last safety stop.
     """
 
     def __init__(self, spent_usd: float, budget_usd: float) -> None:

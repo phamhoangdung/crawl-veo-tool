@@ -1,5 +1,5 @@
-// Chạy 1 lệnh Python bất kỳ bằng interpreter của dự án.
-// Ví dụ: node scripts/run-python.mjs -m pytest backend
+// Runs any Python command with the project's interpreter.
+// Example: node scripts/run-python.mjs -m pytest backend
 import { spawn } from "node:child_process";
 import {
   ROOT,
@@ -25,7 +25,7 @@ child.on("error", (err) => {
   process.exit(1);
 });
 
-// Chuyển tiếp Ctrl+C xuống process con rồi thoát theo đúng exit code của nó.
+// Forward Ctrl+C to the child process, then exit with its exit code.
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => child.kill(sig));
 }

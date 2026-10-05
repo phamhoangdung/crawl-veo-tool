@@ -1,11 +1,11 @@
-"""Đọc đuôi file nhật ký backend cho màn "Nhật ký hệ thống"."""
+"""Read the tail of the backend log file for the "System log" screen."""
 
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.logging_setup import log_file_path
 
-# Đọc tối đa ngần này byte cuối file — đủ cho vài nghìn dòng mà không nạp cả file.
+# Read at most this many bytes from the end of the file — enough for a few thousand lines without loading the whole file.
 _TAIL_BYTES = 512_000
 
 
@@ -27,5 +27,5 @@ def read_tail(max_lines: int, path: Path | None = None) -> LogTail:
         data = f.read()
     lines = data.decode("utf-8", errors="replace").splitlines()
     if size > _TAIL_BYTES and lines:
-        lines = lines[1:]  # dòng đầu có thể bị cắt giữa chừng
+        lines = lines[1:]  # the first line may be cut in the middle
     return LogTail(path=path, exists=True, lines=lines[-max_lines:])

@@ -8,8 +8,8 @@ import {
 } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 // Styles
-// CSS của React Flow phải nạp toàn cục — thiếu nó thì canvas mất bố cục
-// (node chồng nhau, không thấy đường nối) mà không báo lỗi gì.
+// React Flow's CSS must be loaded globally — without it the canvas loses its layout
+// (nodes overlap, edges are invisible) with no error reported.
 import '@xyflow/react/dist/style.css'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'

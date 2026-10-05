@@ -28,8 +28,8 @@ def get_timeline(video_id: int, db: Session = Depends(get_db)) -> TimelineRead:
 def save_timeline(
     video_id: int, payload: TimelineSaveRequest, db: Session = Depends(get_db)
 ) -> TimelineRead:
-    """Chỉ LƯU draft — không render. Render là hành động riêng qua endpoint bên dưới,
-    do người dùng chủ động bấm (nguyên tắc Phase 13: AI gợi ý, người quyết định)."""
+    """Only SAVE the draft — no render. Render is a separate action via the endpoint below,
+    explicitly clicked by the user (Phase 13 principle: AI suggests, human decides)."""
     try:
         operations = timeline_service.save_timeline(db, video_id, payload.model_dump())
     except timeline_service.VideoNotFoundError:
@@ -52,7 +52,7 @@ def render_timeline(video_id: int, db: Session = Depends(get_db)) -> TimelineRen
 
 @router.get("/{video_id}/audio-stems", response_model=AudioStemsRead)
 def get_audio_stems(video_id: int, db: Session = Depends(get_db)) -> AudioStemsRead:
-    """Các track audio đã tách (giọng đọc / nhạc nền) để chỉnh âm lượng riêng."""
+    """The separated audio tracks (narration / background music) for adjusting volume independently."""
     try:
         stems = timeline_service.get_audio_stems(db, video_id)
     except timeline_service.VideoNotFoundError:

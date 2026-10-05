@@ -13,9 +13,9 @@ from app.services import trending_service
 
 @pytest.fixture
 def db_session():
-    """Session DB thật (SQLite in-memory) — `_attach_library_status` (Phase 20)
-    chạy query thật nên `dummy_session` (chỉ là `object()`) không còn đủ cho
-    các test gọi `search_bilibili`/`get_category_page`/`get_bilibili_popular_page`."""
+    """A real DB session (in-memory SQLite) — `_attach_library_status` (Phase 20)
+    runs a real query so `dummy_session` (just an `object()`) is no longer enough for
+    tests calling `search_bilibili`/`get_category_page`/`get_bilibili_popular_page`."""
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
@@ -24,8 +24,8 @@ def db_session():
 
 
 class TestSearchBilibiliTranslate:
-    """`translate_keyword` tái dùng `crawl_service.translate_keyword_to_chinese`
-    — trước đây trang Trending không có tuỳ chọn này dù trang Crawl có."""
+    """`translate_keyword` reuses `crawl_service.translate_keyword_to_chinese`
+    — previously the Trending page lacked this option though the Crawl page had it."""
 
     @staticmethod
     def _fake_results(bvids: list[str]) -> list[dict]:
@@ -108,8 +108,8 @@ class TestSearchBilibiliTranslate:
 
 
 class TestAttachLibraryStatus:
-    """Phase 20 — màn Khám phá cần biết video nào đã tải để hiện badge/link
-    'Video của tôi' ngay trên thẻ, không phải đoán qua bvid ở frontend."""
+    """Phase 20 — the Discovery screen needs to know which videos are downloaded to show a badge/link
+    'My videos' right on the card, without guessing via bvid in the frontend."""
 
     def test_marks_existing_video_and_leaves_others_untouched(self, db_session) -> None:
         db_session.add(User(id=1))
@@ -144,12 +144,12 @@ class TestAttachLibraryStatus:
         assert videos[1].video_id is None
 
     def test_empty_list_does_not_query(self, db_session) -> None:
-        # Không raise dù chưa có gì trong DB — bảo vệ nhánh rỗng (search 0 kết quả).
+        # Does not raise even with nothing in the DB — guards the empty branch (search with 0 results).
         trending_service._attach_library_status(db_session, [])
 
 
 class TestAttachChannelInfo:
-    """Phase 22 — ghi nhận kênh vừa thấy + gắn `channel_is_followed`."""
+    """Phase 22 — record the channels just seen + attach `channel_is_followed`."""
 
     def test_upserts_channel_and_marks_followed(self, db_session) -> None:
         from app.models.channel import Channel
@@ -169,20 +169,20 @@ class TestAttachChannelInfo:
 
         assert videos[0].channel_is_followed is True
         assert videos[1].channel_is_followed is False
-        # Kênh 99 chưa từng thấy trước đó phải được ghi nhận mới (upsert_seen_batch).
+        # Channel 99, never seen before, must be newly recorded (upsert_seen_batch).
         assert db_session.query(Channel).filter(Channel.channel_id == "99").count() == 1
 
     def test_videos_without_channel_id_are_skipped(self, db_session) -> None:
         videos = [trending_service.TrendingVideoRead(bvid="BV1", title="v1", channel_id=None)]
-        # Không raise dù không có channel_id nào để upsert.
+        # Does not raise even with no channel_id to upsert.
         trending_service._attach_channel_info(db_session, videos)
         assert videos[0].channel_is_followed is False
 
 
 class TestRunPeriodicSnapshot:
-    """Phase 20 — ghi snapshot chuyên mục đều đặn, tách khỏi việc ai đó có mở
-    trang Báo cáo xu hướng hay không (trước đây lịch sử chỉ dày lên khi có
-    người mở `GET /stats`)."""
+    """Phase 20 — record category snapshots regularly, separate from whether someone has opened the
+    trend report page (previously history only grew when someone opened
+    `GET /stats`)."""
 
     @pytest.mark.anyio
     async def test_writes_snapshot_for_followed_categories_only(
@@ -212,10 +212,10 @@ class TestRunPeriodicSnapshot:
             trending_service, "get_categories_stats", fake_get_categories_stats
         )
 
-        # Vòng lặp chạy vô hạn — raise CancelledError ngay ở lần ngủ đầu tiên
-        # để dừng sau đúng 1 vòng (checkpoint thật, không phụ thuộc lịch chạy
-        # của event loop như gọi `task.cancel()` từ trong 1 coroutine không
-        # await gì — coroutine đó không bao giờ nhường lại quyền điều khiển).
+        # The loop runs forever — raise CancelledError right at the first sleep
+        # to stop after exactly 1 round (a real checkpoint, not depending on the schedule
+        # of the event loop like calling `task.cancel()` from inside a coroutine that does not
+        # await anything — that coroutine never yields control back).
         async def raise_cancelled(*a, **k):
             raise asyncio.CancelledError
 
@@ -230,7 +230,7 @@ class TestRunPeriodicSnapshot:
     async def test_survives_exception_in_one_cycle(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """1 chu kỳ lỗi (Bilibili trục trặc, mất mạng...) không được giết vòng lặp."""
+        """1 failing cycle (Bilibili hiccup, network loss...) must not kill the loop."""
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
@@ -267,7 +267,7 @@ class TestRunPeriodicSnapshot:
         with pytest.raises(asyncio.CancelledError):
             await trending_service.run_periodic_snapshot(session_factory, interval_seconds=999)
 
-        # Vòng lặp không chết ở lần lỗi đầu — vẫn chạy tiếp tới lần 2 (ngủ 2 lần).
+        # The loop does not die at the first error — it keeps running to the 2nd (sleeping twice).
         assert call_count == 2
 
 
@@ -316,7 +316,7 @@ class TestGetChannelVideos:
 
         assert page.degraded is True
         assert page.videos == []
-        assert page.has_more is False  # degraded không được hứa còn trang sau
+        assert page.has_more is False  # degraded must not promise a next page
 
     @pytest.mark.anyio
     async def test_converts_space_video_items(

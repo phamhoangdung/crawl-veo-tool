@@ -7,21 +7,21 @@ from app.core.db import Base
 
 
 class Category(Base):
-    """Chuyên mục Bilibili, phát hiện tự động từ field `tid`/`tname` của API.
+    """Bilibili category, auto-discovered from the API's `tid`/`tname` fields.
 
-    Không hardcode danh sách: chuyên mục mới xuất hiện trong kết quả API sẽ được
-    thêm vào đây, nên tool tự bắt kịp khi Bilibili đổi phân loại.
+    The list is not hardcoded: a new category appearing in API results gets
+    added here, so the tool keeps up when Bilibili changes its taxonomy.
     """
 
     __tablename__ = "categories"
 
-    # tid do Bilibili cấp — dùng luôn làm khoá chính để upsert cho gọn.
+    # tid is issued by Bilibili — used directly as the primary key to keep upserts simple.
     rid: Mapped[int] = mapped_column(Integer, primary_key=True)
     name_zh: Mapped[str] = mapped_column(String)
-    # Tên tiếng Việt dịch sẵn; None nghĩa là chưa dịch, UI hiển thị name_zh.
+    # Pre-translated Vietnamese name; None means not translated yet, the UI shows name_zh.
     name_vi: Mapped[str | None] = mapped_column(String, default=None)
     group_name: Mapped[str | None] = mapped_column(String, default=None)
-    # Người dùng có theo dõi chuyên mục này ở trang Trending không.
+    # Whether the user follows this category on the Trending page.
     is_followed: Mapped[bool] = mapped_column(default=False)
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -34,10 +34,10 @@ class Category(Base):
 
 
 class CategorySnapshot(Base):
-    """Số liệu 1 chuyên mục tại 1 thời điểm.
+    """Metrics of one category at one point in time.
 
-    Bilibili chỉ trả số hiện tại, không có lịch sử — muốn vẽ đường xu hướng thì
-    phải tự tích luỹ. Mỗi lần mở trang Trending sẽ ghi thêm 1 điểm.
+    Bilibili only returns the current numbers, no history — to draw a trend line we
+    have to accumulate them ourselves. Every time the Trending page opens, one point is added.
     """
 
     __tablename__ = "category_snapshots"
@@ -53,8 +53,8 @@ class CategorySnapshot(Base):
     avg_plays: Mapped[int] = mapped_column(Integer, default=0)
     max_plays: Mapped[int] = mapped_column(Integer, default=0)
     total_likes: Mapped[int] = mapped_column(Integer, default=0)
-    # Tổng `pts` — điểm xếp hạng thật Bilibili tự tính, đáng tin hơn total_plays
-    # để so sánh "độ hot" giữa các thời điểm/chuyên mục (xem schemas/trending.py).
+    # Total `pts` — the real ranking score Bilibili computes itself, more reliable than total_plays
+    # for comparing "hotness" across time points/categories (see schemas/trending.py).
     total_pts: Mapped[int] = mapped_column(Integer, default=0)
-    # Lượt xem trung bình chia cho số ngày kể từ khi video đăng — xấp xỉ "độ nóng".
+    # Average views divided by days since the video was posted — approximates "heat".
     heat_score: Mapped[float] = mapped_column(Float, default=0.0)

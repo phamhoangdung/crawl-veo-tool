@@ -17,8 +17,8 @@ import { useEditorStore } from './store'
 const ZOOM_FACTOR = 1.5
 
 /**
- * Thanh công cụ timeline: undo/redo, zoom, và các thao tác trên clip đang chọn.
- * Thao tác cần biết vị trí playhead (cắt đôi) nhận `currentTime` từ preview.
+ * Timeline toolbar: undo/redo, zoom, and actions on the selected clip.
+ * Actions that need the playhead position (split in two) receive `currentTime` from the preview.
  */
 export function EditorToolbar({ currentTime }: { currentTime: number }) {
   const selected = useEditorStore((s) => s.selected)
@@ -36,8 +36,8 @@ export function EditorToolbar({ currentTime }: { currentTime: number }) {
 
   const track = selected ? operations.tracks[selected.trackIndex] : null
   const hasSelection = Boolean(selected && track)
-  // Đổi thứ tự chỉ có nghĩa với track video (vị trí suy ra từ thứ tự mảng);
-  // audio/overlay đã có track_start/start riêng nên kéo trực tiếp là đủ.
+  // Reordering only makes sense for the video track (position inferred from the array order);
+  // audio/overlay already have their own track_start/start so dragging directly is enough.
   const canReorder = hasSelection && track?.type === 'video' && track.clips.length > 1
 
   return (

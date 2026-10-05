@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 
-/** Vị trí node trên canvas, theo scene id. */
+/** Position of nodes on the canvas, by scene id. */
 export type NodePositions = Record<number, { x: number; y: number }>
 
 interface FlowState {
   positions: NodePositions
   past: NodePositions[]
   future: NodePositions[]
-  /** Snapshot lúc bắt đầu cử chỉ kéo; null khi không kéo. */
+  /** Snapshot at the start of a drag gesture; null when not dragging. */
   gestureSnapshot: NodePositions | null
   dirty: boolean
 
@@ -32,13 +32,13 @@ function samePositions(a: NodePositions, b: NodePositions): boolean {
 }
 
 /**
- * Store cho canvas dựng video.
+ * Store for the video-building canvas.
  *
- * Khác `features/editor/store.ts` ở chỗ undo/redo **gộp theo cử chỉ**: editor
- * push history mỗi `pointermove` nên một cú kéo tiêu hết stack 50 entry và undo
- * chỉ lùi được vài pixel. Ở đây `beginGesture`/`endGesture` (nối vào
- * `onNodeDragStart`/`onNodeDragStop` của React Flow) chỉ push đúng 1 entry cho
- * cả cú kéo.
+ * Unlike `features/editor/store.ts`, undo/redo here is **grouped by gesture**: the editor
+ * pushes history on every `pointermove` so one drag used up the whole 50-entry stack and undo
+ * could only step back a few pixels. Here `beginGesture`/`endGesture` (wired to
+ * `onNodeDragStart`/`onNodeDragStop` of React Flow) push exactly 1 entry for
+ * the whole drag.
  */
 export const useFlowStore = create<FlowState>()((set, get) => ({
   positions: {},
@@ -47,7 +47,7 @@ export const useFlowStore = create<FlowState>()((set, get) => ({
   gestureSnapshot: null,
   dirty: false,
 
-  // Nạp từ server: xoá history vì đây là mốc mới, không phải thao tác của người dùng.
+  // Load from the server: clear history because this is a new baseline, not a user action.
   setPositions: (positions) =>
     set({ positions, past: [], future: [], gestureSnapshot: null, dirty: false }),
 
@@ -58,7 +58,7 @@ export const useFlowStore = create<FlowState>()((set, get) => ({
     })),
 
   beginGesture: () => {
-    if (get().gestureSnapshot !== null) return // đã trong cử chỉ, không chồng lấn
+    if (get().gestureSnapshot !== null) return // already in a gesture, no overlap
     set((state) => ({ gestureSnapshot: state.positions }))
   },
 
@@ -66,7 +66,7 @@ export const useFlowStore = create<FlowState>()((set, get) => ({
     set((state) => {
       const snapshot = state.gestureSnapshot
       if (snapshot === null) return {}
-      // Click (không kéo) thì đừng tiêu 1 ô history.
+      // A click (no drag) should not spend 1 history slot.
       if (samePositions(snapshot, state.positions)) return { gestureSnapshot: null }
       return {
         past: [...state.past, snapshot].slice(-MAX_HISTORY),
@@ -77,7 +77,7 @@ export const useFlowStore = create<FlowState>()((set, get) => ({
 
   undo: () =>
     set((state) => {
-      // Không dùng `.at(-1)`: target TS của dự án chưa có Array.prototype.at.
+      // Do not use `.at(-1)`: the project's TS target does not have Array.prototype.at yet.
       const previous = state.past[state.past.length - 1]
       if (previous === undefined) return {}
       return {

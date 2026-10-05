@@ -14,7 +14,7 @@ from app.services import topic_service
 
 router = APIRouter(prefix="/api/topics", tags=["topics"])
 
-# MVP: 1 user cố định — xem app/api/crawl.py.
+# MVP: 1 fixed user — see app/api/crawl.py.
 _DEFAULT_USER_ID = 1
 
 

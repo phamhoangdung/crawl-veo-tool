@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-// Trang Profile của template tạm ẩn cùng các mục tài khoản — vào /settings thì
-// chuyển thẳng tới trang cài đặt thật đầu tiên.
+// The template's Profile page is temporarily hidden along with the account entries — going to /settings
+// redirects straight to the first real settings page.
 export const Route = createFileRoute('/_authenticated/settings/')({
   beforeLoad: () => {
     throw redirect({ to: '/settings/downloads' })

@@ -46,10 +46,10 @@ def download_video(video_id: int, variant: str = "dubbed", db: Session = Depends
 
 @router.get("/{video_id}/stream")
 def stream_video(video_id: int, variant: str = "original", db: Session = Depends(get_db)) -> FileResponse:
-    """Phát video trong thẻ <video> của trình duyệt.
+    """Play the video in the browser's <video> tag.
 
-    Khác `/download`: không đặt `filename` nên trình duyệt phát inline thay vì
-    tải xuống. FileResponse tự xử lý HTTP Range nên tua được.
+    Unlike `/download`: no `filename` is set so the browser plays inline instead of
+    downloading. FileResponse handles HTTP Range itself so seeking works.
     """
     video = db.get(Video, video_id)
     if video is None:

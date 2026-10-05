@@ -20,8 +20,8 @@ def db() -> Session:
 
 class TestCreateToken:
     def test_returns_plaintext_once_and_stores_only_hash(self, db: Session) -> None:
-        """Rò DB không được cho phép dùng lại token — chỉ lưu hash một chiều,
-        khác API key của provider (phải mã hoá 2 chiều vì cần giải mã để gửi đi)."""
+        """A DB leak must not allow reusing a token — only a one-way hash is stored,
+        unlike a provider API key (which must be two-way encrypted since it must be decrypted to be sent)."""
         issued = service.create_token(db, 1, "claude-code", ["gen:write"])
 
         assert issued.plain_token.startswith("sk_local_")
@@ -82,7 +82,7 @@ class TestRequireScope:
         service.require_scope(issued.record, "gen:write")
 
     def test_blocks_when_scope_missing(self, db: Session) -> None:
-        """Token chỉ đọc không được phép tiêu tiền — đây là lý do chính có scope."""
+        """A read-only token must not be allowed to spend money — this is the main reason scopes exist."""
         issued = service.create_token(db, 1, "readonly", ["assets:read"])
 
         with pytest.raises(service.McpTokenError, match="gen:write"):
@@ -100,7 +100,7 @@ class TestRevoke:
         assert service.revoke_token(db, 1, 999) is False
 
     def test_revoked_token_still_listed_for_audit(self, db: Session) -> None:
-        """Giữ lại record đã thu hồi để còn xem được đã từng cấp quyền gì cho ai."""
+        """Keep the revoked record so we can still see what access was ever granted to whom."""
         issued = service.create_token(db, 1, "agent", ["gen:write"])
         service.revoke_token(db, 1, issued.record.id)
 

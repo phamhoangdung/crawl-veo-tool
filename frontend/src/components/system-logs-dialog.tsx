@@ -16,7 +16,7 @@ import { Switch } from '@/components/ui/switch'
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void }
 
-/** Xem nhật ký backend ngay trong app — bản đóng gói không còn cửa sổ console. */
+/** View the backend log right inside the app — the packaged build no longer has a console window. */
 export function SystemLogsDialog({ open, onOpenChange }: Props) {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)

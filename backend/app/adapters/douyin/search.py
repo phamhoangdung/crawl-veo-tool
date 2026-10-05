@@ -1,18 +1,18 @@
-"""Tìm kiếm video Douyin theo từ khoá (Phase 3, nghiên cứu + verify 2026-09-15).
+"""Search Douyin videos by keyword (Phase 3, researched + verified 2026-09-15).
 
-**Phát hiện quan trọng khác hẳn phần tải video:** endpoint tìm kiếm
-(`aweme/v1/web/general/search/single/`) đòi hỏi:
-1. Chữ ký chống bot `a_bogus` trên MỌI query param (xem `_vendor_abogus.py`).
-2. **Cookie đăng nhập tài khoản thật** — không phải cookie ẩn danh như tải video.
-   Đã verify bằng request thật (2026-09-15, không cookie): server trả HTTP 200 với
-   `{"status_code": 2483, "status_msg": "请先登录，再继续搜索吧"}` ("vui lòng đăng
-   nhập trước khi tìm kiếm"). Chữ ký a_bogus đúng cú pháp (không bị chặn ở tầng
-   chống bot), nhưng bị chặn ở tầng nghiệp vụ vì thiếu phiên đăng nhập.
+**Important finding, very different from the video-download part:** the search endpoint
+(`aweme/v1/web/general/search/single/`) requires:
+1. The `a_bogus` anti-bot signature on EVERY query param (see `_vendor_abogus.py`).
+2. **A real logged-in account cookie** — not an anonymous cookie like video download.
+   Verified with a real request (2026-09-15, no cookie): the server returns HTTP 200 with
+   `{"status_code": 2483, "status_msg": "请先登录，再继续搜索吧"}` ("please log in
+   before searching"). The a_bogus signature is syntactically correct (not blocked at the
+   anti-bot layer), but blocked at the business layer for lack of a login session.
 
-Vì vậy đây là "probe" giống `douyin_service.probe_share_url()`: xây đúng request
-đã ký, phân loại lỗi "cần đăng nhập" tách biệt với lỗi khác, còn hình dạng JSON
-lúc **tìm kiếm thành công** (có cookie đăng nhập thật) vẫn CHƯA biết — không đoán,
-để phiên sau có cookie đăng nhập thật mới viết phần đọc kết quả.
+So this is a "probe" like `douyin_service.probe_share_url()`: it builds the correctly signed request,
+classifies the "login required" error separately from other errors, while the JSON shape
+of a **successful search** (with a real login cookie) is still UNKNOWN — we do not guess,
+leaving the result-reading part to a later session that has a real login cookie.
 """
 
 import base64
@@ -29,9 +29,9 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0"
 )
 
-# Khớp `BaseRequestModel` trong f2/apps/douyin/model.py (đối chiếu source thật,
-# không đoán) — các giá trị browser/version là chuỗi tĩnh mô phỏng 1 trình duyệt
-# Edge/Windows cụ thể, không cần cập nhật theo phiên bản trình duyệt thật của máy.
+# Matches `BaseRequestModel` in f2/apps/douyin/model.py (checked against the real source,
+# not guessed) — the browser/version values are static strings imitating a specific
+# Edge/Windows browser, with no need to update to the machine's real browser version.
 _BASE_PARAMS: dict[str, str | int] = {
     "device_platform": "webapp",
     "aid": "6383",
@@ -61,7 +61,7 @@ _BASE_PARAMS: dict[str, str | int] = {
     "round_trip_time": 100,
 }
 
-# Khớp `PostSearch` trong f2/apps/douyin/model.py.
+# Matches `PostSearch` in f2/apps/douyin/model.py.
 _SEARCH_DEFAULTS: dict[str, str | int] = {
     "search_channel": "aweme_general",
     "filter_selected": "{}",
@@ -75,26 +75,26 @@ _SEARCH_DEFAULTS: dict[str, str | int] = {
 
 
 class DouyinLoginRequiredError(RuntimeError):
-    """Douyin từ chối tìm kiếm vì thiếu phiên ĐĂNG NHẬP tài khoản thật — khác
-    với `DouyinCookieExpiredError` (cookie ẩn danh thiếu/hết hạn) ở chỗ hành
-    động cần làm là đăng nhập thật, không chỉ mở trang rồi copy cookie."""
+    """Douyin refuses the search for lack of a real logged-in ACCOUNT session — unlike
+    `DouyinCookieExpiredError` (anonymous cookie missing/expired) in that the
+    required action is to really log in, not just open the page and copy a cookie."""
 
 
 class DouyinSearchError(RuntimeError):
-    """Douyin trả `status_code` khác 0 và không phải lỗi "cần đăng nhập" đã biết."""
+    """Douyin returned a non-zero `status_code` that is not the known "login required" error."""
 
 
 def _gen_fake_ms_token(length: int = 107) -> str:
-    """msToken giả (không gọi endpoint sinh msToken thật của Douyin) — đã verify
-    bằng request thật (2026-09-15): msToken giả tự sinh nhận cùng phản hồi với
-    msToken thật lấy qua mssdk, tức bước này server không kiểm tra chặt. Tự sinh
-    tại chỗ tránh phải gọi thêm 1 endpoint mạng khác chỉ để lấy token."""
+    """A fake msToken (the real Douyin msToken-issuing endpoint is not called) — verified
+    with a real request (2026-09-15): a self-generated fake msToken got the same response as
+    a real msToken fetched via mssdk, i.e. the server does not check it strictly at this step. Generating it
+    locally avoids calling yet another network endpoint just to get a token."""
     raw = bytes(random.getrandbits(8) for _ in range(length))
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
 def _sign(params: dict[str, str | int]) -> str:
-    """Gắn `a_bogus` vào cuối chuỗi query, trả về URL đầy đủ đã ký."""
+    """Append `a_bogus` to the end of the query string, returning the full signed URL."""
     param_str = "&".join(f"{k}={v}" for k, v in params.items())
     browser_fp = BrowserFingerprintGenerator.generate_fingerprint("Edge")
     signed_params, _ab_value, _ua = ABogus(fp=browser_fp, user_agent=_USER_AGENT).generate_abogus(
@@ -104,12 +104,12 @@ def _sign(params: dict[str, str | int]) -> str:
 
 
 async def probe_search(keyword: str, cookie: str, *, offset: int = 0, count: int = 15) -> dict:
-    """Gọi thật endpoint tìm kiếm, trả về JSON thô hoặc ném lỗi đã phân loại.
+    """Really call the search endpoint, returning raw JSON or raising a classified error.
 
-    Ném `DouyinLoginRequiredError` khi Douyin báo cần đăng nhập (status_code
-    2483 — mã đã verify thật, không đoán), `DouyinSearchError` cho các
-    `status_code` khác 0 còn lại (chưa gặp thật, giữ nguyên message Douyin trả
-    về để dễ tra cứu khi gặp).
+    Raises `DouyinLoginRequiredError` when Douyin says login is required (status_code
+    2483 — a code verified for real, not guessed), and `DouyinSearchError` for the remaining
+    non-zero `status_code` values (never seen for real; Douyin's message is kept as is
+    to ease lookup when encountered).
     """
     params = {
         **_BASE_PARAMS,

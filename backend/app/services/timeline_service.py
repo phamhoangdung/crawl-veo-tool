@@ -1,7 +1,7 @@
-"""Lưu/đọc draft timeline + render bản cuối — xem docs/phases/phase-13-timeline-editor.md.
+"""Save/read the timeline draft + render the final version — see docs/phases/phase-13-timeline-editor.md.
 
-Nguyên tắc cốt lõi: AI chỉ gợi ý (điền sẵn `timeline_json`), render CHỈ xảy ra khi
-người dùng chủ động gọi `render_timeline_for_video` (nút riêng ở UI, không tự động).
+Core principle: AI only suggests (pre-fills `timeline_json`), rendering happens ONLY when
+the user explicitly calls `render_timeline_for_video` (a separate button in the UI, never automatic).
 """
 
 from dataclasses import dataclass
@@ -17,9 +17,9 @@ from app.models.video import Video
 
 _VALID_TRACK_TYPES = {"video", "audio", "overlay", "image", "blur"}
 
-# Timeline neo được vào 2 loại chủ thể: video crawl về (Phase 13) và dự án nhiều
-# cảnh dựng bằng AI (Phase 14/16). Dùng chung đúng một `timeline_json` + một
-# renderer, chỉ khác chỗ lấy thư mục làm việc.
+# A timeline anchors to 2 kinds of subjects: crawled videos (Phase 13) and multi-scene
+# projects built with AI (Phase 14/16). They share exactly one `timeline_json` + one
+# renderer, differing only in where the working directory comes from.
 SubjectType = Literal["video", "project"]
 
 
@@ -41,7 +41,7 @@ class ProjectNotFoundError(SubjectNotFoundError):
 
 @dataclass(frozen=True)
 class _Subject:
-    """Chủ thể giữ timeline — gói lại phần khác nhau giữa `Video` và dự án."""
+    """The subject holding the timeline — wraps the parts that differ between `Video` and a project."""
 
     row: Video | GenerationProject
     work_dir: Path
@@ -69,8 +69,8 @@ def _resolve_subject(db: Session, subject_type: SubjectType, subject_id: int) ->
 
 
 def validate_operations(operations: dict) -> None:
-    """Kiểm tra hình dạng timeline. Hàm thuần, không chạm DB — nên dùng được cho
-    cả timeline của `Video` (Phase 13) và của dự án nhiều cảnh (Phase 15)."""
+    """Validate the timeline shape. A pure function, touching no DB — so usable for
+    both the `Video` timeline (Phase 13) and the multi-scene project timeline (Phase 15)."""
     tracks = operations.get("tracks")
     if not isinstance(tracks, list) or not tracks:
         raise TimelineValidationError("Timeline cần trường 'tracks' dạng list, không rỗng")
@@ -97,8 +97,8 @@ def validate_operations(operations: dict) -> None:
                 if "text" not in clip or "start" not in clip or "end" not in clip:
                     raise TimelineValidationError("Clip overlay cần đủ 'text', 'start', 'end'")
             elif track_type == "blur":
-                # Vùng che logo/phụ đề gốc: cần đủ toạ độ và kích thước, thời
-                # gian là tuỳ chọn (không có = che suốt video).
+                # Region hiding the original logo/subtitles: needs full coordinates and size, the time
+                # range is optional (absent = hide for the whole video).
                 missing = [k for k in ("x", "y", "width", "height") if k not in clip]
                 if missing:
                     raise TimelineValidationError(
@@ -117,8 +117,8 @@ def validate_operations(operations: dict) -> None:
                         "Vùng làm mờ phải có cả 'start' và 'end', hoặc không có cái nào"
                     )
             elif track_type == "image":
-                # Logo/watermark chỉ bắt buộc có file nguồn: hiện suốt video là
-                # mặc định hợp lý, còn start/end là tuỳ chọn để hiện theo mốc.
+                # Logo/watermark only requires a source file: showing for the whole video is
+                # a sensible default, while start/end are optional to show by time range.
                 if "source" not in clip:
                     raise TimelineValidationError("Clip ảnh cần 'source'")
                 has_start = clip.get("start") is not None
@@ -146,8 +146,8 @@ def get_timeline_for(
 def save_timeline_for(
     db: Session, subject_type: SubjectType, subject_id: int, operations: dict
 ) -> dict:
-    """Lưu draft — validate hình dạng cơ bản nhưng KHÔNG render. Cho phép gọi
-    nhiều lần để sửa dần (mỗi lần gọi ghi đè toàn bộ draft cũ)."""
+    """Save the draft — validates the basic shape but does NOT render. Allows calling
+    many times to refine gradually (each call overwrites the whole old draft)."""
     subject = _resolve_subject(db, subject_type, subject_id)
     validate_operations(operations)
     subject.row.timeline_json = operations
@@ -158,8 +158,8 @@ def save_timeline_for(
 def render_timeline_for(
     db: Session, subject_type: SubjectType, subject_id: int
 ) -> Path:
-    """Render draft đã lưu thành file hoàn chỉnh — chỉ gọi khi người dùng chủ động
-    bấm nút render (không tự động sau save_timeline)."""
+    """Render the saved draft into a finished file — only called when the user explicitly
+    clicks the render button (never automatically after save_timeline)."""
     subject = _resolve_subject(db, subject_type, subject_id)
     if not subject.row.timeline_json:
         raise TimelineValidationError("Chưa có timeline nào được lưu cho mục này")
@@ -187,12 +187,12 @@ def render_timeline_for_video(db: Session, video_id: int) -> Path:
 
 
 def get_audio_stems(db: Session, video_id: int) -> dict[str, str | None]:
-    """Đường dẫn các track audio đã tách, để timeline dựng track riêng cho từng loại.
+    """Paths of the separated audio tracks, so the timeline builds a separate track for each kind.
 
-    Bước lồng tiếng (dubbing_service) ghi ra `voice_timeline.mp3` (giọng đọc
-    tiếng Việt) và demucs tách `no_vocals.wav` (nhạc nền gốc). Tách riêng thì
-    chỉnh được âm lượng từng loại — bản `dubbed.mp4` đã trộn sẵn nên không tách
-    lại được.
+    The dubbing step (dubbing_service) writes `voice_timeline.mp3` (the Vietnamese
+    narration) and demucs separates `no_vocals.wav` (the original background music). Kept separate,
+    each kind's volume can be adjusted — the `dubbed.mp4` is already mixed so it cannot be
+    separated again.
     """
     video = db.get(Video, video_id)
     if video is None:
@@ -207,6 +207,6 @@ def get_audio_stems(db: Session, video_id: int) -> dict[str, str | None]:
     return {
         "voice": str(voice) if voice.exists() else None,
         "background": str(background) if background.exists() else None,
-        # Bản trộn sẵn — dùng khi chưa tách được stem riêng.
+        # Pre-mixed version — used when separate stems could not be extracted.
         "mixed": video.dubbed_path,
     }

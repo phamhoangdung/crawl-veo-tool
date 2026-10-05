@@ -1,16 +1,16 @@
-"""Douyin: kiểm tra cấu hình cookie, thăm dò link chia sẻ, tải video, và tìm kiếm
-theo từ khoá (Phase 3).
+"""Douyin: check the cookie configuration, probe share links, download videos, and search
+by keyword (Phase 3).
 
-`probe_share_url()` gọi 2 bước công khai (resolve link ngắn → lấy detail) rồi báo
-lại hình dạng JSON nhận được — hữu ích để kiểm tra cookie/kết nối nhanh mà không
-tải cả video. `download_video()` giao việc bóc tách/tải cho yt-dlp (xem docstring
-`app.adapters.douyin.client`) thay vì tự đoán field JSON.
+`probe_share_url()` makes 2 public steps (resolve the short link → fetch detail) then reports
+the JSON shape received — useful for a quick cookie/connection check without
+downloading the whole video. `download_video()` delegates extraction/download to yt-dlp (see the docstring of
+`app.adapters.douyin.client`) instead of guessing JSON fields.
 
-`search_videos()` **cần cookie ĐĂNG NHẬP tài khoản thật**, khác với
-`probe_share_url()`/`download_video()` chỉ cần cookie ẩn danh — đã verify bằng
-request thật (xem docstring `app.adapters.douyin.search`). `DOUYIN_COOKIE` dùng
-chung cho cả 3 hàm; nếu chỉ cấu hình cookie ẩn danh thì `search_videos()` sẽ ném
-`DouyinLoginRequiredError` dù `is_configured()` trả `True`.
+`search_videos()` **needs a REAL logged-in account cookie**, unlike
+`probe_share_url()`/`download_video()` which only need an anonymous cookie — verified with a
+real request (see the docstring of `app.adapters.douyin.search`). `DOUYIN_COOKIE` is shared
+by all 3 functions; if only an anonymous cookie is configured then `search_videos()` will raise
+`DouyinLoginRequiredError` even though `is_configured()` returns `True`.
 """
 
 import asyncio
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class DouyinNotConfiguredError(RuntimeError):
-    """Chưa có cookie Douyin trong cấu hình."""
+    """No Douyin cookie in the configuration."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -40,12 +40,12 @@ def is_configured() -> bool:
 
 
 async def probe_share_url(share_url: str) -> dict:
-    """Thử resolve link chia sẻ và lấy metadata, báo lại cấu trúc JSON nhận được.
+    """Try to resolve the share link and fetch metadata, reporting the JSON structure received.
 
-    Ném `DouyinNotConfiguredError` khi chưa có cookie, `DouyinCookieExpiredError`
-    khi Douyin trả 401/403 (cookie hết hạn) — hai tình huống khác hẳn nhau nên
-    UI phải phân biệt được: một bên là "đi lấy cookie đi", bên kia là "cookie cũ
-    hết hạn rồi, lấy lại".
+    Raises `DouyinNotConfiguredError` when there is no cookie, `DouyinCookieExpiredError`
+    when Douyin returns 401/403 (cookie expired) — two very different situations so the
+    UI must tell them apart: one is "go get a cookie", the other is "the old cookie
+    expired, get it again".
     """
     if not is_configured():
         raise DouyinNotConfiguredError()
@@ -58,19 +58,19 @@ async def probe_share_url(share_url: str) -> dict:
     logger.info("Douyin probe thành công: aweme_id=%s", aweme_id)
     return {
         "aweme_id": aweme_id,
-        # Các khoá ở tầng ngoài cùng và trong `aweme_detail` — đủ để biết phải
-        # đọc vào đâu khi viết phần bóc tách link không watermark.
+        # The top-level keys and those inside `aweme_detail` — enough to know where to
+        # read when writing the no-watermark link extraction.
         "top_level_keys": sorted(detail.keys()),
         "detail_keys": sorted(_detail_node(detail).keys()),
     }
 
 
 async def download_video(share_url: str, dest_path: Path) -> dict:
-    """Resolve link chia sẻ rồi tải video không watermark về `dest_path` (.mp4).
+    """Resolve the share link then download the video without watermark to `dest_path` (.mp4).
 
-    Ném `DouyinNotConfiguredError` khi chưa có cookie, `DouyinCookieExpiredError`
-    khi cookie thiếu/hết hạn (yt-dlp báo "fresh cookies needed", hoặc HTTP 401/403
-    lúc resolve) — cùng 2 lỗi như `probe_share_url` để UI xử lý nhất quán.
+    Raises `DouyinNotConfiguredError` when there is no cookie, `DouyinCookieExpiredError`
+    when the cookie is missing/expired (yt-dlp reports "fresh cookies needed", or HTTP 401/403
+    during resolve) — the same 2 errors as `probe_share_url` so the UI handles them consistently.
     """
     if not is_configured():
         raise DouyinNotConfiguredError()
@@ -87,14 +87,14 @@ async def download_video(share_url: str, dest_path: Path) -> dict:
 
 
 async def search_videos(keyword: str, *, offset: int = 0, count: int = 15) -> dict:
-    """Tìm kiếm video theo từ khoá. Trả JSON thô từ Douyin (thành công) — hình
-    dạng JSON lúc thành công CHƯA biết (xem docstring `app.adapters.douyin.search`),
-    dùng để thăm dò cho tới khi có cookie đăng nhập thật.
+    """Search videos by keyword. Returns the raw JSON from Douyin (on success) — the JSON
+    shape on success is NOT known yet (see the docstring of `app.adapters.douyin.search`),
+    used for probing until a real login cookie is available.
 
-    Ném `DouyinNotConfiguredError` (chưa cấu hình cookie gì cả),
-    `DouyinLoginRequiredError` (có cookie nhưng không phải cookie đăng nhập —
-    cái phổ biến nhất sẽ gặp cho tới khi bạn tự đăng nhập Douyin thật),
-    `DouyinSearchError` (lỗi nghiệp vụ khác từ Douyin).
+    Raises `DouyinNotConfiguredError` (no cookie configured at all),
+    `DouyinLoginRequiredError` (a cookie exists but is not a login cookie —
+    the most common one you will hit until you log into Douyin for real),
+    `DouyinSearchError` (other business errors from Douyin).
     """
     if not is_configured():
         raise DouyinNotConfiguredError()
@@ -106,8 +106,8 @@ async def search_videos(keyword: str, *, offset: int = 0, count: int = 15) -> di
 
 
 def _detail_node(payload: dict) -> dict:
-    """Node chứa metadata video. Douyin từng đặt ở `aweme_detail`, cũng có khi ở
-    `aweme_list[0]` — thử cả hai thay vì giả định một cái rồi hỏng lặng lẽ."""
+    """The node holding the video metadata. Douyin used to put it at `aweme_detail`, and sometimes at
+    `aweme_list[0]` — try both instead of assuming one and failing silently."""
     node = payload.get("aweme_detail")
     if isinstance(node, dict):
         return node

@@ -27,15 +27,15 @@ def storage(tmp_path, monkeypatch) -> None:
 
 class TestValidateName:
     def test_rejects_names_that_break_mention_parsing(self) -> None:
-        """`name` được gọi trong prompt dạng `@ten` — khoảng trắng/dấu tiếng Việt
-        làm việc parse `@ten` không xác định, nên phải chặn từ lúc tạo."""
+        """`name` is called in prompts as `@name` — spaces/Vietnamese diacritics
+        make parsing `@name` ambiguous, so it must be blocked at creation."""
         for invalid in ["Có Dấu", "hai tu", "dau-gach", "@at", ""]:
             with pytest.raises(service.CharacterReferenceError):
                 service.validate_name(invalid)
 
     def test_accepts_slug_and_normalises_case(self) -> None:
-        """Chữ hoa được hạ về chữ thường thay vì báo lỗi — người dùng gõ `@Hero`
-        trong prompt vẫn khớp ref tên `hero` (mention parsing cũng lowercase)."""
+        """Uppercase is lowercased instead of raising an error — the user typing `@Hero`
+        in a prompt still matches the ref named `hero` (mention parsing also lowercases)."""
         assert service.validate_name("  Sunhui_Hero  ") == "sunhui_hero"
         assert service.validate_name("UPPER") == "upper"
         assert service.validate_name("prop_01") == "prop_01"
@@ -83,8 +83,8 @@ class TestResolveMentions:
         assert missing == ["khong_co"]
 
     def test_deduplicates_repeated_mentions(self, db: Session) -> None:
-        """Cùng 1 ref gọi nhiều lần trong prompt không được đính kèm ảnh 2 lần —
-        vừa tốn payload gửi lên provider, vừa có thể làm lệch kết quả."""
+        """The same ref called many times in a prompt must not attach its images twice —
+        it costs payload sent to the provider and may also skew the result."""
         service.create_reference(db, 1, "hero", [("a.png", _PNG)])
 
         found, missing = service.resolve_mentions(db, 1, "@hero and @hero again")

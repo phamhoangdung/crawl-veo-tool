@@ -1,9 +1,9 @@
-"""Theo dõi tác vụ đang chạy: tải video, tách lời thoại, dịch, lồng tiếng.
+"""Track running tasks: video download, transcription, translation, dubbing.
 
-Giữ trong bộ nhớ chứ không ghi DB: tiến độ chỉ có ý nghĩa trong lúc tác vụ chạy,
-mất khi restart là đúng (tác vụ dở cũng không tiếp tục được). Tool chạy 1 process
-nên dict thường là đủ; nếu sau này chuyển sang Celery/nhiều worker thì phải đổi
-sang Redis.
+Kept in memory rather than written to the DB: progress only matters while the task runs,
+and losing it on restart is correct (an interrupted task cannot continue anyway). The tool runs 1 process
+so a plain dict is enough; if it later moves to Celery/multiple workers it must change
+to Redis.
 """
 
 import threading
@@ -15,25 +15,25 @@ TaskKind = Literal[
     "download", "transcribe", "translate", "diarize", "dub", "burn", "render_project"
 ]
 
-# Tác vụ có thể thuộc về 1 video (pipeline crawl) hoặc 1 dự án nhiều cảnh
-# (Phase 15). Phân biệt tường minh bằng field riêng thay vì mã hoá vào id —
-# nhét project_id vào ô video_id sẽ khiến mọi query theo video_id lặng lẽ trả
-# rỗng thay vì báo lỗi.
+# A task can belong to 1 video (crawl pipeline) or 1 multi-scene project
+# (Phase 15). Distinguished explicitly with a separate field instead of encoding into the id —
+# stuffing project_id into the video_id slot would make every query by video_id silently return
+# empty instead of reporting an error.
 SubjectType = Literal["video", "project"]
 
 Stage = Literal[
     "pending",
-    # Phase 20 — tải hàng loạt qua màn Khám phá: video xếp hàng chờ tới lượt
-    # (đã set status=DOWNLOADING nhưng chưa lấy được slot semaphore).
+    # Phase 20 — bulk download via the Discovery screen: the video is queued waiting for its turn
+    # (status=DOWNLOADING already set but no semaphore slot obtained yet).
     "queued",
-    # Tải video — "video"/"audio" (2 chặng nối tiếp) không còn dùng kể từ
-    # Phase 21 (video+audio giờ tải song song), giữ lại trong Literal để không
-    # phá kiểu dữ liệu cũ, thay bằng 1 chặng "downloading" duy nhất.
+    # Video download — "video"/"audio" (2 sequential stages) are no longer used since
+    # Phase 21 (video+audio now download in parallel), kept in the Literal so the old
+    # data type is not broken, replaced by a single "downloading" stage.
     "video",
     "audio",
     "downloading",
     "merging",
-    # Các bước xử lý
+    # Processing steps
     "separating",
     "transcribing",
     "translating",
@@ -41,10 +41,10 @@ Stage = Literal[
     "synthesizing",
     "muxing",
     "burning",
-    # Dựng video dự án nhiều cảnh (Phase 15)
+    # Building a multi-scene project video (Phase 15)
     "generating",
     "rendering",
-    # Kết thúc
+    # Finished
     "done",
     "failed",
 ]
@@ -82,14 +82,14 @@ _KIND_LABELS: dict[str, str] = {
 
 @dataclass
 class TaskProgress:
-    # Với subject_type="project" thì đây là project_id, không phải video_id.
-    # Giữ nguyên tên field để không phải sửa toàn bộ API/frontend đã dùng nó.
+    # With subject_type="project" this is the project_id, not a video_id.
+    # The field name is kept so all the APIs/frontend already using it need not change.
     video_id: int
     title: str
     kind: TaskKind = "download"
     subject_type: SubjectType = "video"
     stage: Stage = "pending"
-    # Đếm theo byte (tải) hoặc theo đơn vị việc (số câu đã dịch/đọc).
+    # Counted in bytes (download) or in work units (sentences translated/read).
     current: int = 0
     total: int | None = None
     started_at: float = field(default_factory=time.monotonic)
@@ -98,7 +98,7 @@ class TaskProgress:
 
     @property
     def percent(self) -> float:
-        """Phần trăm của chặng hiện tại. Không biết tổng thì trả 0."""
+        """Percentage of the current stage. Returns 0 when the total is unknown."""
         if not self.total:
             return 0.0
         return min(100.0, self.current / self.total * 100)
@@ -121,10 +121,10 @@ class TaskProgress:
         return _KIND_LABELS.get(self.kind, self.kind)
 
 
-# Ghi từ trong tác vụ, đọc từ request khác — cần khoá.
+# Written from inside tasks, read from other requests — a lock is needed.
 _lock = threading.Lock()
-# Khoá theo (subject_type, subject_id, kind): 1 video chạy nhiều loại tác vụ
-# không ghi đè nhau, và dự án id=7 không đụng video id=7.
+# Keyed by (subject_type, subject_id, kind): 1 video running several kinds of tasks
+# does not overwrite them, and project id=7 does not touch video id=7.
 _active: dict[tuple[str, int, str], TaskProgress] = {}
 
 
@@ -156,7 +156,7 @@ def set_stage(
         if progress is None:
             return
         progress.stage = stage
-        # Mỗi chặng đếm lại từ đầu để phần trăm phản ánh đúng chặng đang chạy.
+        # Each stage counts from the start again so the percentage reflects the running stage.
         progress.current = 0
         progress.total = total
         progress.started_at = time.monotonic()
@@ -200,7 +200,7 @@ def clear(
     *,
     subject_type: SubjectType = "video",
 ) -> None:
-    """Bỏ 1 tác vụ khỏi danh sách; không truyền kind thì bỏ mọi tác vụ của video."""
+    """Remove 1 task from the list; without kind, remove every task of the video."""
     with _lock:
         if kind is not None:
             _active.pop((subject_type, video_id, kind), None)
@@ -210,7 +210,7 @@ def clear(
 
 
 def clear_finished() -> int:
-    """Dọn mọi tác vụ đã kết thúc. Trả về số mục đã bỏ."""
+    """Clear every finished task. Returns the number of entries removed."""
     with _lock:
         keys = [key for key, p in _active.items() if not p.is_running]
         for key in keys:
@@ -227,6 +227,6 @@ def is_running(
 
 
 def snapshot() -> list[TaskProgress]:
-    """Bản sao danh sách tác vụ để trả cho API mà không giữ khoá lâu."""
+    """A copy of the task list to return to the API without holding the lock long."""
     with _lock:
         return list(_active.values())

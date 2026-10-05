@@ -16,17 +16,17 @@ from app.services import download_service, progress_service
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
-# Nhịp kiểm tra thay đổi ở phía server. Chỉ gửi xuống client khi dữ liệu thực sự
-# khác lần trước, nên nhịp này nhanh mà không tạo lưu lượng vô ích.
+# Interval for checking changes on the server side. Only sends to the client when the data really
+# differs from last time, so this fast interval creates no useless traffic.
 _STREAM_TICK_SECONDS = 0.5
 
-# Không có tác vụ nào chạy thì vẫn phải nhả comment định kỳ, nếu không proxy hoặc
-# trình duyệt có thể coi kết nối là chết và đóng nó.
+# When no task is running we still must emit a periodic comment, otherwise a proxy or the
+# browser may consider the connection dead and close it.
 _HEARTBEAT_SECONDS = 15.0
 
 
 class TaskProgressRead(BaseModel):
-    # Với subject_type="project" thì đây là project_id (Phase 16).
+    # With subject_type="project" this is the project_id (Phase 16).
     video_id: int
     subject_type: str = "video"
     title: str
@@ -38,13 +38,13 @@ class TaskProgressRead(BaseModel):
     current: int
     total: int | None
     is_running: bool
-    # Chỉ có nghĩa với tải video (byte/giây); các bước khác đếm theo số câu.
+    # Only meaningful for video downloads (bytes/second); other steps count by sentences.
     speed_per_sec: float
     error: str | None
 
 
 class StorageLocationRead(BaseModel):
-    """Nơi file được lưu — tool chạy local nên trả đường dẫn thật trên máy."""
+    """Where the files are stored — the tool runs locally so it returns the real path on the machine."""
 
     storage_root: str
     video_path: str | None = None
@@ -54,7 +54,7 @@ class StorageLocationRead(BaseModel):
 
 @router.get("/progress", response_model=list[TaskProgressRead])
 def list_progress() -> list[TaskProgressRead]:
-    """Tiến độ mọi tác vụ đang chạy (tải, tách lời, dịch, lồng tiếng)."""
+    """Progress of every running task (download, transcribe, translate, dub)."""
     return [
         TaskProgressRead(
             video_id=p.video_id,
@@ -81,17 +81,17 @@ def _serialize_tasks() -> list[dict]:
 
 @router.get("/stream")
 async def stream_progress(request: Request) -> StreamingResponse:
-    """Đẩy tiến độ qua Server-Sent Events để client không phải poll.
+    """Push progress over Server-Sent Events so the client does not have to poll.
 
-    Chỉ gửi khi dữ liệu đổi so với lần gửi trước. Client dùng `EventSource`, nên
-    trình duyệt tự kết nối lại khi đứt — không cần xử lý reconnect ở frontend.
+    Sends only when the data changed since the last send. The client uses `EventSource`, so the
+    browser reconnects by itself when dropped — no reconnect handling needed in the frontend.
     """
 
     async def event_stream() -> AsyncIterator[str]:
         last_payload: str | None = None
         since_heartbeat = 0.0
 
-        # Gửi ngay trạng thái hiện tại để client không phải chờ tick đầu tiên.
+        # Send the current state right away so the client does not wait for the first tick.
         while True:
             if await request.is_disconnected():
                 break
@@ -103,8 +103,8 @@ async def stream_progress(request: Request) -> StreamingResponse:
                 yield f"data: {payload}\n\n"
             elif since_heartbeat >= _HEARTBEAT_SECONDS:
                 since_heartbeat = 0.0
-                # Dòng bắt đầu bằng ':' là comment của SSE — giữ kết nối sống,
-                # client bỏ qua.
+                # A line starting with ':' is an SSE comment — keeps the connection alive,
+                # the client ignores it.
                 yield ": keep-alive\n\n"
 
             await asyncio.sleep(_STREAM_TICK_SECONDS)
@@ -115,7 +115,7 @@ async def stream_progress(request: Request) -> StreamingResponse:
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            # Tắt buffering của proxy (nginx...) để event tới ngay thay vì bị gom.
+            # Turn off proxy (nginx...) buffering so events arrive right away instead of being batched.
             "X-Accel-Buffering": "no",
         },
     )
@@ -123,13 +123,13 @@ async def stream_progress(request: Request) -> StreamingResponse:
 
 @router.delete("/progress/finished")
 def clear_finished_progress() -> dict[str, int]:
-    """Dọn mọi tác vụ đã kết thúc khỏi danh sách."""
+    """Clear every finished task from the list."""
     return {"cleared": progress_service.clear_finished()}
 
 
 @router.delete("/progress/{video_id}")
 def clear_progress(video_id: int, kind: str | None = None) -> dict[str, bool]:
-    """Bỏ 1 tác vụ khỏi danh sách; không truyền kind thì bỏ mọi tác vụ của video."""
+    """Remove 1 task from the list; without kind, remove every task of the video."""
     progress_service.clear(video_id, kind)  # type: ignore[arg-type]
     return {"ok": True}
 
@@ -155,10 +155,10 @@ def storage_location(video_id: int | None = None, db: Session = Depends(get_db))
 
 @router.post("/reveal")
 def reveal_in_file_manager(video_id: int | None = None, db: Session = Depends(get_db)) -> dict[str, str]:
-    """Mở thư mục chứa file trong Finder/Explorer.
+    """Open the folder containing the file in Finder/Explorer.
 
-    Chỉ dùng được vì tool chạy local trên máy người dùng. Đường dẫn luôn lấy từ
-    DB, không nhận từ client — tránh biến endpoint này thành công cụ mở file tuỳ ý.
+    Only possible because the tool runs locally on the user's machine. The path is always taken from the
+    DB, never accepted from the client — to avoid turning this endpoint into an arbitrary file opener.
     """
     if video_id is None:
         target = download_service.get_storage_root()
@@ -178,7 +178,7 @@ def reveal_in_file_manager(video_id: int | None = None, db: Session = Depends(ge
 
     try:
         if sys.platform == "darwin":
-            # -R chọn sẵn file trong Finder thay vì chỉ mở thư mục.
+            # -R preselects the file in Finder instead of just opening the folder.
             args = ["open", "-R", str(target)] if target.is_file() else ["open", str(target)]
         elif sys.platform == "win32":
             args = (

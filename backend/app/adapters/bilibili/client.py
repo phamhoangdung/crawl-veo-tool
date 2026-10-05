@@ -20,20 +20,20 @@ class BilibiliApiError(RuntimeError):
 
 
 class BilibiliRiskControlError(BilibiliApiError):
-    """Phase 22: `x/space/wbi/arc/search` (video của 1 kênh) bị Bilibili siết
-    risk-control nặng hơn cả `x/web-interface/view` — trả HTTP 412 hoặc mã lỗi
-    -352 (đã ghi nhận qua tài liệu cộng đồng, xem
-    docs/phases/phase-22-channel-follow.md mục Khảo sát #3). KHÔNG phải lỗi
-    "kênh này không có video" — caller phải phân biệt được để hiện đúng thông
-    báo "đang bị giới hạn" thay vì "kênh trống", và KHÔNG được coi đây là lỗi
-    500 làm vỡ cả popup xem trước."""
+    """Phase 22: `x/space/wbi/arc/search` (a channel's videos) is hit by Bilibili's
+    risk control even harder than `x/web-interface/view` — it returns HTTP 412 or error code
+    -352 (documented by community write-ups, see
+    docs/phases/phase-22-channel-follow.md, Survey #3). It is NOT the
+    "this channel has no videos" case — the caller must be able to tell them apart to show the right
+    "currently rate limited" message instead of "empty channel", and must NOT treat this as a
+    500 error that breaks the whole preview popup."""
 
     def __init__(self, code: int, message: str) -> None:
         super().__init__(code, message)
 
 
 def _strip_highlight_tags(title: str) -> str:
-    """Search API đôi khi bọc từ khoá khớp trong <em class="keyword">...</em>."""
+    """The search API sometimes wraps matched keywords in <em class="keyword">...</em>."""
     return _EM_TAG_RE.sub("", title)
 
 
@@ -82,7 +82,7 @@ class BilibiliClient:
         return payload["data"]["list"]
 
     async def get_online_list(self) -> list[dict]:
-        """Video đang được xem nhiều — mỗi item kèm tid/tname, dùng để phát hiện chuyên mục."""
+        """Currently popular videos — each item carries tid/tname, used to discover categories."""
         payload = await self._get_json(
             "https://api.bilibili.com/x/web-interface/online/list", {}
         )
@@ -96,8 +96,8 @@ class BilibiliClient:
         return payload["data"]
 
     async def get_video_cid(self, bvid: str) -> int:
-        """`x/web-interface/view` hay bị chặn 412 (risk control) — dùng `pagelist` thay thế,
-        cùng cho ra cid nhưng ít bị chặn hơn. Lấy cid của phần đầu tiên (video 1 phần)."""
+        """`x/web-interface/view` is often blocked with 412 (risk control) — use `pagelist` instead,
+        which gives the same cid but is blocked less. Takes the cid of the first part (single-part video)."""
         payload = await self._get_json(
             "https://api.bilibili.com/x/player/pagelist", {"bvid": bvid}
         )
@@ -113,9 +113,9 @@ class BilibiliClient:
         return payload["data"]["dash"]
 
     async def get_related(self, bvid: str) -> list[dict]:
-        """Video liên quan (Phase 22) — endpoint công khai, KHÔNG cần ký WBI,
-        rủi ro risk-control thấp (cùng API dùng cho sidebar "video liên quan"
-        trên chính trang xem Bilibili, traffic công khai rất lớn)."""
+        """Related videos (Phase 22) — a public endpoint, NO WBI signature needed,
+        low risk-control exposure (the same API used for the "related videos" sidebar
+        on Bilibili's own watch page, with very large public traffic)."""
         payload = await self._get_json(
             "https://api.bilibili.com/x/web-interface/archive/related", {"bvid": bvid}
         )
@@ -124,10 +124,10 @@ class BilibiliClient:
     async def get_space_videos(
         self, mid: str, page: int = 1, page_size: int = 25
     ) -> list[dict]:
-        """Video khác trong 1 kênh (Phase 22) — cần ký WBI, và bị Bilibili siết
-        risk-control nặng (xem docstring `BilibiliRiskControlError`). Bọc lỗi
-        HTTP 412 lẫn mã lỗi -352 thành `BilibiliRiskControlError` để caller
-        phân biệt được với "kênh thật sự không có video"."""
+        """Other videos of a channel (Phase 22) — needs a WBI signature, and Bilibili applies heavy
+        risk control (see the `BilibiliRiskControlError` docstring). Wraps both
+        HTTP 412 and error code -352 into `BilibiliRiskControlError` so the caller can
+        tell it apart from "the channel truly has no videos"."""
         params = await wbi.sign_params(
             self._client, {"mid": mid, "pn": page, "ps": page_size, "order": "pubdate"}
         )

@@ -1,15 +1,15 @@
 import { useCallback, type RefObject } from 'react'
 
 /**
- * Lifecycle kéo-thả dùng chung cho các lớp kéo-thả trên khung preview
- * (OverlayLayer/BlurRegionLayer/ImageLayer): đo container lúc `pointerdown`,
- * gắn `pointermove`/`pointerup` vào `window` (để vẫn nhận sự kiện khi chuột
- * rời khỏi phần tử gốc), tự gỡ listener khi kéo xong — kèm cleanup khi
- * component unmount giữa chừng cú kéo (vd người dùng chuyển tab lúc đang kéo),
- * điều mà 3 bản tự viết tay trước đây đều bỏ sót.
+ * Drag-and-drop lifecycle shared by the drag layers on the preview frame
+ * (OverlayLayer/BlurRegionLayer/ImageLayer): measures the container at `pointerdown`,
+ * attaches `pointermove`/`pointerup` to `window` (so events are still received when the mouse
+ * leaves the source element), removes the listeners itself when the drag ends — plus cleanup when
+ * the component unmounts midway through a drag (e.g. the user switches tab while dragging),
+ * which the 3 hand-written versions before all missed.
  *
- * Không cố gộp luôn công thức tính toạ độ (fraction [0,1] vs pixel thật) vì
- * mỗi nơi dùng khác nhau thật sự — chỉ gộp phần lifecycle lặp lại y hệt.
+ * It does not try to also merge the coordinate formulas (fraction [0,1] vs real pixels) because
+ * each place really differs — only the identically repeated lifecycle part is merged.
  */
 export function usePointerDrag(containerRef: RefObject<HTMLElement | null>) {
   return useCallback(

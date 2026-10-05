@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "VieDub Studio",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "identifier": "com.viedubstudio.app",
   "build": {
     "frontendDist": "../frontend/dist",
@@ -28,7 +28,8 @@
     "active": true,
     "targets": ["nsis"],
     "windows": {
-      "webviewInstallMode": { "type": "embedBootstrapper" }
+      "webviewInstallMode": { "type": "embedBootstrapper" },
+      "nsis": { "compression": "lzma", "installMode": "currentUser" }
     },
     "icon": [
       "icons/32x32.png",

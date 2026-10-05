@@ -16,30 +16,30 @@ interface EditorStore {
   operations: TimelineOperations
   selected: Selection | null
   /**
-   * Yêu cầu tua video tới giây này. Timeline đặt giá trị khi người dùng chọn
-   * clip; khung preview hưởng ứng rồi tự xoá. Dùng `{seconds, nonce}` chứ không
-   * phải số trần để chọn lại đúng clip cũ vẫn tua lại được.
+   * Request to seek the video to this second. The timeline sets the value when the user selects a
+   * clip; the preview frame responds and then clears it itself. Uses `{seconds, nonce}` rather than
+   * a bare number so re-selecting the same old clip still seeks again.
    */
   seekRequest: { seconds: number; nonce: number } | null
   requestSeek: (seconds: number) => void
   consumeSeek: () => void
-  /** Số pixel mỗi giây trên timeline — zoom in/out để làm việc với clip ngắn. */
+  /** Pixels per second on the timeline — zoom in/out to work with short clips. */
   pxPerSecond: number
   setZoom: (pxPerSecond: number) => void
-  /** Lịch sử để undo/redo; chỉ lưu `operations`, không lưu vùng chọn. */
+  /** History for undo/redo; stores only `operations`, not the selection. */
   past: TimelineOperations[]
   future: TimelineOperations[]
   undo: () => void
   redo: () => void
-  /** Snapshot lúc bắt đầu 1 cử chỉ kéo (drag); null khi không đang kéo. */
+  /** Snapshot at the start of a drag gesture; null when not dragging. */
   gestureSnapshot: TimelineOperations | null
   beginGesture: () => void
   endGesture: () => void
-  /** Cắt đôi clip tại giây `atSeconds` (tính trên timeline output). */
+  /** Split a clip in two at second `atSeconds` (measured on the output timeline). */
   splitClip: (trackIndex: number, clipIndex: number, atSeconds: number) => void
   duplicateClip: (trackIndex: number, clipIndex: number) => void
   moveClip: (trackIndex: number, clipIndex: number, direction: -1 | 1) => void
-  /** Thêm clip vào track có sẵn cùng type+role, hoặc tạo track mới nếu chưa có. */
+  /** Add a clip to an existing track of the same type+role, or create a new track if there is none. */
   addClipToTrack: (
     type: TimelineTrack['type'],
     clip: TimelineClip,
@@ -47,18 +47,18 @@ interface EditorStore {
   ) => void
   setOperations: (operations: TimelineOperations) => void
   updateClip: (trackIndex: number, clipIndex: number, patch: Partial<TimelineClip>) => void
-  /** Như `updateClip` nhưng KHÔNG đẩy lịch sử — dùng trong lúc đang kéo
-   * (`pointermove`), giữa `beginGesture`/`endGesture`. `updateClip` đẩy 1 bước
-   * lịch sử mỗi lần gọi nên trước đây 1 cú kéo dài (~60-120 lần/giây) tiêu hết
-   * cả 50 bước lịch sử — Undo sau khi kéo gần như vô dụng (xem `endGesture`). */
+  /** Like `updateClip` but does NOT push history — used while dragging
+   * (`pointermove`), between `beginGesture`/`endGesture`. `updateClip` pushes 1 history
+   * step per call so previously one long drag (~60-120 times/second) used up
+   * all 50 history steps — Undo after a drag was nearly useless (see `endGesture`). */
   updateClipDuringGesture: (
     trackIndex: number,
     clipIndex: number,
     patch: Partial<TimelineClip>
   ) => void
-  /** Áp cùng 1 patch cho MỌI clip của 1 track, trong 1 bước lịch sử duy nhất —
-   * dùng cho style áp cả track (vd font phụ đề). Gọi `updateClip` lặp lại từng
-   * clip sẽ đẩy N bước undo riêng cho 1 thay đổi khái niệm là 1 bước. */
+  /** Apply the same patch to EVERY clip of a track, in a single history step —
+   * used for track-wide style (e.g. subtitle font). Calling `updateClip` repeatedly per
+   * clip would push N separate undo steps for one change that is conceptually 1 step. */
   updateTrackClips: (trackIndex: number, patch: Partial<TimelineClip>) => void
   removeClip: (trackIndex: number, clipIndex: number) => void
   select: (selection: Selection) => void
@@ -67,7 +67,7 @@ interface EditorStore {
 
 const MAX_HISTORY = 50
 
-/** Áp thay đổi lên operations, đẩy bản cũ vào lịch sử để undo được. */
+/** Apply a change to operations, pushing the old version into history so it can be undone. */
 function withHistory(
   state: { operations: TimelineOperations; past: TimelineOperations[] },
   next: TimelineOperations
@@ -75,7 +75,7 @@ function withHistory(
   return {
     operations: next,
     past: [...state.past, state.operations].slice(-MAX_HISTORY),
-    // Thao tác mới làm mất nhánh redo — giống mọi editor khác.
+    // A new action discards the redo branch — like every other editor.
     future: [] as TimelineOperations[],
   }
 }
@@ -147,14 +147,14 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       }
 
       const track: TimelineTrack = { type, clips: [clip], ...(role ? { role } : {}) }
-      // Track video phải đứng đầu: intro/outro nối vào đúng chỗ và renderer lấy
-      // track video đầu tiên làm nền.
+      // The video track must come first: intro/outro join in the right place and the renderer takes the
+      // first video track as the base.
       const tracks =
         type === 'video' ? [track, ...state.operations.tracks] : [...state.operations.tracks, track]
       return withHistory(state, { tracks })
     }),
 
-  // Nạp timeline mới (từ server hoặc gợi ý AI) — xoá lịch sử vì đây là điểm bắt đầu mới.
+  // Load a new timeline (from the server or an AI suggestion) — clear history because this is a new starting point.
   setOperations: (operations) =>
     set({ operations, selected: null, past: [], future: [] }),
 
@@ -178,7 +178,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     })),
 
   beginGesture: () => {
-    if (get().gestureSnapshot !== null) return // đã trong cử chỉ, không chồng lấn
+    if (get().gestureSnapshot !== null) return // already in a gesture, no overlap
     set((state) => ({ gestureSnapshot: state.operations }))
   },
 
@@ -186,10 +186,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((state) => {
       const snapshot = state.gestureSnapshot
       if (snapshot === null) return {}
-      // Click (không thực kéo) thì đừng tiêu 1 ô lịch sử — so sánh nông đủ dùng
-      // vì object gốc chỉ đổi khi có patch thật (mapTrack luôn tạo mảng/track
-      // mới), snapshot khác state.operations về REFERENCE ngay khi có ít nhất 1
-      // `updateClipDuringGesture` xảy ra.
+      // A click (not a real drag) should not spend 1 history slot — a shallow compare is enough
+      // because the original object only changes when there is a real patch (mapTrack always creates a new
+      // array/track), and the snapshot differs from state.operations by REFERENCE as soon as at least 1
+      // `updateClipDuringGesture` has happened.
       if (snapshot === state.operations) return { gestureSnapshot: null }
       return {
         past: [...state.past, snapshot].slice(-MAX_HISTORY),
@@ -216,12 +216,12 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       if (!rawClip) return state
       const clip = asTimed(rawClip)
 
-      // `atSeconds` là vị trí trên timeline output; quy về offset trong file nguồn.
+      // `atSeconds` is the position on the output timeline; convert it to an offset within the source file.
       const offsetInClip =
         track.type === 'audio' ? atSeconds - (clip.track_start ?? 0) : atSeconds - clip.start
       const splitAt = clip.start + offsetInClip
 
-      // Cắt sát mép thì bỏ qua: tạo clip 0 giây chỉ làm rối timeline.
+      // Cutting right at an edge is skipped: creating a 0-second clip only clutters the timeline.
       if (splitAt <= clip.start + 0.05 || splitAt >= clip.end - 0.05) return state
 
       const first = { ...clip, end: splitAt }
@@ -252,7 +252,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       if (!rawClip) return state
       const clip = asTimed(rawClip)
 
-      // Bản sao audio đặt ngay sau bản gốc để không chồng tiếng lên nhau.
+      // The audio copy is placed right after the original so the sounds do not overlap each other.
       const copy =
         track.type === 'audio'
           ? { ...clip, track_start: (clip.track_start ?? 0) + (clip.end - clip.start) }

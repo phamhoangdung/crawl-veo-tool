@@ -15,11 +15,11 @@ class SceneStatus(str, enum.Enum):
 
 
 class GenerationProject(Base):
-    """Một dự án video nhiều cảnh (Phase 15).
+    """A multi-scene video project (Phase 15).
 
-    Tách khỏi bảng `videos` có chủ đích: `Video` là video crawl về (bắt buộc có
-    `platform`/`source_url`/`job_id`, đi qua state machine tải → dịch → lồng
-    tiếng), còn dự án này sinh từ đầu bằng AI nên không có gì trong số đó.
+    Deliberately separate from the `videos` table: `Video` is a crawled video (it must have
+    `platform`/`source_url`/`job_id` and goes through the download → translate → dub
+    state machine), while this project is generated from scratch by AI so it has none of those.
     """
 
     __tablename__ = "generation_projects"
@@ -27,14 +27,14 @@ class GenerationProject(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     title: Mapped[str] = mapped_column()
-    # Chỉ dùng để đặt tên file (EP001_001.png) — KHÔNG phải khoá quan hệ.
-    # Mọi truy vấn cần đúng phải đi qua FK của Scene.
+    # Only used to name files (EP001_001.png) — NOT a relational key.
+    # Any query that needs correctness must go through the Scene FK.
     output_prefix: Mapped[str] = mapped_column()
     rendered_path: Mapped[str | None] = mapped_column(default=None)
     canvas_viewport: Mapped[dict | None] = mapped_column(JSON, default=None)
-    # Timeline tinh chỉnh sau khi dựng thô (Phase 13 mở cho dự án AI). Tách khỏi
-    # `rendered_path` có chủ đích: bản dựng thô từ canvas là đầu vào của editor,
-    # còn `timeline_rendered_path` là bản cuối sau khi kéo-chỉnh.
+    # Timeline refined after the rough cut (Phase 13 opened to AI projects). Kept apart from
+    # `rendered_path` on purpose: the rough cut from the canvas is the editor's input,
+    # while `timeline_rendered_path` is the final version after drag-editing.
     timeline_json: Mapped[dict | None] = mapped_column(JSON, default=None)
     timeline_rendered_path: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(
@@ -48,12 +48,12 @@ class GenerationProject(Base):
 
 
 class Scene(Base):
-    """Một phân cảnh trong dự án.
+    """One scene in the project.
 
-    Không có bảng `edges` riêng: với chuỗi tuyến tính, cạnh nối vào cảnh này
-    được xác định đủ bởi `order_index` + `transition_in` + `chain_from_previous`.
-    Bảng edges sẽ cho phép vẽ nhánh mà `ffmpeg.render_timeline` không diễn đạt
-    được (nó nhận đúng 1 track video).
+    There is no separate `edges` table: for a linear chain, the edge entering this scene
+    is fully determined by `order_index` + `transition_in` + `chain_from_previous`.
+    An edges table would allow branches that `ffmpeg.render_timeline` cannot express
+    (it accepts exactly 1 video track).
     """
 
     __tablename__ = "scenes"
@@ -73,12 +73,12 @@ class Scene(Base):
     )
 
     duration_seconds: Mapped[float] = mapped_column(Float, default=5.0)
-    # Thuộc CẠNH đi vào cảnh này, không phải cảnh trước — cảnh đầu tiên luôn "cut".
+    # Belongs to the EDGE entering this scene, not the previous scene — the first scene is always "cut".
     transition_in: Mapped[str] = mapped_column(String, default="cut")
     transition_duration: Mapped[float] = mapped_column(Float, default=1.0)
-    # Nối frame: lấy khung cuối clip cảnh trước làm keyframe mở đầu cảnh này.
+    # Frame chaining: use the last frame of the previous scene's clip as the opening keyframe of this one.
     chain_from_previous: Mapped[bool] = mapped_column(default=True)
-    # Dùng ảnh tĩnh + chuyển động camera (miễn phí) thay vì sinh video AI.
+    # Use a still image + camera motion (free) instead of generating AI video.
     use_ken_burns: Mapped[bool] = mapped_column(default=True)
     ken_burns_motion: Mapped[str] = mapped_column(String, default="zoom_in")
 

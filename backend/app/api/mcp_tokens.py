@@ -32,10 +32,10 @@ def _to_read(record: McpAccessToken) -> McpTokenRead:
 
 
 def _mcp_config(plain_token: str) -> dict:
-    """Config dán thẳng vào Claude Code/Codex.
+    """Config to paste straight into Claude Code/Codex.
 
-    Tự sinh kèm đường dẫn Python thật đang chạy — viết tay chỗ này rất dễ sai
-    (đó cũng là lý do GOHA hiện sẵn khối config để copy, xem research Phần 6.2).
+    Auto-generated with the real Python path currently running — writing this by hand is very error-prone
+    (which is also why GOHA shows a ready config block to copy, see research Part 6.2).
     """
     backend_dir = Path(__file__).resolve().parent.parent.parent
     return {

@@ -23,7 +23,7 @@ export const sidebarData: SidebarData = {
   },
   navGroups: [
     {
-      // Nhóm theo luồng làm việc thật: tìm video → xử lý → lấy kết quả.
+      // Grouped by the real workflow: find videos → process → get the result.
       title: 'Nội dung',
       items: [
         {
@@ -32,17 +32,17 @@ export const sidebarData: SidebarData = {
           icon: LayoutDashboard,
         },
         {
-          // Phase 20: gộp "Xu hướng" + "Tìm & tải" — trước đây tách 2 trang
-          // khiến tick chọn ở Trending rồi "thêm vào hàng đợi" ở Crawl không
-          // còn màn hình nào hiển thị lại được (xem
+          // Phase 20: merged "Trends" + "Find & download" — previously 2 separate pages
+          // meant ticking in Trending then "adding to the queue" in Crawl had
+          // no screen left that could show it again (see
           // docs/phases/phase-20-discovery-workspace.md).
           title: 'Khám phá video',
           url: '/discover',
           icon: TrendingUp,
         },
         {
-          // Trước đây "Chủ đề quan tâm" + biểu đồ chuyên mục (bên trong trang
-          // Xu hướng cũ) tách rời — giờ gộp thành 2 tab của 1 trang báo cáo.
+          // Previously "Topics of interest" + the category chart (inside the old
+          // Trends page) were separate — now merged into 2 tabs of 1 report page.
           title: 'Báo cáo xu hướng',
           url: '/insights',
           icon: BarChart3,

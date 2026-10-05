@@ -22,20 +22,20 @@ from app.services import (
 logger = logging.getLogger(__name__)
 
 _MIN_STRETCH_FACTOR_DELTA = (
-    0.05  # bỏ qua time-stretch nếu lệch dưới 5%, không đáng để re-encode
+    0.05  # skip time-stretch if off by less than 5%, not worth re-encoding
 )
 
-# Số câu xử lý song song. Đo thật trên 5 câu: dịch nhanh 3.8x, TTS nhanh 10.2x so
-# với tuần tự. Giới hạn 8 để không bị provider chặn vì rate limit — cao hơn cũng
-# không nhanh thêm bao nhiêu vì nghẽn ở mạng.
+# Number of sentences processed in parallel. Measured on 5 sentences: translation 3.8x faster, TTS 10.2x faster
+# than sequential. Capped at 8 so the provider does not block us for rate limiting — higher also
+# gains little because the network is the bottleneck.
 _MAX_CONCURRENT_SEGMENTS = 8
 
 
 def _is_speakable(text: str) -> bool:
-    """Có chữ hoặc số để đọc không.
+    """Whether there is any letter or digit to read.
 
-    Edge-TTS báo "No audio was received" khi văn bản chỉ có dấu câu — lỗi input
-    chứ không phải lỗi mạng, nên retry cũng vô ích. Lọc trước cho sạch log.
+    Edge-TTS reports "No audio was received" when the text is only punctuation — an input error
+    rather than a network error, so retrying is useless. Filter beforehand to keep the log clean.
     """
     return bool(re.search(r"[^\W_]", text, flags=re.UNICODE))
 
@@ -43,14 +43,14 @@ def _is_speakable(text: str) -> bool:
 def run_transcribe(db: Session, video: Video, source_lang: str = "zh") -> None:
     video.status = VideoStatus.TRANSCRIBING
     db.commit()
-    # faster-whisper chạy liền một mạch, không chia nhỏ được nên chỉ báo chặng
-    # chứ không có phần trăm.
+    # faster-whisper runs in one go and cannot be split, so only the stage is reported
+    # with no percentage.
     progress_service.set_stage(video.id, "transcribing", kind="transcribe")
     try:
-        # Process pool riêng (P2): compute thuần, không đụng DB/progress_service
-        # bên trong `transcribe_service.transcribe` — an toàn tách process. Hàm
-        # này đã luôn chạy trong 1 thread nền (không phải event loop chính) nên
-        # chặn chờ `.result()` ở đây không ảnh hưởng server.
+        # Dedicated process pool (P2): pure compute, touching no DB/progress_service
+        # inside `transcribe_service.transcribe` — safe to separate into another process. This function
+        # always already runs in a background thread (not the main event loop), so
+        # blocking on `.result()` here does not affect the server.
         future = worker_pool.submit(
             transcribe_service.transcribe, Path(video.local_path), language=source_lang
         )
@@ -64,12 +64,12 @@ def run_transcribe(db: Session, video: Video, source_lang: str = "zh") -> None:
 
 
 def run_diarize(db: Session, video: Video) -> None:
-    """Gắn nhãn người nói (SPEAKER_00, SPEAKER_01...) vào transcript đã có.
+    """Attach speaker labels (SPEAKER_00, SPEAKER_01...) to the existing transcript.
 
-    KHÔNG phải bước bắt buộc trong state machine (không đổi VideoStatus) — chỉ
-    bổ sung field `speaker` cho từng đoạn để `run_dub_and_mux` dùng gán giọng
-    đọc riêng theo vai (Phase 19). Bỏ qua bước này thì lồng tiếng vẫn chạy bình
-    thường bằng 1 giọng chung như trước.
+    NOT a mandatory step in the state machine (VideoStatus does not change) — it only
+    adds a `speaker` field to each segment so `run_dub_and_mux` can assign a separate
+    voice per speaker (Phase 19). Skipping this step still dubs
+    normally with 1 shared voice as before.
     """
     segments = video.transcript_json or []
     if not segments:
@@ -80,7 +80,7 @@ def run_diarize(db: Session, video: Video) -> None:
     if not audio_path.exists():
         ffmpeg.extract_audio(Path(video.local_path), audio_path)
 
-    # Process pool riêng (P2) — cùng lý do như `run_transcribe`.
+    # Dedicated process pool (P2) — same reason as `run_transcribe`.
     future = worker_pool.submit(
         diarization_adapter.assign_speakers, audio_path, segments
     )
@@ -98,7 +98,7 @@ async def run_translate(
         progress_service.set_stage(
             video.id, "translating", total=len(segments), kind="translate"
         )
-        # Dịch song song có giới hạn — tuần tự thì 32 câu mất ~8s, song song ~2s.
+        # Translate in parallel with a limit — sequentially 32 sentences take ~8s, in parallel ~2s.
         semaphore = asyncio.Semaphore(_MAX_CONCURRENT_SEGMENTS)
 
         async def translate_one(segment: dict) -> dict:
@@ -109,9 +109,9 @@ async def run_translate(
             progress_service.advance(video.id, 1, kind="translate")
             return {**segment, "translated_text": text}
 
-        # Dựng list MỚI thay vì sửa tại chỗ: cột JSON của SQLAlchemy không theo
-        # dõi thay đổi bên trong, gán lại chính object cũ thì commit không ghi gì.
-        # gather giữ nguyên thứ tự đầu vào nên timeline không bị xáo.
+        # Build a NEW list instead of editing in place: SQLAlchemy JSON columns do not track
+        # changes inside, reassigning the same old object makes commit write nothing.
+        # gather preserves input order so the timeline is not shuffled.
         translated = list(
             await asyncio.gather(*(translate_one(seg) for seg in segments))
         )
@@ -120,8 +120,8 @@ async def run_translate(
         video.status = VideoStatus.TRANSLATED
         db.commit()
     except AllProvidersExhaustedError:
-        # Hết quota toàn bộ key trong pool + provider free — tạm dừng để thử lại
-        # sau, KHÔNG phải lỗi cần sửa (khác FAILED_TRANSLATING).
+        # Every key in the pool + the free provider is out of quota — pause to retry
+        # later, NOT an error needing a fix (unlike FAILED_TRANSLATING).
         video.status = VideoStatus.PAUSED_QUOTA
         db.commit()
         raise
@@ -140,7 +140,7 @@ async def _synthesize_segment_matched_duration(
     index: int,
     voice: dict[str, str] | None = None,
 ) -> AudioSegment | None:
-    """Sinh giọng rồi co giãn (time-stretch, giữ cao độ) cho khớp thời lượng đoạn gốc."""
+    """Generate speech then stretch (time-stretch, keeping pitch) to match the original segment duration."""
     raw_path = tmp_dir / f"segment_{index}_raw.mp3"
     try:
         await tts_service.synthesize_speech(db, user_id, text, raw_path, voice=voice)
@@ -162,8 +162,8 @@ async def _synthesize_segment_matched_duration(
     stretched_path = tmp_dir / f"segment_{index}_stretched.mp3"
     ffmpeg.time_stretch(raw_path, stretched_path, factor)
     stretched_clip = AudioSegment.from_file(stretched_path)
-    # Đã nạp cả 2 file vào bộ nhớ (audio thật nằm trong `stretched_clip`) — dọn
-    # ngay thay vì để lại tới lần cleanup 30 ngày (storage_cleanup_service).
+    # Both files are loaded into memory (the real audio is in `stretched_clip`) — clean up
+    # right away instead of leaving them until the 30-day cleanup (storage_cleanup_service).
     raw_path.unlink(missing_ok=True)
     stretched_path.unlink(missing_ok=True)
     return stretched_clip
@@ -172,14 +172,14 @@ async def _synthesize_segment_matched_duration(
 async def run_dub_and_mux(
     db: Session, user_id: int, video: Video, keep_background: bool = True
 ) -> Path:
-    """Sinh giọng đọc cho từng đoạn (time-stretch khớp thời lượng câu gốc), tuỳ chọn tách
-    và giữ lại nhạc nền (Demucs) trước khi thay audio track, thay vì xoá sạch âm thanh gốc."""
+    """Generate speech for each segment (time-stretch to match the original sentence duration), optionally separating
+    and keeping the background music (Demucs) before replacing the audio track, instead of wiping the original audio."""
     video.status = VideoStatus.DUBBING
     db.commit()
     try:
         segments = video.transcript_json or []
-        # Tắt phân vai trong Cài đặt thì bỏ qua nhãn người nói đã có sẵn (từ lúc
-        # còn bật) — lồng tiếng bằng 1 giọng chung như khi chưa từng phân vai.
+        # If speaker separation is turned off in Settings, ignore speaker labels that already exist (from when
+        # it was on) — dub with 1 shared voice as if speakers were never separated.
         speaker_voices = (
             video.speaker_voices_json or {}
             if settings_service.get_speaker_diarization_enabled(db, user_id)
@@ -194,16 +194,16 @@ async def run_dub_and_mux(
         progress_service.set_stage(
             video.id, "synthesizing", total=len(segments), kind="dub"
         )
-        # Sinh giọng song song (gọi mạng, chờ I/O là chính) rồi mới ghép tuần tự
-        # — ghép là xử lý audio trên CPU, chạy song song không nhanh hơn.
-        # Đo thật: 32 câu tuần tự ~54s, song song ~5s.
+        # Generate speech in parallel (mostly network calls, waiting on I/O) and only then join sequentially
+        # — joining is CPU audio processing, parallel is no faster.
+        # Measured: 32 sentences sequential ~54s, parallel ~5s.
         tts_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_SEGMENTS)
 
         async def synthesize_one(
             index: int, segment: dict
         ) -> tuple[int, AudioSegment | None]:
-            # CHỈ dùng bản dịch: giọng tiếng Việt không đọc được lời gốc tiếng
-            # Trung, Edge-TTS sẽ báo "No audio was received".
+            # ONLY use the translation: a Vietnamese voice cannot read the original Chinese,
+            # Edge-TTS would report "No audio was received".
             text = (segment.get("translated_text") or "").strip()
             if not _is_speakable(text):
                 logger.debug(
@@ -236,22 +236,22 @@ async def run_dub_and_mux(
         if keep_background:
             video.status = VideoStatus.SEPARATING_AUDIO
             db.commit()
-            # Demucs chạy model PyTorch liền mạch — chỉ báo chặng, không có %.
+            # Demucs runs the PyTorch model in one go — only the stage is reported, no %.
             progress_service.set_stage(video.id, "separating", kind="dub")
             original_audio_path = video_dir / "original_audio.wav"
             if not original_audio_path.exists():
-                # Nếu bước "Phân vai người nói" (Phase 19) đã chạy trước, file
-                # này đã có sẵn — trích lại là thừa (I/O nặng cho video dài).
+                # If the "Speaker separation" step (Phase 19) ran earlier, this file
+                # already exists — extracting it again is wasteful (heavy I/O for long videos).
                 await asyncio.to_thread(
                     ffmpeg.extract_audio, Path(video.local_path), original_audio_path
                 )
 
             def report_chunk(done: int, total: int) -> None:
-                """Video dài cắt thành nhiều khúc — báo tiến độ theo khúc, nếu không
-                thanh tiến độ sẽ đứng im hàng chục phút và trông như treo.
+                """A long video is cut into several chunks — report progress per chunk, otherwise
+                the progress bar would sit still for tens of minutes and look hung.
 
-                Chỉ đặt `total` ở khúc đầu: `set_stage` reset `current` về 0 mỗi
-                lần gọi, gọi lại mỗi khúc thì thanh tiến độ mãi mãi đứng ở 1/total.
+                Only set `total` at the first chunk: `set_stage` resets `current` to 0 on every
+                call, calling it again per chunk would leave the progress bar forever at 1/total.
                 """
                 if done == 1:
                     progress_service.set_stage(
@@ -259,10 +259,10 @@ async def run_dub_and_mux(
                     )
                 progress_service.advance(video.id, 1, "dub")
 
-            # to_thread cho toàn bộ khối dưới: Demucs + ffmpeg đều là lệnh chặn,
-            # gọi trực tiếp trong coroutine này (chạy thẳng trên event loop
-            # chính khi queue làm background task) sẽ đứng cả server tới khi
-            # xong — xem docs/performance-optimization/plan.md mục P0.
+            # to_thread for the whole block below: Demucs + ffmpeg are both blocking,
+            # calling directly in this coroutine (which runs straight on the main event loop
+            # when queued as a background task) would freeze the whole server until
+            # done — see docs/performance-optimization/plan.md, section P0.
             _vocals_path, background_path = await asyncio.to_thread(
                 audio_chunk_service.separate_vocals,
                 original_audio_path,

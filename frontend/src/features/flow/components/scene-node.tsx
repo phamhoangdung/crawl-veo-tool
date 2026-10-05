@@ -46,11 +46,11 @@ function SceneNodeInner({ data, selected }: NodeProps) {
       }`}
       style={{ width: SCENE_NODE_WIDTH }}
     >
-      {/* Cảnh đầu không nhận cạnh vào — nó không có gì phía trước để nối. */}
+      {/* The first scene accepts no incoming edge — it has nothing before it to connect to. */}
       {!isFirst && <Handle type='target' position={Position.Left} />}
       <Handle type='source' position={Position.Right} />
-      {/* Handle riêng cho nhân vật — thả cạnh vào đây để tự chèn @tên vào prompt,
-          tách khỏi handle Left (nối frame từ cảnh trước) để khỏi lẫn 2 loại cạnh. */}
+      {/* A separate handle for characters — drop an edge here to insert @name into the prompt automatically,
+          kept apart from the Left handle (frame chaining from the previous scene) so the 2 kinds of edges do not mix. */}
       <Handle type='target' position={Position.Top} id='character' className='!bg-primary' />
 
       <div className='flex items-center justify-between gap-1 border-b px-2 py-1.5'>

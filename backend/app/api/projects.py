@@ -36,7 +36,7 @@ from app.services import (
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
-# MVP: 1 user cố định — cùng quy ước với app/api/api_keys.py.
+# MVP: 1 fixed user — same convention as app/api/api_keys.py.
 _DEFAULT_USER_ID = 1
 
 
@@ -224,7 +224,7 @@ def get_project_cost_estimate(
 def start_render(
     project_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
 ) -> RenderStartResponse:
-    """Nhận job rồi trả ngay — dựng 5 cảnh mất vài phút, không giữ request."""
+    """Accept the job and return right away — building 5 scenes takes minutes, the request is not held."""
     try:
         project_render_service.start_render(db, _DEFAULT_USER_ID, project_id)
     except project_render_service.ProjectRenderError as exc:
@@ -245,7 +245,7 @@ def start_render(
 def export_project_to_library(
     project_id: int, db: Session = Depends(get_db)
 ) -> ExportToLibraryResponse:
-    """Đưa video đã dựng vào kho dùng chung để mở trong Timeline Editor."""
+    """Put the built video into the shared library to open in the Timeline Editor."""
     try:
         imported = project_render_service.export_to_asset_library(
             db, _DEFAULT_USER_ID, project_id
@@ -276,7 +276,7 @@ def get_project_output(project_id: int, db: Session = Depends(get_db)) -> FileRe
     dependencies=[Depends(require_scope("assets:read"))],
 )
 def get_project_timeline(project_id: int, db: Session = Depends(get_db)) -> TimelineRead:
-    """Timeline tinh chỉnh của dự án — `null` khi chưa lưu lần nào (UI sẽ xin gợi ý)."""
+    """The project's refined timeline — `null` when never saved (the UI will ask for a suggestion)."""
     _require_project(db, project_id)
     operations = timeline_service.get_timeline_for(db, "project", project_id)
     return TimelineRead(tracks=operations["tracks"] if operations else None)
@@ -288,8 +288,8 @@ def get_project_timeline(project_id: int, db: Session = Depends(get_db)) -> Time
     dependencies=[Depends(require_scope("assets:read"))],
 )
 def suggest_project_timeline(project_id: int, db: Session = Depends(get_db)) -> TimelineRead:
-    """Timeline gợi ý dựng thẳng từ các cảnh đã sinh clip — vai trò tương đương
-    `buildSuggestionFromPipeline` của video crawl, nhưng nguồn là canvas."""
+    """Suggested timeline built straight from the scenes that have clips — equivalent role to
+    `buildSuggestionFromPipeline` for crawled videos, but the source is the canvas."""
     project = _require_project(db, project_id)
     try:
         operations = project_service.build_operations(db, project)
@@ -324,8 +324,8 @@ def save_project_timeline(
 def render_project_timeline(
     project_id: int, db: Session = Depends(get_db)
 ) -> TimelineRenderRead:
-    """Render bản cuối sau khi kéo-chỉnh. Khác `/render` (dựng thô từ canvas):
-    endpoint này chỉ ghép đúng những gì timeline đang mô tả, không sinh cảnh mới."""
+    """Render the final version after drag-editing. Unlike `/render` (rough cut from the canvas):
+    this endpoint only assembles exactly what the timeline describes, without generating new scenes."""
     _require_project(db, project_id)
     try:
         output_path = timeline_service.render_timeline_for(db, "project", project_id)

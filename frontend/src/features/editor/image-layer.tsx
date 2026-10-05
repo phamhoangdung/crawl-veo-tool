@@ -3,14 +3,14 @@ import { usePointerDrag } from '@/hooks/use-pointer-drag'
 import { useEditorStore } from './store'
 
 /**
- * Hộp logo/watermark kéo-thả trên khung preview, tương tự `OverlayLayer` nhưng
- * cho track "image". `x`/`y` là toạ độ TÂM ảnh theo tỉ lệ [0,1] — khớp công
- * thức backend (`main_w*x-overlay_w/2`), `width` là bề rộng theo tỉ lệ khung
- * hình, kéo góc dưới-phải để đổi.
+ * Drag-and-drop logo/watermark box on the preview frame, similar to `OverlayLayer` but
+ * for the "image" track. `x`/`y` are the CENTER coordinates of the image as ratios [0,1] — matching the
+ * backend formula (`main_w*x-overlay_w/2`), `width` is the width as a frame
+ * ratio, drag the bottom-right corner to change it.
  */
 export function ImageLayer({ currentTime }: { currentTime: number }) {
-  // Chỉ subscribe đúng track "image" — xem giải thích ở OverlayLayer (cùng lý
-  // do, cùng cách làm).
+  // Subscribe only to the "image" track — see the explanation in OverlayLayer (same
+  // reason, same approach).
   const trackIndex = useEditorStore((s) =>
     s.operations.tracks.findIndex((t) => t.type === 'image')
   )
@@ -31,8 +31,8 @@ export function ImageLayer({ currentTime }: { currentTime: number }) {
       })
     }, endGesture)
 
-    // `beginGesture` phải chạy lúc pointerdown THẬT sự xảy ra, không phải lúc
-    // JSX gọi `beginMove(...)` để dựng handler (chuyện đó xảy ra mỗi lần render).
+    // `beginGesture` must run when the pointerdown REALLY happens, not when the
+    // JSX calls `beginMove(...)` to build the handler (that happens on every render).
     return (e: React.PointerEvent) => {
       beginGesture()
       handlePointerDown(e)
@@ -72,8 +72,8 @@ export function ImageLayer({ currentTime }: { currentTime: number }) {
               left: `${x * 100}%`,
               top: `${y * 100}%`,
               width: `${width * 100}%`,
-              // Chỉ biết đúng tỉ lệ thật lúc render (phụ thuộc ảnh gốc) — khung
-              // vuông là gần đúng đủ dùng để kéo-thả, không cần chính xác pixel.
+              // The real ratio is only known at render time (depends on the source image) — a
+              // square frame is close enough for drag-and-drop, no pixel accuracy needed.
               aspectRatio: '1',
               opacity: clip.opacity ?? 1,
             }}

@@ -17,8 +17,8 @@ describe('gộp history theo cử chỉ', () => {
     }
     useFlowStore.getState().endGesture()
 
-    // Editor Phase 13 push mỗi pointermove nên chỗ này sẽ là 100 — đó là lỗi
-    // khiến undo chỉ lùi được vài pixel.
+    // The Phase 13 editor pushes on every pointermove so this place would be 100 — that is the bug
+    // that made undo step back only a few pixels.
     expect(useFlowStore.getState().past).toHaveLength(1)
   })
 
@@ -53,7 +53,7 @@ describe('gộp history theo cử chỉ', () => {
   it('beginGesture lồng nhau không tạo snapshot chồng lấn', () => {
     useFlowStore.getState().beginGesture()
     useFlowStore.getState().moveNode(1, 30, 30)
-    useFlowStore.getState().beginGesture() // bị bỏ qua
+    useFlowStore.getState().beginGesture() // ignored
     useFlowStore.getState().moveNode(1, 60, 60)
     useFlowStore.getState().endGesture()
 

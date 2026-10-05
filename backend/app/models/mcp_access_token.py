@@ -5,8 +5,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
-# Scope hẹp có chủ đích: agent chỉ được sinh nội dung và đọc chi phí, KHÔNG được
-# đụng vào API key provider hay cấu hình hệ thống.
+# Deliberately narrow scope: an agent may only generate content and read costs, and may NOT
+# touch provider API keys or system configuration.
 MCP_SCOPES = (
     "assets:read",
     "assets:write",
@@ -17,10 +17,10 @@ MCP_SCOPES = (
 
 
 class McpAccessToken(Base):
-    """Token cho agent ngoài (Claude Code/Codex) gọi vào qua MCP.
+    """Token for external agents (Claude Code/Codex) calling in through MCP.
 
-    Chỉ lưu hash — plaintext hiện đúng 1 lần lúc tạo rồi không lấy lại được.
-    Đây là token nội bộ của app, không liên quan tới key của provider AI.
+    Only the hash is stored — the plaintext is shown exactly once at creation and cannot be retrieved again.
+    This is the app's own internal token, unrelated to AI provider keys.
     """
 
     __tablename__ = "mcp_access_tokens"

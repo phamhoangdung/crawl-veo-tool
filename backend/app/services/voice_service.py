@@ -7,8 +7,8 @@ from app.services import api_key_service
 
 logger = logging.getLogger(__name__)
 
-# 2 giọng tiếng Việt chuẩn của Edge-TTS (free, luôn có sẵn không cần cấu hình
-# gì) — đủ 1 nam 1 nữ cho MVP phân vai người nói (Phase 19).
+# The 2 standard Vietnamese Edge-TTS voices (free, always available with no configuration
+# needed) — one male and one female are enough for the MVP of speaker separation (Phase 19).
 _EDGE_VOICES: list[dict[str, str]] = [
     {
         "provider": "edge",
@@ -28,8 +28,8 @@ _ELEVENLABS_VOICES_ENDPOINT = "https://api.elevenlabs.io/v1/voices"
 
 
 async def list_available_voices(db: Session, user_id: int) -> list[dict[str, str]]:
-    """Ghép giọng Edge-TTS (luôn có) với giọng ElevenLabs thật của user nếu đã
-    cấu hình key — chỉ "peek" key (không tính vào usage pool của Phase 8, xem
+    """Combine the Edge-TTS voices (always present) with the user's real ElevenLabs voices if a
+    key is configured — only "peek" at the key (not counted in the Phase 8 usage pool, see
     `api_key_service.get_decrypted_key`)."""
     voices = list(_EDGE_VOICES)
 

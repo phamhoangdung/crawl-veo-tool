@@ -1,10 +1,10 @@
-"""Test bảng phân khu chính chủ `_TID_GROUP` (Phase Trending cải thiện,
-2026-09-16) — thay cho việc đoán nhóm bằng từ khoá tiếng Trung.
+"""Test the official zone table `_TID_GROUP` (Trending improvement phase,
+2026-09-16) — replacing guessing the group from Chinese keywords.
 
-Bug cụ thể đã verify trong DB thật trước khi sửa: rid=138 (搞笑/Hài hước) bị
-heuristic cũ xếp vào "Giải trí" (khớp từ khoá 搞笑 trong `_GROUP_HINTS`), nhưng
-theo bảng phân khu thật của Bilibili (đối chiếu tài liệu cộng đồng
-github.com/pskdje/bilibili-API-collect) thì 138 thuộc phân khu 生活 (Đời sống).
+The specific bug verified in the real DB before the fix: rid=138 (搞笑/Humor) was put by the old
+heuristic into "Entertainment" (matching the keyword 搞笑 in `_GROUP_HINTS`), but
+per Bilibili's real zone table (cross-checked with community docs
+github.com/pskdje/bilibili-API-collect) 138 belongs to zone 生活 (Life).
 """
 
 from unittest.mock import AsyncMock, patch
@@ -27,13 +27,13 @@ def session_factory():
 
 class TestGuessGroup:
     def test_known_tid_uses_canonical_table_not_keyword_guess(self) -> None:
-        """138 (搞笑) chứa từ khoá "搞笑" khớp heuristic cũ ra "Giải trí", nhưng
-        bảng chính thức phải thắng — verify đúng nhóm thật (Đời sống)."""
+        """138 (搞笑) contains the keyword "搞笑" which matches the old heuristic into "Entertainment", but
+        the official table must win — verify the right group (Life)."""
         assert category_service._guess_group(138, "搞笑") == "Đời sống"
 
     def test_unknown_tid_falls_back_to_keyword_heuristic(self) -> None:
-        """tid lạ (chưa có trong bảng chính thức, ví dụ phân khu Bilibili vừa
-        thêm) vẫn phải đoán được bằng từ khoá — không được trả về None ngay."""
+        """An unknown tid (not in the official table, e.g. a zone Bilibili just
+        added) must still be guessable by keyword — it must not return None right away."""
         assert category_service._guess_group(999999, "美食测试") == "Ẩm thực"
 
     def test_unknown_tid_and_no_keyword_match_returns_none(self) -> None:
@@ -42,9 +42,9 @@ class TestGuessGroup:
 
 class TestResyncKnownGroups:
     def test_fixes_stale_wrong_group_without_rediscovery(self, session_factory) -> None:
-        """Mục đã lưu nhóm sai từ trước (do heuristic cũ) phải được sửa lại chỉ
-        bằng cách gọi resync — không cần chuyên mục đó xuất hiện lại trong lần
-        quét API mới (nó có thể không còn "hot" đủ để lọt vào popular/online)."""
+        """An entry saved with the wrong group earlier (by the old heuristic) must be fixed
+        just by calling resync — without that category appearing again in a
+        new API scan (it may no longer be "hot" enough to make it into popular/online)."""
         with session_factory() as db:
             db.add(Category(rid=138, name_zh="搞笑", group_name="Giải trí"))
             db.commit()
@@ -64,8 +64,8 @@ class TestResyncKnownGroups:
             assert changed == 0
 
     def test_unmapped_tid_keeps_existing_group_untouched(self, session_factory) -> None:
-        """tid không có trong bảng chính thức lẫn không khớp từ khoá nào —
-        đừng xoá mất nhóm cũ (có thể do người dùng/phiên trước đặt), giữ nguyên."""
+        """A tid neither in the official table nor matching any keyword —
+        do not wipe the old group (it may have been set by the user/an earlier session), keep it."""
         with session_factory() as db:
             db.add(Category(rid=999999, name_zh="完全陌生的名字", group_name="Khác cũ"))
             db.commit()
@@ -88,10 +88,10 @@ class TestCountPendingTranslations:
 
 
 class TestTranslateMissingNames:
-    """Verify wiring (dùng `translate_cached` — có cache bền, đúng ý "chỉ dịch
-    khi có chủ đề mới" — thay vì `translate_text` thô như code cũ) bằng mock,
-    không gọi API dịch thật (2026-09-16: Google free bị rate-limit lúc test
-    thật do gọi dồn dập trong phiên — không phải lỗi code, xem Ghi chú phase)."""
+    """Verify wiring (uses `translate_cached` — a durable cache, matching the intent "only translate
+    when there is a new topic" — instead of the raw `translate_text` like the old code) with a mock,
+    no real translation API calls (2026-09-16: free Google was rate-limited during the
+    real test due to bursts of calls in one session — not a code bug, see the phase notes)."""
 
     @pytest.mark.asyncio
     async def test_uses_cached_translation_helper_not_raw_translate(
@@ -119,9 +119,9 @@ class TestTranslateMissingNames:
     async def test_failed_translation_leaves_category_pending_for_retry(
         self, session_factory
     ) -> None:
-        """Hết quota (Google rate-limit, hết key OpenAI...) không được crash cả
-        lượt dịch — mục đó ở lại `name_vi=None` để lần sau (background task kế
-        tiếp) tự thử lại, đúng ý "tự động, không cần bấm lại"."""
+        """Out of quota (Google rate limit, out of OpenAI keys...) must not crash the whole
+        translation pass — that entry stays at `name_vi=None` so next time (the next background
+        task) it retries by itself, matching the intent "automatic, no need to click again"."""
         with session_factory() as db:
             db.add(Category(rid=1, name_zh="搞笑", name_vi=None))
             db.commit()
@@ -174,8 +174,8 @@ class TestEnsureDefaultCategories:
     def test_existing_db_gets_missing_defaults_without_touching_user_choices(
         self, session_factory
     ) -> None:
-        """DB cũ chỉ có 1 dòng người dùng đã đổi: phải được bổ sung mục thiếu,
-        không bị ghi đè tên/nhóm, và mục mới KHÔNG tự bật theo dõi."""
+        """An old DB has only 1 row the user changed: the missing entries must be topped up,
+        without overwriting the name/group, and the new entries must NOT auto-enable following."""
         with session_factory() as db:
             db.add(Category(rid=4, name_zh="游戏", name_vi="Tên tôi tự đặt", is_followed=False))
             db.commit()

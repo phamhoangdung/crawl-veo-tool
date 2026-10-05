@@ -1,0 +1,14 @@
+# Contents of the downloadable AI pack (see scripts/build-ai-pack.mjs and
+# backend/app/core/packs.py). Pinned to the versions verified with the app; bump
+# AI_PACK_VERSION in packs.py whenever this file changes.
+torch==2.14.0
+torchaudio==2.11.0
+numpy==2.4.6
+scipy==1.17.1
+scikit-learn==1.9.1
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+av==18.1.0
+onnxruntime==1.29.0
+demucs==4.1.0
+speechbrain==1.1.1

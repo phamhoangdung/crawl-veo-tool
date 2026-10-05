@@ -1,5 +1,5 @@
-// Cài đặt phụ thuộc cho cả backend lẫn frontend, chạy được trên
-// Windows/macOS/Linux. Dùng: `npm run setup`.
+// Installs dependencies for both backend and frontend; works on
+// Windows/macOS/Linux. Usage: `npm run setup`.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -37,8 +37,8 @@ function which(cmd) {
 }
 
 /**
- * Hỏi `--version` để chắc chắn interpreter thực sự chạy được. Có timeout vì
- * một bản Python cài hỏng có thể treo vô hạn thay vì báo lỗi.
+  * Asks for `--version` to make sure the interpreter really runs. Has a timeout because
+  * a broken Python install can hang forever instead of reporting an error.
  */
 function probePython(cmd) {
   const res = spawnSync(cmd, ["--version"], {
@@ -49,7 +49,7 @@ function probePython(cmd) {
   return (res.stdout || res.stderr || "").trim();
 }
 
-// 1. Tìm Python global để tạo venv / cài thẳng.
+// 1. Find a global Python to create the venv / install into.
 console.log("Đang tìm Python khả dụng...");
 const candidates = process.env.PYTHON ? [process.env.PYTHON] : SUPPORTED_PYTHONS;
 
@@ -78,8 +78,8 @@ if (!basePython) {
 
 console.log(`Python: ${basePython} (${pythonVersion})`);
 
-// PyTorch (demucs/faster-whisper phụ thuộc) thường chưa có bản build cho các
-// phiên bản Python quá mới — cảnh báo sớm thay vì để pip lỗi khó hiểu.
+// PyTorch (a dependency of demucs/faster-whisper) often has no build for very
+// new Python versions: warn early instead of letting pip fail cryptically.
 const minor = Number(pythonVersion.match(/^Python 3\.(\d+)/)?.[1]);
 if (Number.isFinite(minor) && (minor < 11 || minor > 12)) {
   console.warn(
@@ -115,14 +115,14 @@ run(backendPython, ["-m", "pip", "install", "-r", "backend/requirements.txt"]);
 if (!which("pnpm")) fail("Chưa có pnpm. Cài bằng: npm install -g pnpm");
 run("pnpm", ["-C", "frontend", "install"]);
 
-// 4. File .env ở root.
+// 4. The .env file at the root.
 const envPath = resolve(ROOT, ".env");
 if (!existsSync(envPath)) {
   copyFileSync(resolve(ROOT, ".env.example"), envPath);
   console.log("\nĐã tạo .env từ .env.example.");
 }
 
-// 5. Cảnh báo ffmpeg (bắt buộc cho pipeline, không tự cài được).
+// 5. Warn about ffmpeg (required by the pipeline, cannot be installed automatically).
 if (!which("ffmpeg")) {
   console.warn(
     "\n⚠ Không tìm thấy ffmpeg — pipeline sẽ lỗi khi xử lý video. Cài bằng:\n" +

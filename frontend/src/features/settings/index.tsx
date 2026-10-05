@@ -22,8 +22,8 @@ const sidebarNavItems = [
     icon: <Monitor size={18} />,
   },
   {
-    // Phase 21 — trang cài đặt thật đầu tiên của dự án (các trang trên vẫn là
-    // demo của template shadcn-admin).
+    // Phase 21 — the project's first real settings page (the pages above are still
+    // demos of the shadcn-admin template).
     title: 'Tải xuống',
     href: '/settings/downloads',
     icon: <Download size={18} />,

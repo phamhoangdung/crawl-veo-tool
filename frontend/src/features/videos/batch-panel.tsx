@@ -30,8 +30,8 @@ const STEP_LABELS: { value: BatchStep; label: string }[] = [
   { value: 'burn', label: 'Ghép phụ đề cứng' },
 ]
 
-// Khớp với DEFAULT_STEPS của backend: "burn" là lựa chọn phong cách, không phải
-// bước ai cũng cần, nên không bật sẵn.
+// Matches the backend DEFAULT_STEPS: "burn" is a style choice, not a step
+// everyone needs, so it is not enabled by default.
 const DEFAULT_STEPS: BatchStep[] = [
   'download',
   'transcribe',
@@ -52,8 +52,8 @@ export function BatchPanel() {
   const [steps, setSteps] = useState<BatchStep[]>(DEFAULT_STEPS)
   const [concurrency, setConcurrency] = useState(1)
 
-  // Chỉ hỏi lại liên tục khi có batch đang chạy — batch xong rồi mà vẫn poll 2
-  // giây/lần thì chỉ tổ làm ồn log backend.
+  // Keep asking only while a batch is running — once the batch is done, polling every 2
+  // seconds only adds noise to the backend log.
   const { data: status } = useQuery({
     queryKey: ['batch-status'],
     queryFn: getBatchStatus,
@@ -97,8 +97,8 @@ export function BatchPanel() {
   function toggleStep(step: BatchStep, checked: boolean) {
     setSteps((prev) =>
       checked
-        ? // Giữ đúng thứ tự pipeline chứ không theo thứ tự bấm: backend chạy
-          // tuần tự theo danh sách nhận được, đảo thứ tự là hỏng.
+        ? // Keep the pipeline order rather than the click order: the backend runs
+          // sequentially by the list it receives, reversing the order breaks it.
           STEP_LABELS.filter((s) => s.value === step || prev.includes(s.value)).map(
             (s) => s.value
           )

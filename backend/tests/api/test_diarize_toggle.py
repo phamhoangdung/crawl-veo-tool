@@ -1,4 +1,4 @@
-"""Phân vai người nói có công tắc trong Cài đặt (mặc định tắt)."""
+"""Speaker separation has a switch in Settings (off by default)."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,7 +23,7 @@ def client():
     Session = sessionmaker(bind=engine)
     with Session() as db:
         db.add(User(id=1))
-        db.commit()  # không có relationship nên SQLAlchemy không tự sắp thứ tự FK
+        db.commit()  # no relationship so SQLAlchemy does not order the FKs itself
         db.add(Job(id=1, user_id=1, platform=Platform.LOCAL, keyword="k"))
         db.commit()
         db.add(

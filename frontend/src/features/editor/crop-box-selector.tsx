@@ -8,9 +8,9 @@ interface CropBoxSelectorProps {
   onChange: (box: CropBox) => void
 }
 
-/** Khung crop kéo-thả (di chuyển) + kéo góc dưới-phải (đổi kích thước) trên khung
- * preview video — toạ độ tính theo pixel THẬT của video nguồn (`videoWidth`/
- * `videoHeight`), quy đổi sang % để hiển thị đúng dù preview bị scale. */
+/** Crop box with drag (move) + drag of the bottom-right corner (resize) on the video
+ * preview frame — coordinates in the REAL pixels of the source video (`videoWidth`/
+ * `videoHeight`), converted to % for display so it stays right even when the preview is scaled. */
 export function CropBoxSelector({ videoWidth, videoHeight, value, onChange }: CropBoxSelectorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 

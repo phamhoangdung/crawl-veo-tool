@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
-/** Màu đủ tương phản trong cả nền sáng lẫn tối. */
+/** Colors with enough contrast on both light and dark backgrounds. */
 const SERIES_COLORS = [
   'var(--chart-1)',
   'var(--chart-2)',
@@ -81,8 +81,8 @@ function ChartTooltip({
 export function CategoryChart({ rids }: { rids: number[] }) {
   const sortedRids = useMemo(() => [...rids].sort((a, b) => a - b), [rids])
 
-  // Gọi stats để ghi thêm 1 điểm lịch sử cho lần mở trang này; kết quả dùng làm
-  // dự phòng hiển thị khi lịch sử còn quá ít điểm.
+  // Call stats to record 1 more history point for this page open; the result is used as a
+  // display fallback when the history still has too few points.
   const statsQuery = useQuery({
     queryKey: ['trending', 'stats', sortedRids],
     queryFn: () => getCategoryStats(sortedRids),
@@ -101,15 +101,15 @@ export function CategoryChart({ rids }: { rids: number[] }) {
     const histories = historyQuery.data ?? []
     const names = new Map<number, string>(histories.map((h) => [h.rid, h.name]))
 
-    // Gom điểm của mọi chuyên mục theo mốc thời gian để recharts vẽ nhiều đường
-    // trên cùng một trục X.
+    // Group the points of every category by time mark so recharts draws many lines
+    // on the same X axis.
     const byTime = new Map<string, ChartRow>()
     for (const history of histories) {
       for (const point of history.points) {
         const key = point.captured_at
         const row = byTime.get(key) ?? { time: formatTime(key) }
-        // Dùng total_pts (điểm xếp hạng thật Bilibili) thay vì total_plays —
-        // xem docstring backend `schemas/trending.py::SnapshotPoint.total_pts`.
+        // Use total_pts (Bilibili's real ranking score) instead of total_plays —
+        // see the backend docstring `schemas/trending.py::SnapshotPoint.total_pts`.
         row[history.name] = point.total_pts
         byTime.set(key, row)
       }
@@ -193,7 +193,7 @@ export function CategoryChart({ rids }: { rids: number[] }) {
   )
 }
 
-/** Chưa đủ điểm để vẽ đường — hiển thị số liệu hiện tại dạng thanh ngang. */
+/** Not enough points to draw a line — show the current numbers as horizontal bars. */
 function CurrentSnapshot({
   stats,
 }: {

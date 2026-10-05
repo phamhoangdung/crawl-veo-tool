@@ -1,6 +1,6 @@
-"""Test `YouTubeClient` — dựng theo tài liệu chính thức developers.google.com/
-youtube/v3 (khác Bilibili/Douyin, không cần đoán field). Mock ở mức
-`httpx.MockTransport`, không gọi API thật (cần key thật, xem
+"""Test `YouTubeClient` — built per the official docs developers.google.com/
+youtube/v3 (unlike Bilibili/Douyin, no need to guess fields). Mocked at the
+`httpx.MockTransport` level, no real API calls (a real key would be needed, see
 docs/phases/phase-17-content-opportunity.md)."""
 
 import httpx

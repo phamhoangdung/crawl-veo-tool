@@ -1,9 +1,9 @@
 export interface StudioSettings {
   imageModel: string
   videoModel: string
-  /** Số biến thể mỗi lần sinh ảnh. Video luôn sinh 1 (đắt gấp ~50-100 lần ảnh). */
+  /** Number of variants per image generation. Video always generates 1 (about 50-100 times the cost of an image). */
   variantCount: number
-  /** Tiền tố tên file theo tập/dự án, vd "EP001" → EP001_001.png. */
+  /** File name prefix by episode/project, e.g. "EP001" → EP001_001.png. */
   outputPrefix: string
 }
 

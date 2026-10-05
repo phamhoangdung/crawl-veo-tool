@@ -22,8 +22,8 @@ def _no_real_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestCallWithRetry:
-    """_call_with_retry chỉ retry khi 429 (rate limit) — lý do dịch từng đoạn phụ
-    đề riêng lẻ dễ dồn dập gọi API và bị Google/OpenAI chặn tạm."""
+    """_call_with_retry only retries on 429 (rate limit) — the reason translating each subtitle
+    segment separately easily bursts the API and gets temporarily blocked by Google/OpenAI."""
 
     @pytest.mark.anyio
     async def test_retries_on_429_then_succeeds(self) -> None:
@@ -42,9 +42,9 @@ class TestCallWithRetry:
 
     @pytest.mark.anyio
     async def test_gives_up_after_max_retries_raises_quota_exceeded(self) -> None:
-        """Sau khi hết lượt retry vẫn 429 → chuyển thành ProviderQuotaExceededError
-        (Phase 8), không phải httpx.HTTPStatusError thô — để translate_text biết đây
-        là tín hiệu "key cần nghỉ" và xoay sang key khác trong pool."""
+        """After retries run out and it is still 429 → converted to ProviderQuotaExceededError
+        (Phase 8), not the raw httpx.HTTPStatusError — so translate_text knows this is
+        the "key needs a rest" signal and rotates to another key in the pool."""
 
         async def always_429() -> str:
             raise _http_status_error(429)
@@ -67,8 +67,8 @@ class TestCallWithRetry:
 
 
 class TestTranslateText:
-    """translate_text: xoay vòng key OpenAI trong pool khi hết quota, fallback Google
-    free khi hết pool, và báo AllProvidersExhaustedError khi cả 2 đều lỗi (Phase 8)."""
+    """translate_text: rotates OpenAI keys in the pool when out of quota, falls back to free Google
+    when the pool is out, and reports AllProvidersExhaustedError when both fail (Phase 8)."""
 
     @pytest.mark.anyio
     async def test_uses_google_directly_when_no_openai_key_configured(self, dummy_session) -> None:
@@ -112,8 +112,8 @@ class TestTranslateText:
 
     @pytest.mark.anyio
     async def test_rotates_to_next_key_when_first_key_exhausted(self, dummy_session) -> None:
-        """Key #1 bị 429 liên tục → đánh dấu thất bại, thử key #2 trong pool và
-        thành công — không rơi xuống Google khi pool vẫn còn key active khác."""
+        """Key #1 gets 429 continuously → marked as failed, tries key #2 in the pool and
+        succeeds — does not fall to Google while the pool still has other active keys."""
         picks = iter([(1, "key-a"), (2, "key-b")])
 
         async def fake_translate(_client, api_key, *_args, **_kwargs):
@@ -142,8 +142,8 @@ class TestTranslateText:
 
     @pytest.mark.anyio
     async def test_falls_back_to_google_when_openai_pool_exhausted(self, dummy_session) -> None:
-        """Chỉ 1 key OpenAI, hết quota → không còn key nào khác trong pool → fallback
-        Google free như hành vi gốc trước Phase 8."""
+        """Only 1 OpenAI key, out of quota → no other key left in the pool → fallback to
+        free Google like the original behavior before Phase 8."""
         picks = iter([(1, "key-a")])
 
         with (

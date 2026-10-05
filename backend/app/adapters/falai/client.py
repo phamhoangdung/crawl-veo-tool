@@ -1,22 +1,22 @@
-"""Adapter fal.ai thật (Phase 14) — dùng khi `FALAI_MODE=real`.
+"""Real fal.ai adapter (Phase 14) — used when `FALAI_MODE=real`.
 
-⚠️ **CHƯA CHẠY LẦN NÀO VỚI KEY THẬT.** Phần cơ chế hàng đợi (submit → poll →
-tải file) theo đúng giao thức queue công khai của fal.ai và có test bằng HTTP giả;
-còn hai thứ dưới đây là **suy đoán có căn cứ chứ không phải sự thật đã kiểm chứng**,
-và là chỗ đầu tiên cần xem lại khi có key:
+⚠️ **HAS NEVER BEEN RUN WITH A REAL KEY.** The queue mechanism (submit → poll →
+download file) follows fal.ai's public queue protocol and is tested with fake HTTP;
+the two items below are **educated guesses, not verified facts**,
+and are the first place to revisit once a key is available:
 
-1. `_MODEL_ENDPOINTS` — đường dẫn model trên fal.ai. Tên model đổi theo thời gian
-   (kling-2.1 → 3.0...), nên để ở một bảng duy nhất, sửa một chỗ là xong.
-2. `_image_input()` / `_video_input()` — tên trường đầu vào của từng model. Mỗi
-   họ model đặt tên khác nhau (`image_url` vs `start_image_url`...).
+1. `_MODEL_ENDPOINTS` — model paths on fal.ai. Model names change over time
+   (kling-2.1 → 3.0...), so they live in a single table: fix one place and done.
+2. `_image_input()` / `_video_input()` — the input field names of each model. Each
+   model family names them differently (`image_url` vs `start_image_url`...).
 
-Thiết kế để hỏng thì hỏng TO: gặp response không đúng hình dạng mong đợi thì ném
-`GenerationError` nói rõ thiếu trường nào, chứ không lặng lẽ ghi ra file rỗng rồi
-để người dùng phát hiện sau khi đã trả tiền.
+Designed to fail LOUDLY: on a response not shaped as expected it raises
+`GenerationError` saying which field is missing, instead of silently writing an empty file and
+letting the user find out after having paid.
 
-Adapter chỉ là HTTP client mỏng: key do service chọn từ pool rồi truyền vào, và
-429 ném `ProviderQuotaExceededError` để service xoay key (cùng quy ước với
-`app/adapters/translate/openai.py`, xem Phase 8).
+The adapter is only a thin HTTP client: the key is chosen from the pool by the service and passed in, and
+429 raises `ProviderQuotaExceededError` so the service rotates keys (same convention as
+`app/adapters/translate/openai.py`, see Phase 8).
 """
 
 import asyncio
@@ -36,10 +36,10 @@ PROVIDER_NAME = "falai"
 
 _QUEUE_BASE = "https://queue.fal.run"
 
-# Tên model nội bộ (dùng trong cost_service, UI, DB) -> đường dẫn model fal.ai.
-# CHƯA KIỂM CHỨNG — xem cảnh báo đầu file.
+# Internal model name (used in cost_service, UI, DB) -> fal.ai model path.
+# UNVERIFIED — see the warning at the top of the file.
 _MODEL_ENDPOINTS: dict[str, str] = {
-    # Ảnh
+    # Images
     "nano-banana": "fal-ai/nano-banana",
     "flux-schnell": "fal-ai/flux/schnell",
     "flux-dev": "fal-ai/flux/dev",
@@ -49,15 +49,15 @@ _MODEL_ENDPOINTS: dict[str, str] = {
     "veo-3.1": "fal-ai/veo3/image-to-video",
 }
 
-# Mỗi bao lâu hỏi lại trạng thái job. fal.ai tính tiền theo lần sinh chứ không
-# theo lần hỏi trạng thái, nhưng hỏi quá dày vẫn có thể bị rate-limit.
+# How often to re-ask the job status. fal.ai bills per generation, not
+# per status poll, but polling too often can still hit rate limits.
 _POLL_INTERVAL_SECONDS = 2.0
-# Trần thời gian chờ: sinh video 8s ở model chậm nhất hiếm khi quá 5 phút. Quá
-# mốc này thì nhiều khả năng job kẹt, chờ tiếp cũng vô ích.
+# Waiting cap: an 8s video on the slowest model rarely exceeds 5 minutes. Past
+# this mark the job is most likely stuck, and waiting more is pointless.
 _POLL_TIMEOUT_SECONDS = 600.0
 
-# Các chuỗi cho biết provider từ chối vì chính sách nội dung, không phải lỗi kỹ
-# thuật. Thử lại hay đổi key đều vô ích — phải sửa prompt.
+# Strings indicating the provider refused for content policy, not a
+# technical error. Retrying or changing keys is useless — the prompt must be fixed.
 _POLICY_MARKERS = (
     "content policy",
     "safety",
@@ -68,7 +68,7 @@ _POLICY_MARKERS = (
 
 
 class GenerationError(RuntimeError):
-    """Lỗi không thể tự khắc phục bằng cách đổi key hay thử lại."""
+    """An error that cannot be fixed by changing keys or retrying."""
 
 
 def resolve_endpoint(model: str) -> str:
@@ -82,15 +82,15 @@ def resolve_endpoint(model: str) -> str:
 
 
 def _auth_headers(api_key: str) -> dict[str, str]:
-    # fal.ai dùng tiền tố "Key", không phải "Bearer".
+    # fal.ai uses the "Key" prefix, not "Bearer".
     return {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
 
 
 def _to_data_uri(path: Path) -> str:
-    """Nhúng ảnh tham chiếu thẳng vào request thay vì upload trước.
+    """Embed reference images straight into the request instead of uploading first.
 
-    Bớt được một vòng gọi API (và một chỗ có thể hỏng riêng); đổi lại request nặng
-    hơn, chấp nhận được với vài ảnh tham chiếu.
+    Saves one API round trip (and one separate place that can fail); in exchange the request is
+    heavier, acceptable with a few reference images.
     """
     if not path.exists():
         raise GenerationError(f"Không tìm thấy ảnh tham chiếu: {path}")
@@ -100,7 +100,7 @@ def _to_data_uri(path: Path) -> str:
 
 
 def _raise_for_status(response: httpx.Response) -> None:
-    """Chuẩn hoá lỗi HTTP thành đúng loại mà tầng trên biết cách xử lý."""
+    """Normalize an HTTP error into the exact kind the upper layer knows how to handle."""
     if response.status_code == 429:
         exc = httpx.HTTPStatusError(
             "429 Too Many Requests", request=response.request, response=response
@@ -146,7 +146,7 @@ async def _submit(
 async def _wait_for_result(
     client: httpx.AsyncClient, api_key: str, submitted: dict
 ) -> dict:
-    """Chờ job xong rồi lấy kết quả. Ném lỗi rõ ràng khi job hỏng hoặc quá hạn chờ."""
+    """Wait for the job to finish, then fetch the result. Raises a clear error when the job fails or the wait times out."""
     headers = _auth_headers(api_key)
     deadline = asyncio.get_running_loop().time() + _POLL_TIMEOUT_SECONDS
 
@@ -174,10 +174,10 @@ async def _wait_for_result(
 
 
 def _extract_media_url(result: dict, *, kind: str) -> str:
-    """Lấy URL file từ kết quả. Hình dạng khác nhau giữa model ảnh và model video.
+    """Get the file URL from the result. The shape differs between image and video models.
 
-    Không đoán mò: không tìm thấy thì ném lỗi kèm nguyên các khoá có trong response
-    để người sửa biết phải nhìn vào đâu.
+    No guessing: if nothing is found, raise an error with all the keys present in the response
+    so the fixer knows where to look.
     """
     if kind == "image":
         images = result.get("images") or result.get("image")
@@ -205,9 +205,9 @@ def _extract_media_url(result: dict, *, kind: str) -> str:
 
 
 async def _download(client: httpx.AsyncClient, url: str, output_path: Path) -> None:
-    """Tải file kết quả về. Ghi ra file tạm rồi mới đổi tên: tải dở mà đứt mạng sẽ
-    để lại file hỏng ở đúng đường dẫn mà cache coi là "đã có", tức là mất tiền sinh
-    lại cũng không sửa được."""
+    """Download the result file. Writes to a temp file before renaming: a download cut off by a network drop would
+    leave a broken file at the exact path the cache treats as "already there", meaning that even paying to
+    regenerate could not fix it."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     partial = output_path.with_suffix(output_path.suffix + ".part")
 
@@ -225,7 +225,7 @@ async def _download(client: httpx.AsyncClient, url: str, output_path: Path) -> N
 def _image_input(
     prompt: str, reference_images: list[Path], width: int, height: int
 ) -> dict:
-    """CHƯA KIỂM CHỨNG — xem cảnh báo đầu file."""
+    """UNVERIFIED — see the warning at the top of the file."""
     payload: dict = {"prompt": prompt, "image_size": {"width": width, "height": height}}
     if reference_images:
         payload["image_urls"] = [_to_data_uri(p) for p in reference_images]
@@ -238,7 +238,7 @@ def _video_input(
     keyframe_end: Path | None,
     duration_seconds: float,
 ) -> dict:
-    """CHƯA KIỂM CHỨNG — xem cảnh báo đầu file."""
+    """UNVERIFIED — see the warning at the top of the file."""
     payload: dict = {"prompt": prompt, "duration": str(int(duration_seconds))}
     if keyframe_start is not None:
         payload["image_url"] = _to_data_uri(keyframe_start)
@@ -256,10 +256,10 @@ async def _run(
     *,
     kind: str,
 ) -> None:
-    """Toàn bộ luồng thật, nhận sẵn `client` để test tiêm được `MockTransport`.
+    """The whole real flow, taking a ready `client` so tests can inject a `MockTransport`.
 
-    Hai hàm public bên dưới chỉ lo mở/đóng client — tách ra để không phải thêm
-    tham số chỉ-dùng-cho-test vào API công khai.
+    The two public functions below only open/close the client — split out so no
+    test-only parameter has to be added to the public API.
     """
     submitted = await _submit(client, api_key, endpoint, payload)
     logger.info("fal.ai nhận job %s: %s", kind, submitted.get("request_id"))
@@ -295,7 +295,7 @@ async def generate_video(
     width: int = 1280,
     height: int = 720,
 ) -> None:
-    del width, height  # model video nhận tỉ lệ theo ảnh keyframe, không theo số pixel
+    del width, height  # video models take the ratio from the keyframe image, not from pixel counts
     endpoint = resolve_endpoint(model)
     payload = _video_input(prompt, keyframe_start, keyframe_end, duration_seconds)
     async with httpx.AsyncClient(timeout=60) as client:

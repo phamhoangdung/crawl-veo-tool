@@ -9,12 +9,12 @@ from app.services import font_service
 
 logger = logging.getLogger(__name__)
 
-# Font mặc định cho drawtext (Phase 13 overlay) — chỉ định trực tiếp `fontfile`
-# thay vì để filter tự dò qua fontconfig. Trên nhiều bản ffmpeg đóng gói sẵn
-# (portable build, hoặc app đóng gói desktop ở Phase 12) fontconfig không có
-# config file khả dụng ("Fontconfig error: Cannot load default config file") —
-# lỗi này khiến drawtext CRASH (access violation) thay vì báo lỗi rõ ràng, thay vì
-# chỉ đơn giản là không hiện chữ. Tự chỉ định fontfile tránh phụ thuộc fontconfig.
+# Default font for drawtext (Phase 13 overlay) — `fontfile` is specified directly
+# instead of letting the filter probe via fontconfig. On many prebuilt ffmpeg builds
+# (portable build, or the Phase 12 desktop package) fontconfig has no usable
+# config file ("Fontconfig error: Cannot load default config file") —
+# this error makes drawtext CRASH (access violation) instead of reporting a clear error, instead of
+# merely not showing the text. Specifying fontfile ourselves avoids depending on fontconfig.
 _DEFAULT_FONT_CANDIDATES = [
     r"C:\Windows\Fonts\arial.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
@@ -46,21 +46,21 @@ def _resolve_default_fontfile() -> str:
 
 
 def _escape_filter_path(path: str) -> str:
-    """Escape đường dẫn để nhét an toàn vào filter ffmpeg (dấu `:` là delimiter
-    của filter, dấu `\\` của Windows path cũng cần escape) — cùng cách đã dùng ở
-    `burn_subtitles` cho đường dẫn file .srt."""
+    """Escape a path so it can be safely put into an ffmpeg filter (`:` is the filter
+    delimiter, and the `\\` of Windows paths also needs escaping) — same approach already used in
+    `burn_subtitles` for the .srt file path."""
     return path.replace("\\", "/").replace(":", "\\:")
 
 
 def ensure_ffmpeg_available() -> None:
-    # Tìm lại ở registry/thư mục cài phổ biến trước khi báo thiếu — app mở từ
-    # trình cài đặt có thể không thừa hưởng PATH của người dùng.
+    # Look again in the registry/common install directories before reporting it missing — an app opened from
+    # the installer may not inherit the user's PATH.
     if not ensure_ffmpeg_on_path():
         raise FfmpegNotFoundError()
 
 
 def merge_video_audio(video_path: Path, audio_path: Path, output_path: Path) -> None:
-    """Ghép video-only + audio-only stream (DASH) thành 1 file mp4, copy codec (không re-encode)."""
+    """Merge a video-only + audio-only stream (DASH) into 1 mp4 file, copying codecs (no re-encode)."""
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -77,7 +77,7 @@ def merge_video_audio(video_path: Path, audio_path: Path, output_path: Path) -> 
 
 
 def extract_audio(video_path: Path, output_path: Path) -> None:
-    """Tách audio track thành file wav riêng (đầu vào cho Demucs)."""
+    """Extract the audio track into a separate wav file (input for Demucs)."""
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -88,10 +88,10 @@ def extract_audio(video_path: Path, output_path: Path) -> None:
 
 
 def time_stretch(input_path: Path, output_path: Path, factor: float) -> None:
-    """Co giãn thời lượng audio theo `factor` (giữ cao độ) bằng filter `atempo` của ffmpeg.
+    """Stretch the audio duration by `factor` (keeping pitch) with ffmpeg's `atempo` filter.
 
-    `atempo` chỉ nhận factor trong [0.5, 2.0] mỗi lần — factor ngoài khoảng này cần chain
-    nhiều lần `atempo`, ít gặp với 1 câu thoại nên clamp về biên thay vì chain cho đơn giản.
+    `atempo` only accepts a factor in [0.5, 2.0] per pass — a factor outside this range needs chaining
+    several `atempo` passes; rare for a single line of dialogue, so we clamp to the bound instead of chaining, for simplicity.
     """
     ensure_ffmpeg_available()
     clamped = max(0.5, min(2.0, factor))
@@ -104,7 +104,7 @@ def time_stretch(input_path: Path, output_path: Path, factor: float) -> None:
 
 
 def mix_audio_tracks(track_a: Path, track_b: Path, output_path: Path) -> None:
-    """Trộn 2 track audio (vd giọng đọc mới + nhạc nền đã tách) thành 1 track."""
+    """Mix 2 audio tracks (e.g. the new narration + the separated background music) into 1 track."""
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -139,9 +139,9 @@ def get_video_dimensions(video_path: Path) -> tuple[int, int]:
 
 
 def probe_duration_seconds(video_path: Path) -> float | None:
-    """Thời lượng thật của video. Trả None khi không đọc được, để phía gọi tự
-    quyết (khác `probe_video_width` có giá trị mặc định hợp lý — thời lượng thì
-    không có con số nào đoán được mà vẫn đúng)."""
+    """Real duration of the video. Returns None when it cannot be read, leaving the caller to
+    decide (unlike `probe_video_width`, which has a sensible default — for duration
+    there is no number one can guess that is still right)."""
     try:
         result = subprocess.run(
             [
@@ -164,11 +164,11 @@ def probe_duration_seconds(video_path: Path) -> float | None:
 def extract_thumbnail(
     video_path: Path, output_path: Path, *, at_seconds: float = 1.0
 ) -> None:
-    """Trích 1 khung hình làm ảnh bìa cho video nhập từ máy (video tải từ nền
-    tảng đã có cover_url riêng, video tự có thì không).
+    """Extract 1 frame as the cover image for a video imported from disk (videos downloaded from a
+    platform already have their own cover_url; self-owned videos do not).
 
-    Seek trước `-i` cho nhanh; clip ngắn hơn `at_seconds` thì lùi về giữa clip để
-    không ra ảnh rỗng.
+    Seek before `-i` for speed; a clip shorter than `at_seconds` falls back to the middle of the clip so
+    the image is not empty.
     """
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,11 +195,11 @@ def extract_thumbnail(
 def extract_last_frame(
     video_path: Path, output_path: Path, *, offset_from_end: float = 0.05
 ) -> None:
-    """Trích khung cuối clip thành ảnh — dùng làm keyframe mở đầu cảnh kế tiếp
-    (nối frame, xem docs/phases/phase-15-node-canvas.md).
+    """Extract the last frame of a clip as an image — used as the opening keyframe of the next scene
+    (frame chaining, see docs/phases/phase-15-node-canvas.md).
 
-    Lùi `offset_from_end` giây so với điểm cuối: seek đúng vào mốc cuối cùng
-    thường rơi qua frame cuối decode được và ra ảnh rỗng.
+    Step back `offset_from_end` seconds from the end: seeking exactly to the very end
+    usually lands past the last decodable frame and yields an empty image.
     """
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +207,7 @@ def extract_last_frame(
     duration = probe_duration_seconds(video_path)
     seek_args: list[str] = []
     if duration is not None:
-        # -ss trước -i để seek nhanh (không decode từ đầu clip).
+        # -ss before -i for fast seeking (no decoding from the start of the clip).
         seek_args = ["-ss", str(max(0.0, duration - offset_from_end))]
 
     subprocess.run(
@@ -224,10 +224,10 @@ def extract_last_frame(
     )
 
 
-# Alignment trong `force_style` đi theo đánh số SSA v4 (2 = giữa-dưới, +4 = đẩy
-# lên trên ⇒ 6 = giữa-trên), KHÔNG phải sơ đồ bàn phím số của ASS v4+ mà ai cũng
-# tưởng. Đã đo bằng ffmpeg thật: Alignment=8 đặt chữ ra GIỮA khung hình, không
-# phải trên — và nó không báo lỗi gì, chỉ lặng lẽ sai chỗ.
+# Alignment in `force_style` follows SSA v4 numbering (2 = bottom-center, +4 = pushed
+# to the top => 6 = top-center), NOT the numpad layout of ASS v4+ that everyone
+# assumes. Measured with real ffmpeg: Alignment=8 puts the text in the MIDDLE of the frame, not
+# the top — and it reports no error, just silently puts it in the wrong place.
 _SUBTITLE_ALIGNMENT = {"bottom": 2, "top": 6}
 
 
@@ -235,10 +235,10 @@ _HEX_COLOR_RE = re.compile(r"^[0-9a-fA-F]{6}$")
 
 
 def _validate_hex_color(hex_color: str) -> str:
-    """`#RRGGBB`/`RRGGBB` → `RRGGBB` đã kiểm tra hợp lệ. Chỉ kiểm tra độ dài là
-    chưa đủ — chuỗi 6 ký tự nhưng không phải hex (vd chứa `:` hay `'`) vẫn lọt
-    qua rồi ghép thẳng vào filter ffmpeg, có thể phá cú pháp `-vf` (dấu `:` là
-    delimiter option của filter) thay vì báo lỗi rõ ràng ở đây."""
+    """`#RRGGBB`/`RRGGBB` → validated `RRGGBB`. Checking only the length is
+    not enough — a 6-character string that is not hex (e.g. containing `:` or `'`) would still slip
+    through and be pasted straight into the ffmpeg filter, possibly breaking the `-vf` syntax (`:` is the
+    filter option delimiter) instead of reporting a clear error here."""
     h = hex_color.lstrip("#")
     if not _HEX_COLOR_RE.fullmatch(h):
         raise ValueError(
@@ -248,10 +248,10 @@ def _validate_hex_color(hex_color: str) -> str:
 
 
 def _hex_to_ass_color(hex_color: str) -> str:
-    """`RRGGBB` (dạng color picker HTML) → `&H00BBGGRR&` (dạng `PrimaryColour`
-    của ASS/SSA — thứ tự BGR, byte đầu là alpha với 00=đục hoàn toàn). Đảo thứ
-    tự byte là lỗi dễ mắc và ffmpeg không báo gì, chỉ ra sai màu lặng lẽ — cùng
-    kiểu bẫy đã gặp với `Alignment` (xem ghi chú Phase 5)."""
+    """`RRGGBB` (HTML color picker format) → `&H00BBGGRR&` (the `PrimaryColour` format
+    of ASS/SSA — BGR order, the first byte is alpha with 00 = fully opaque). Swapping the byte
+    order is an easy mistake and ffmpeg reports nothing, just silently outputs the wrong color — the same
+    kind of trap as with `Alignment` (see the Phase 5 notes)."""
     h = _validate_hex_color(hex_color)
     r, g, b = h[0:2], h[2:4], h[4:6]
     return f"&H00{b}{g}{r}&"
@@ -268,20 +268,20 @@ def burn_subtitles(
     font_color: str = "FFFFFF",
     bold: bool = False,
 ) -> None:
-    """Burn phụ đề vào video. `font_size` nên chọn theo tỉ lệ khung hình (video dọc 9:16
-    cần chữ to hơn tương đối vì khung hẹp) — xem `subtitle_service.pick_font_size_for`.
+    """Burn subtitles into the video. `font_size` should be chosen by aspect ratio (a vertical 9:16 video
+    needs relatively larger text because the frame is narrow) — see `subtitle_service.pick_font_size_for`.
 
-    `position` = "bottom" (mặc định, chuẩn phụ đề thông thường) hoặc "top" — đặt
-    lên trên khi video gốc đã có phụ đề cháy sẵn ở dưới, nếu không hai lớp chữ sẽ
-    chồng lên nhau.
+    `position` = "bottom" (default, standard subtitle placement) or "top" — place
+    on top when the source video already has burned-in subtitles at the bottom, otherwise the two text layers would
+    overlap.
 
-    `font_family` là id trong `font_service` (None = font mặc định). Dùng
-    `fontsdir` trỏ vào thư mục font đã đóng gói để libass tìm đúng font mà
-    KHÔNG cần dò qua fontconfig hệ thống — cùng lý do `drawtext` phải chỉ định
-    `fontfile` trực tiếp (ghi chú Phase 13): máy thiếu file cấu hình fontconfig
-    thì lỗi lặng lẽ hoặc crash thay vì báo rõ.
+    `font_family` is an id in `font_service` (None = default font). Uses
+    `fontsdir` pointing at the bundled font directory so libass finds the right font
+    WITHOUT probing system fontconfig — same reason `drawtext` must specify
+    `fontfile` directly (Phase 13 note): a machine lacking the fontconfig config file
+    fails silently or crashes instead of reporting clearly.
 
-    Đường dẫn srt phải escape dấu `:` và `\\` cho cú pháp filter của ffmpeg trên Windows.
+    The srt path must escape `:` and `\\` for ffmpeg filter syntax on Windows.
     """
     ensure_ffmpeg_available()
     alignment = _SUBTITLE_ALIGNMENT.get(position)
@@ -312,17 +312,17 @@ def burn_subtitles(
 
 
 def _escape_drawtext(text: str) -> str:
-    """Escape ký tự đặc biệt cho filter `drawtext` — cùng kiểu escape đã dùng ở
-    `burn_subtitles` cho filter `subtitles`, drawtext cần thêm escape dấu nháy đơn
-    vì text được bọc trong `'...'`."""
+    """Escape special characters for the `drawtext` filter — same kind of escaping used in
+    `burn_subtitles` for the `subtitles` filter; drawtext additionally needs the single quote escaped
+    because the text is wrapped in `'...'`."""
     return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
 def probe_video_width(path: str | Path) -> int:
-    """Bề rộng thật của video, để quy đổi khung phụ đề theo tỉ lệ thành số ký tự.
+    """Real width of the video, used to convert the proportional subtitle box into a character count.
 
-    Trả 1080 khi không đọc được (video dọc phổ biến nhất) — thà wrap hơi lệch
-    còn hơn làm chết cả lần render.
+    Returns 1080 when it cannot be read (vertical video is the most common) — better a slightly off wrap
+    than killing the whole render.
     """
     try:
         result = subprocess.run(
@@ -339,19 +339,19 @@ def probe_video_width(path: str | Path) -> int:
 
 
 def _has_cjk(text: str) -> bool:
-    """Chữ Hán rộng gần gấp đôi chữ Latin nên số ký tự vừa một dòng khác nhau."""
+    """Han characters are almost twice as wide as Latin ones, so the characters that fit on one line differ."""
     return any("\u4e00" <= ch <= "\u9fff" for ch in text)
 
 
 def _wrap_text_to_box(text: str, max_chars: int) -> str:
-    """Chia câu thành nhiều dòng cho vừa khung phụ đề.
+    """Split a sentence into several lines to fit the subtitle box.
 
-    `drawtext` KHÔNG tự xuống dòng — câu dài sẽ tràn ra ngoài khung hình và bị
-    cắt mất. Phải tự chèn '\n' ở đây.
+    `drawtext` does NOT wrap on its own — a long sentence would overflow the frame and be
+    cut off. We must insert '\n' ourselves here.
 
-    Cắt theo từ, nhưng từ nào dài hơn cả dòng thì cắt cứng giữa từ (thà xuống
-    dòng giữa từ còn hơn tràn ra ngoài). Tiếng Trung không có dấu cách giữa chữ
-    nên gần như luôn đi vào nhánh cắt cứng — đó là hành vi đúng cho tiếng Trung.
+    Break by word, but a word longer than a whole line is hard-cut mid-word (better to
+    break mid-word than to overflow). Chinese has no spaces between characters,
+    so it almost always takes the hard-cut branch — which is the correct behavior for Chinese.
     """
     if max_chars <= 0:
         return text
@@ -378,16 +378,16 @@ def _wrap_text_to_box(text: str, max_chars: int) -> str:
 
 
 def render_timeline(operations: dict, output_path: Path) -> None:
-    """Render 1 timeline (Phase 13) thành video hoàn chỉnh — dựng `-filter_complex`
-    động từ "edit operations" JSON thay vì các hàm đơn lẻ cố định ở trên.
+    """Render 1 timeline (Phase 13) into a finished video — builds `-filter_complex`
+    dynamically from the JSON "edit operations" instead of the fixed single-purpose functions above.
 
-    Cấu trúc `operations` mong đợi:
+    Expected structure of `operations`:
     {
       "tracks": [
         {"type": "video", "clips": [
             {"source": "path.mp4", "start": 0, "end": 10,
              "transition_in": "cut"|"fade", "transition_duration": 1.0,
-             "crop": {"x": 0, "y": 0, "width": 720, "height": 1280}}, ...  # tuỳ chọn, Phase 11
+             "crop": {"x": 0, "y": 0, "width": 720, "height": 1280}}, ...  # optional, Phase 11
         ]},
         {"type": "audio", "role": "voice"|"music", "clips": [
             {"source": "path.mp3", "start": 0, "end": 10,
@@ -395,18 +395,18 @@ def render_timeline(operations: dict, output_path: Path) -> None:
         ]},
         {"type": "overlay", "clips": [
             {"text": "...", "start": 0, "end": 5, "x": 0.5, "y": 0.9, "font_size": 32,
-             "font_family": "be-vietnam-pro", "font_color": "FFFFFF", "bold": False}, ...  # font_* tuỳ chọn
+             "font_family": "be-vietnam-pro", "font_color": "FFFFFF", "bold": False}, ...  # font_* optional
         ]}
       ]
     }
 
-    Đúng 1 track "video" (nhiều clip nối tiếp nhau, transition giữa 2 clip liên
-    tiếp), 0+ track "audio" (trộn với nhau bằng amix, mỗi track có volume riêng —
-    dùng cho ducking cơ bản: đặt volume nhạc nền thấp hơn giọng đọc), 0-1 track
-    "overlay" (drawtext, hiện/ẩn theo mốc thời gian qua `enable`).
+    Exactly 1 "video" track (several clips in sequence, with a transition between 2 consecutive
+    clips), 0+ "audio" tracks (mixed with amix, each track with its own volume —
+    used for basic ducking: set the background music volume lower than the narration), 0-1
+    "overlay" track (drawtext, shown/hidden by time ranges via `enable`).
 
-    Giới hạn đã biết (MVP): xfade giả định các clip video cùng resolution/fps —
-    input lệch định dạng cần chuẩn hoá trước (chưa tự động hoá ở bản này).
+    Known limitation (MVP): xfade assumes the video clips share resolution/fps —
+    inputs with mismatched formats need normalizing beforehand (not automated in this version).
     """
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -429,7 +429,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
 
     filter_parts: list[str] = []
 
-    # --- track video: trim (+ crop tuỳ chọn, Phase 11) từng clip rồi nối/chuyển cảnh ---
+    # --- video track: trim (+ optional crop, Phase 11) each clip, then join/transition ---
     video_labels: list[tuple[str, dict]] = []
     for i, clip in enumerate(video_track["clips"]):
         idx = add_input(clip["source"])
@@ -438,12 +438,12 @@ def render_timeline(operations: dict, output_path: Path) -> None:
         crop_filter = (
             f",crop={crop['width']}:{crop['height']}:{crop['x']}:{crop['y']}" if crop else ""
         )
-        # `fps` + `settb` là bắt buộc, không phải tối ưu: `concat` xuất timebase
-        # 1/1000000 và framerate "1/0" (không xác định), còn clip chưa qua concat
-        # giữ timebase gốc (vd 1/15360). Khi có `transition_in="fade"` ở clip nào
-        # đó sau một chuỗi cut, `xfade` sẽ fail với "timebase do not match" /
-        # "needs to be a constant frame rate". Chuẩn hoá từng clip trước khi nối
-        # để mọi tổ hợp cut/fade đều dựng được.
+        # `fps` + `settb` are required, not an optimization: `concat` outputs timebase
+        # 1/1000000 and framerate "1/0" (undefined), while clips that have not been through concat
+        # keep their original timebase (e.g. 1/15360). When some clip has `transition_in="fade"`
+        # after a run of cuts, `xfade` fails with "timebase do not match" /
+        # "needs to be a constant frame rate". Normalizing each clip before joining
+        # lets every cut/fade combination be built.
         filter_parts.append(
             f"[{idx}:v]trim=start={clip['start']}:end={clip['end']},"
             f"setpts=PTS-STARTPTS{crop_filter},fps={_TIMELINE_FPS},settb=AVTB[{label}]"
@@ -472,36 +472,36 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             cumulative_duration += clip_duration
         final_video_label = out_label
 
-    # --- blur: che logo / phụ đề gốc bằng vùng mờ ---
-    # Đặt TRƯỚC overlay text và ảnh: mục đích là che thứ có sẵn trong video gốc,
-    # nếu làm sau thì mờ luôn chữ và logo mà mình vừa thêm vào.
+    # --- blur: hide the logo / original subtitles with a blurred region ---
+    # Placed BEFORE the text and image overlays: the purpose is to hide what is already in the source video,
+    # doing it afterwards would also blur the text and logo we just added.
     if blur_track and blur_track.get("clips"):
         for i, region in enumerate(blur_track["clips"]):
-            # Phải `split` trước: ffmpeg KHÔNG cho dùng lại cùng một nhãn cho 2
-            # nhánh filter (một nhánh cắt vùng để làm mờ, một nhánh làm nền).
+            # Must `split` first: ffmpeg does NOT allow reusing the same label for 2
+            # filter branches (one branch crops the region to blur, the other is the background).
             base = f"blurbase{i}"
             copy = f"blurcopy{i}"
             blurred = f"blurb{i}"
             out_label = f"blur{i}"
             filter_parts.append(f"[{final_video_label}]split=2[{base}][{copy}]")
 
-            # x/y/w/h theo TỈ LỆ khung hình [0,1] để vùng che đúng chỗ dù video
-            # đổi độ phân giải — khớp cách đặt của overlay text và ảnh.
+            # x/y/w/h in frame RATIOS [0,1] so the covered region stays in the right place even if the video
+            # changes resolution — matches how text and image overlays are placed.
             x = region.get("x", 0.0)
             y = region.get("y", 0.0)
             w = region.get("width", 0.2)
             h = region.get("height", 0.1)
 
-            # Cắt riêng vùng cần che, làm mờ, rồi chồng lại đúng vị trí. Làm mờ cả
-            # khung rồi mới cắt thì mép vùng che bị lẫn màu từ ngoài vào.
+            # Crop just the region to hide, blur it, then overlay it back in place. Blurring the whole
+            # frame and then cropping would let colors from outside bleed into the region edges.
             strength = region.get("strength", 20)
             mode = region.get("mode", "blur")
             crop_expr = f"crop=iw*{w}:ih*{h}:iw*{x}:ih*{y}"
 
             if mode == "pixelate":
-                # Làm nhoè kiểu ô vuông: thu nhỏ rồi phóng to lại bằng nội suy
-                # điểm gần nhất. Che chữ Trung tốt hơn blur vì không còn đọc được
-                # nét chữ, trong khi blur mạnh vẫn để lại hình dáng.
+                # Mosaic-style blur: scale down then scale back up with
+                # nearest-neighbor interpolation. Hides Chinese text better than blur because the
+                # strokes are no longer readable, while a strong blur still leaves the shape.
                 block = max(2, int(strength))
                 filter_parts.append(
                     f"[{copy}]{crop_expr},"
@@ -509,9 +509,9 @@ def render_timeline(operations: dict, output_path: Path) -> None:
                     f":flags=neighbor[{blurred}]"
                 )
             else:
-                # gblur chứ không boxblur: boxblur giới hạn radius theo kích
-                # thước vùng cắt (vùng 80x36px chỉ cho radius < 18) nên vùng che
-                # nhỏ sẽ lỗi hẳn. gblur nhận sigma tuỳ ý.
+                # gblur rather than boxblur: boxblur limits the radius by the size of the
+                # cropped region (an 80x36px region only allows radius < 18), so a small
+                # region would fail outright. gblur accepts an arbitrary sigma.
                 filter_parts.append(
                     f"[{copy}]{crop_expr},gblur=sigma={strength}[{blurred}]"
                 )
@@ -526,7 +526,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             )
             final_video_label = out_label
 
-    # --- overlay: chồng drawtext lên track video đã ghép ---
+    # --- overlay: draw drawtext over the concatenated video track ---
     source_video_width: int | None = None
     if overlay_track and overlay_track.get("clips"):
         for i, ov in enumerate(overlay_track["clips"]):
@@ -538,12 +538,12 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             font_color = _validate_hex_color(str(ov.get("font_color", "FFFFFF")))
 
             raw_text = ov["text"]
-            # Khung giới hạn phụ đề (`box_width` theo tỉ lệ bề rộng khung hình):
-            # tự chia dòng cho vừa, vì drawtext không tự wrap. Ước lượng số ký tự
-            # mỗi dòng từ font_size — chữ Hán rộng ~1 font_size, chữ Latin ~0.5.
+            # Subtitle bounding box (`box_width` as a ratio of the frame width):
+            # wrap lines to fit, because drawtext does not wrap itself. Estimate the number of characters
+            # per line from font_size — Han characters are ~1 font_size wide, Latin ~0.5.
             box_width = ov.get("box_width")
             if box_width:
-                # Đọc từ video nguồn 1 lần, không phải mỗi clip.
+                # Read from the source video once, not for every clip.
                 if source_video_width is None:
                     source_video_width = probe_video_width(video_track["clips"][0]["source"])
                 video_width = source_video_width
@@ -552,9 +552,9 @@ def render_timeline(operations: dict, output_path: Path) -> None:
                 raw_text = _wrap_text_to_box(raw_text, int(usable_px / char_px))
 
             text = _escape_drawtext(raw_text)
-            # x/y là toạ độ TÂM chữ theo tỉ lệ khung hình [0,1] (0.5/0.5 = giữa
-            # khung hình) — khớp đúng cách frontend kéo-thả overlay đặt điểm giữa,
-            # không phải mép hộp chữ, để preview và bản render khớp nhau.
+            # x/y are the CENTER coordinates of the text as frame ratios [0,1] (0.5/0.5 = middle
+            # of the frame) — matches exactly how the frontend drag-and-drop places the overlay's center point,
+            # not the edge of the text box, so preview and render match.
             x_expr = f"w*{ov.get('x', 0.5)}-text_w/2"
             y_expr = f"h*{ov.get('y', 0.9)}-text_h/2"
             filter_parts.append(
@@ -565,25 +565,25 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             )
             final_video_label = out_label
 
-    # --- ảnh/logo/watermark: chồng lên trên cùng, sau chữ ---
+    # --- image/logo/watermark: overlay on top, after the text ---
     if image_track and image_track.get("clips"):
         for i, img in enumerate(image_track["clips"]):
             idx = add_input(img["source"])
             scaled = f"imgs{i}"
             out_label = f"img{i}"
 
-            # Bề rộng theo TỈ LỆ khung hình [0,1] để logo co giãn đúng dù video
-            # đổi độ phân giải. Dùng `scale2ref` để biết kích thước video nền;
-            # -1 giữ nguyên tỉ lệ ảnh gốc.
+            # Width as a frame RATIO [0,1] so the logo scales correctly even if the video
+            # changes resolution. Uses `scale2ref` to know the base video size;
+            # -1 keeps the original image aspect ratio.
             width_ratio = img.get("width", 0.15)
             filter_parts.append(
                 f"[{idx}:v][{final_video_label}]scale2ref=w=iw*{width_ratio}:h=-1[{scaled}][vref{i}]"
             )
-            # scale2ref trả lại luôn nhánh video nền — phải dùng nhãn mới của nó.
+            # scale2ref also returns the base video branch — the new label of that branch must be used.
             final_video_label = f"vref{i}"
 
-            # x/y là toạ độ TÂM ảnh theo tỉ lệ khung hình, khớp cách đặt của
-            # overlay text để 2 loại dùng chung logic kéo-thả ở frontend.
+            # x/y are the CENTER coordinates of the image as frame ratios, matching how
+            # text overlays are placed so the 2 kinds share the same drag-and-drop logic in the frontend.
             x_expr = f"main_w*{img.get('x', 0.9)}-overlay_w/2"
             y_expr = f"main_h*{img.get('y', 0.1)}-overlay_h/2"
 
@@ -607,7 +607,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
             )
             final_video_label = out_label
 
-    # --- track audio: trim + volume + dịch tới track_start rồi trộn (amix) ---
+    # --- audio track: trim + volume + shift to track_start, then mix (amix) ---
     audio_labels: list[str] = []
     for t_i, track in enumerate(audio_tracks):
         for c_i, clip in enumerate(track.get("clips", [])):
@@ -645,7 +645,7 @@ def render_timeline(operations: dict, output_path: Path) -> None:
 
 
 def crop_vertical(input_path: Path, output_path: Path, *, x: int, y: int, width: int, height: int) -> None:
-    """Crop tĩnh theo khung cố định (Phase 11) — dùng cho crop dọc 9:16 bán tự động."""
+    """Static crop to a fixed frame (Phase 11) — used for semi-automatic 9:16 vertical crop."""
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -662,9 +662,9 @@ def crop_vertical(input_path: Path, output_path: Path, *, x: int, y: int, width:
 
 
 def make_placeholder_image(output_path: Path, *, label: str, width: int, height: int) -> None:
-    """Ảnh test có chữ chèn sẵn — dùng cho adapter giả ở chế độ phát triển
-    (app/adapters/falai/fake.py). Để ở đây vì chi tiết escape của filter
-    `drawtext` thuộc về adapter ffmpeg, không nên rò ra ngoài."""
+    """Test image with text pre-drawn — used by the fake adapter in development mode
+    (app/adapters/falai/fake.py). Kept here because the escaping details of the
+    `drawtext` filter belong to the ffmpeg adapter and should not leak outside."""
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -684,9 +684,9 @@ def make_placeholder_image(output_path: Path, *, label: str, width: int, height:
 def make_placeholder_video(
     output_path: Path, *, label: str, duration_seconds: float, width: int, height: int
 ) -> None:
-    """Video test có chữ + tone audio — dùng cho adapter giả ở chế độ phát triển.
-    Có cả video và audio stream để pipeline phía sau (ghép, render timeline) xử lý
-    được y như file thật."""
+    """Test video with text + an audio tone — used by the fake adapter in development mode.
+    Has both video and audio streams so the downstream pipeline (concat, timeline render) handles
+    it just like a real file."""
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -717,7 +717,7 @@ def _drawtext_filter(label: str) -> str:
 _KEN_BURNS_FPS = 30
 _KEN_BURNS_ZOOM_END = 1.15
 
-# Framerate chuẩn hoá khi dựng timeline — xem chú thích ở `render_timeline`.
+# Normalized framerate when building a timeline — see the comment in `render_timeline`.
 _TIMELINE_FPS = 30
 
 
@@ -730,15 +730,15 @@ def make_ken_burns_clip(
     width: int = 1280,
     height: int = 720,
 ) -> None:
-    """Sinh clip từ 1 ảnh tĩnh với chuyển động camera chậm (Ken Burns).
+    """Generate a clip from a still image with slow camera motion (Ken Burns).
 
-    Đường thay thế miễn phí cho sinh video AI ở những cảnh không cần chuyển động
-    thật — sinh ảnh rẻ hơn sinh video ~50-100 lần, xem "Chiến lược giảm chi phí"
-    trong docs/phases/phase-14-ai-video-generation.md.
+    A free alternative to AI video generation for scenes that do not need real
+    motion — image generation is ~50-100x cheaper than video generation, see "Chiến lược giảm chi phí"
+    in docs/phases/phase-14-ai-video-generation.md.
 
-    Phóng ảnh lên gấp 4 trước khi zoompan: filter `zoompan` lấy mẫu từ ảnh gốc,
-    zoom trực tiếp trên ảnh nhỏ sẽ ra kết quả rỗ. Nhân đôi `d` theo fps vì
-    `zoompan` đếm bằng frame chứ không phải giây.
+    Scale the image up 4x before zoompan: the `zoompan` filter samples from the source image,
+    and zooming directly on a small image gives a grainy result. Double `d` by fps because
+    `zoompan` counts in frames, not seconds.
     """
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -782,11 +782,11 @@ def make_ken_burns_clip(
 
 
 def replace_audio_track(video_path: Path, new_audio_path: Path, output_path: Path) -> None:
-    """Thay toàn bộ audio track của video bằng file audio mới (Phase 2: chưa giữ nhạc nền gốc).
+    """Replace the whole audio track of the video with a new audio file (Phase 2: does not keep the original background music).
 
-    Re-encode audio sang AAC vì track mới thường khác codec input (mp3 từ TTS);
-    giữ nguyên video stream (copy) để không tốn thời gian re-encode video.
-    `-shortest` để cắt theo track ngắn hơn nếu audio/video lệch thời lượng.
+    Re-encode audio to AAC because the new track usually has a different codec from the input (mp3 from TTS);
+    keep the video stream as is (copy) to avoid re-encoding the video.
+    `-shortest` cuts to the shorter track if audio/video durations differ.
     """
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -814,15 +814,15 @@ _SILENCE_END_RE = re.compile(r"silence_end:\s*(-?[\d.]+)")
 def detect_silences(
     audio_path: Path, *, noise_db: int = -30, min_silence_seconds: float = 0.4
 ) -> list[tuple[float, float]]:
-    """Các khoảng lặng trong audio, dạng [(start, end), ...].
+    """Silent intervals in the audio, as [(start, end), ...].
 
-    Dùng filter `silencedetect` — nó ghi kết quả ra **stderr** dưới dạng log chứ
-    không phải stdout, nên phải đọc stderr chứ không parse output file. Ghi đầu
-    ra vào `-f null` vì ta chỉ cần log, không cần file nào.
+    Uses the `silencedetect` filter — it writes the result to **stderr** as a log,
+    not stdout, so stderr must be read rather than parsing an output file. Output goes
+    to `-f null` because we only need the log, not any file.
 
-    Cặp start/end có thể lệch nhau nếu file kết thúc giữa một khoảng lặng
-    (`silence_start` không có `silence_end` tương ứng) — trường hợp đó bỏ qua
-    khoảng cuối thay vì đoán độ dài.
+    A start/end pair can be unbalanced if the file ends in the middle of a silence
+    (`silence_start` without a matching `silence_end`) — in that case the last
+    interval is skipped instead of guessing its length.
     """
     ensure_ffmpeg_available()
     result = subprocess.run(
@@ -843,10 +843,10 @@ def detect_silences(
 
 
 def slice_audio(input_path: Path, output_path: Path, start: float, end: float) -> None:
-    """Cắt một đoạn audio [start, end) ra file riêng, giữ nguyên định dạng wav.
+    """Cut an audio segment [start, end) into its own file, keeping the wav format.
 
-    `-ss`/`-to` đặt SAU `-i` có chủ đích: đặt trước thì ffmpeg seek theo keyframe
-    gần nhất, sai số tới cả giây — với audio ghép lại sau đó thì lệch là hỏng.
+    `-ss`/`-to` are placed AFTER `-i` on purpose: placed before, ffmpeg seeks to the nearest
+    keyframe, with an error of up to a whole second — for audio that is concatenated afterwards, a mismatch is fatal.
     """
     ensure_ffmpeg_available()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -863,18 +863,18 @@ def slice_audio(input_path: Path, output_path: Path, start: float, end: float) -
 
 
 def concat_audio(parts: list[Path], output_path: Path) -> None:
-    """Nối các file audio đã cắt lại theo đúng thứ tự (concat demuxer).
+    """Concatenate the cut audio files in the right order (concat demuxer).
 
-    Yêu cầu các part cùng định dạng/sample rate — đúng với trường hợp dùng ở đây
-    vì chúng đều là output cùng một lần cắt từ một file gốc.
+    Requires the parts to share format/sample rate — true here
+    because they all come from the same cut of one source file.
     """
     ensure_ffmpeg_available()
     if not parts:
         raise ValueError("Không có phần nào để nối")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     list_file = output_path.parent / f"{output_path.stem}_concat.txt"
-    # Đường dẫn trong file list phải escape dấu nháy đơn; dùng forward slash cho
-    # Windows vì ffmpeg đọc file list theo cú pháp riêng, không theo shell.
+    # Paths in the file list must escape single quotes; use forward slashes for
+    # Windows because ffmpeg reads the file list with its own syntax, not shell syntax.
     list_file.write_text(
         "\n".join(f"file '{str(p).replace(chr(92), '/')}'" for p in parts),
         encoding="utf-8",

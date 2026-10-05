@@ -24,7 +24,7 @@ def test_big_file_drops_partial_first_line_and_keeps_utf8(
     f.write_text("\n".join(f"Đã tải video số {i}" for i in range(200)), encoding="utf-8")
     tail = log_service.read_tail(1000, path=f)
     assert tail.lines[-1] == "Đã tải video số 199"
-    # Không dòng nào bị cắt cụt đầu: mọi dòng đều bắt đầu đúng "Đã tải".
+    # No line is cut off at the start: every line begins exactly with "Đã tải".
     assert all(line.startswith("Đã tải video số ") for line in tail.lines)
 
 

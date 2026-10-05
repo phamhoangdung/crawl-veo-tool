@@ -57,7 +57,7 @@ describe('BootGate', () => {
 
     await expect.element(screen.getByText('APP-READY')).toBeVisible()
     expect(mockHealth).toHaveBeenCalledWith('/health', expect.anything())
-    // Cache đã được làm ấm để trang Khám phá không phải chờ lại.
+    // The cache has been warmed so the Discovery page does not have to wait again.
     expect(client.getQueryData(['trending', 'bilibili', 'categories'])).toEqual(
       []
     )

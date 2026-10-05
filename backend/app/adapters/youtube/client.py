@@ -1,12 +1,12 @@
-"""YouTube Data API v3 — CHỈ dùng để xem xu hướng/đo cơ hội chủ đề, KHÔNG tải
-video (khác Bilibili/Douyin). Theo yêu cầu người dùng: "ytb chỉ là để xem xu
-hướng thôi, chứ ko lấy video về".
+"""YouTube Data API v3 — ONLY used to watch trends/measure topic opportunity, NOT to download
+videos (unlike Bilibili/Douyin). Per the user's request: "YouTube is only for watching
+trends, not for taking videos".
 
-API chính thức, tài liệu công khai đầy đủ (developers.google.com/youtube/v3) —
-khác Bilibili/Douyin không cần đoán field. Miễn phí, giới hạn theo quota (mặc
-định 10.000 unit/ngày/project): `videos.list` = 1 unit, `search.list` = 100
-unit, `channels.list`/`videoCategories.list` = 1 unit (verify qua tài liệu
-chính thức 2026-09-16, xem docs/phases/phase-17-content-opportunity.md).
+Official API with full public documentation (developers.google.com/youtube/v3) —
+unlike Bilibili/Douyin there is no need to guess fields. Free, limited by quota (default
+10,000 units/day/project): `videos.list` = 1 unit, `search.list` = 100
+units, `channels.list`/`videoCategories.list` = 1 unit (verified against the
+official docs 2026-09-16, see docs/phases/phase-17-content-opportunity.md).
 """
 
 import httpx
@@ -15,7 +15,7 @@ _BASE_URL = "https://www.googleapis.com/youtube/v3"
 
 
 class YouTubeNotConfiguredError(RuntimeError):
-    """Chưa có API key YouTube Data API trong pool."""
+    """No YouTube Data API key in the pool yet."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -26,12 +26,12 @@ class YouTubeNotConfiguredError(RuntimeError):
 
 
 class YouTubeQuotaExceededError(RuntimeError):
-    """Hết quota trong ngày (10.000 unit mặc định) — reset theo giờ Thái Bình
-    Dương (múi giờ Google dùng để tính quota), không phải theo ngày VN."""
+    """Out of quota for the day (10,000 units by default) — resets on Pacific
+    Time (the timezone Google uses to compute quota), not on the Vietnam day."""
 
 
 class YouTubeInvalidKeyError(RuntimeError):
-    """Key sai, bị xoá, hoặc chưa bật YouTube Data API v3 cho project đó."""
+    """Wrong key, deleted, or YouTube Data API v3 not enabled for that project."""
 
 
 class YouTubeApiError(RuntimeError):
@@ -65,8 +65,8 @@ class YouTubeClient:
         return response.json()
 
     def _raise_for_error(self, response: httpx.Response) -> None:
-        """Ánh xạ lỗi Google trả về sang lỗi cụ thể — dạng lỗi tài liệu chính
-        thức: `{"error": {"code": ..., "message": ..., "errors": [{"reason": ...}]}}`."""
+        """Map errors returned by Google to specific errors — the official documented
+        error shape: `{"error": {"code": ..., "message": ..., "errors": [{"reason": ...}]}}`."""
         try:
             payload = response.json()
             error = payload.get("error", {})
@@ -85,8 +85,8 @@ class YouTubeClient:
         payload = await self._get(
             "videoCategories", {"part": "snippet", "regionCode": region_code}
         )
-        # Chỉ giữ category còn cho phép duyệt (assignable) — category cũ/đã
-        # ngừng dùng vẫn có thể xuất hiện trong response nhưng vô nghĩa để chọn.
+        # Keep only categories still assignable — old/deprecated categories
+        # may still appear in the response but are meaningless to pick.
         return [
             item
             for item in payload.get("items", [])
@@ -120,8 +120,8 @@ class YouTubeClient:
         order: str = "viewCount",
         published_after: str | None = None,
     ) -> dict:
-        """Chi phí 100 unit/lần — chỉ gọi khi người dùng chủ động bấm tính điểm
-        chủ đề, không gọi tự động/định kỳ."""
+        """Costs 100 units per call — only call when the user explicitly clicks to compute the
+        topic score, never automatically/periodically."""
         params: dict = {
             "part": "snippet",
             "q": query,
@@ -134,8 +134,8 @@ class YouTubeClient:
         return await self._get("search", params)
 
     async def list_videos_stats(self, video_ids: list[str]) -> list[dict]:
-        """`videos.list` theo id — 1 unit/lần dù nhiều id (tối đa 50 id/lần
-        theo tài liệu chính thức), dùng lấy view/like sau khi có id từ search."""
+        """`videos.list` by id — 1 unit per call regardless of many ids (up to 50 ids per call
+        per the official docs), used to get views/likes after getting ids from search."""
         if not video_ids:
             return []
         payload = await self._get(

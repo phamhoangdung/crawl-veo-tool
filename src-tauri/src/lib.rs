@@ -4,14 +4,14 @@ use std::sync::Mutex;
 
 use tauri::{Manager, RunEvent};
 
-/// Giữ tiến trình backend đã spawn để tắt sạch khi đóng app — không tắt sẽ để lại
-/// tiến trình Python treo lại (xem docs/phases/phase-12-desktop-packaging.md, mục
-/// "Tiêu chí hoàn thành": phải kiểm tra Task Manager không còn tiến trình orphan).
+/// Keeps the spawned backend process so it can be shut down cleanly when the app closes;
+/// otherwise a Python process is left hanging around (see docs/phases/phase-12-desktop-packaging.md,
+/// "Definition of Done": Task Manager must show no orphan process).
 struct BackendProcess(Mutex<Option<Child>>);
 
-/// Đường dẫn tới `viedub-backend.exe` — dev mode trỏ thẳng vào thư mục build của
-/// PyInstaller (`backend/dist/viedub-backend/`, tương đối theo CWD lúc `tauri dev`
-/// chạy là `src-tauri/`), bản đóng gói dùng resource đã bundle theo
+/// Path to `viedub-backend.exe`: dev mode points straight at the PyInstaller build folder
+/// (`backend/dist/viedub-backend/`, relative to the CWD `src-tauri/` when `tauri dev`
+/// runs); the packaged build uses the resource bundled via
 /// `tauri.conf.json` (`bundle.resources`).
 fn resolve_backend_exe(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if cfg!(debug_assertions) {
@@ -33,10 +33,10 @@ fn resolve_backend_exe(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(resource_dir.join("backend").join("viedub-backend.exe"))
 }
 
-/// Cổng backend lắng nghe. Bản đóng gói xin hệ điều hành 1 cổng đang RẢNH thay vì
-/// cố định 8000 — máy người dùng có thể đã có phần mềm khác (hoặc bản app cũ chưa
-/// tắt hẳn) chiếm 8000, khi đó giao diện sẽ nói chuyện nhầm với tiến trình lạ.
-/// Dev mode giữ 8000 vì frontend dev (Vite) trỏ cứng vào đó.
+/// Port the backend listens on. The packaged build asks the OS for a FREE port instead of
+/// hard-coding 8000: the user's machine may already have other software (or an old app
+/// instance that has not fully exited) on 8000, and the UI would talk to a stranger process.
+/// Dev mode keeps 8000 because the dev frontend (Vite) hard-codes it.
 fn pick_backend_port() -> u16 {
     if cfg!(debug_assertions) {
         return 8000;
@@ -51,14 +51,14 @@ fn spawn_backend(app: &tauri::AppHandle, port: u16) -> Result<Child, String> {
     let exe_path = resolve_backend_exe(app)?;
     let mut command = Command::new(&exe_path);
     command.env("BACKEND_PORT", port.to_string());
-    // Nhật ký backend tự ghi ra file (xem backend/app/core/logging_setup.py), nên
-    // không cần console: null handle để Python vẫn có stdout/stderr hợp lệ.
+    // The backend writes its log to a file (see backend/app/core/logging_setup.py), so no
+    // console is needed: null handles keep valid stdout/stderr for Python.
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    // Không có cờ này Windows mở cửa sổ cmd cho mỗi sidecar console.
+    // Without this flag Windows opens a cmd window for every console sidecar.
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -98,8 +98,8 @@ pub fn run() {
                 }
             }
 
-            // Cửa sổ tạo ở đây (không để tauri.conf.json tự tạo) để tiêm được địa chỉ
-            // backend vào trang TRƯỚC khi frontend chạy — `frontend/src/lib/api.ts` đọc
+            // The window is created here (not by tauri.conf.json) so the backend address can
+            // be injected into the page BEFORE the frontend runs; `frontend/src/lib/api.ts` reads
             // `window.__VIEDUB_API_BASE__`.
             let window_config = app.config().app.windows[0].clone();
             tauri::WebviewWindowBuilder::from_config(app, &window_config)?
@@ -113,12 +113,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // Tắt sạch tiến trình backend khi app đóng — tránh treo lại tiến trình
-            // Python nền (xem DoD ở docs/phases/phase-12-desktop-packaging.md).
+            // Shut the backend process down cleanly when the app closes, to avoid leaving a
+            // background Python process behind (see the DoD in docs/phases/phase-12-desktop-packaging.md).
             if let RunEvent::Exit = event {
                 let state = app_handle.state::<BackendProcess>();
-                // Lấy Child ra khỏi Mutex rồi nhả lock ngay (không giữ lock trong
-                // lúc kill/wait — đó là I/O chặn, không nên giữ mutex khi làm việc đó).
+                // Take the Child out of the Mutex and release the lock right away (do not
+                // hold the lock while killing/waiting: that is blocking I/O).
                 let child_opt = state.0.lock().unwrap().take();
                 if let Some(mut child) = child_opt {
                     let _ = child.kill();

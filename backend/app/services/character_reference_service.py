@@ -1,8 +1,8 @@
-"""Bộ ảnh tham chiếu nhân vật/cảnh (Phase 14).
+"""Character/scene reference image sets (Phase 14).
 
-Ảnh tham chiếu được đính kèm vào MỌI lần sinh ảnh/video để nhân vật giữ đặc điểm
-xuyên nhiều cảnh — mỗi lần gọi model là một lần sinh độc lập, model không "nhớ"
-lần trước. Xem docs/ai-video-generation/research.md Phần 3.
+Reference images are attached to EVERY image/video generation so the character keeps its features
+across many scenes — each model call is an independent generation, the model does not "remember"
+the previous one. See docs/ai-video-generation/research.md Part 3.
 """
 
 import logging
@@ -34,8 +34,8 @@ def references_dir() -> Path:
 
 
 def validate_name(name: str) -> str:
-    """`name` được dùng làm mention token `@ten` trong prompt nên phải là slug —
-    khoảng trắng hay dấu tiếng Việt sẽ làm việc parse `@ten` không xác định."""
+    """`name` is used as the mention token `@name` in prompts so it must be a slug —
+    spaces or Vietnamese diacritics would make parsing `@name` ambiguous."""
     cleaned = name.strip().lower()
     if not _SLUG_PATTERN.match(cleaned):
         raise CharacterReferenceError(
@@ -140,10 +140,10 @@ def delete_reference(db: Session, user_id: int, reference_id: int) -> bool:
 
 
 def resolve_mentions(db: Session, user_id: int, prompt: str) -> tuple[list[CharacterReference], list[str]]:
-    """Tìm các token `@ten` trong prompt, trả (bộ ảnh khớp, tên không tồn tại).
+    """Find the `@name` tokens in the prompt, returning (matching sets, names that do not exist).
 
-    Quy ước học từ GOHA Flow Studio: người dùng gõ `@char_hero @prop_bag` ở đầu
-    prompt, tool tự đính kèm đúng ảnh — không phải chọn tay từng cặp ảnh-prompt.
+    A convention learned from GOHA Flow Studio: the user types `@char_hero @prop_bag` at the start of the
+    prompt, and the tool attaches the right images automatically — no picking each image-prompt pair by hand.
     """
     mentioned = re.findall(r"@([a-z0-9_]+)", prompt.lower())
     found: list[CharacterReference] = []

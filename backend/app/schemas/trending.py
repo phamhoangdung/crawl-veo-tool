@@ -7,8 +7,8 @@ from pydantic import BaseModel
 class CategoryRead(BaseModel):
     rid: int
     name: str
-    # Tên tiếng Trung vừa để hiển thị, vừa làm từ khoá search khi lướt quá
-    # 11 video mà ranking/region trả về.
+    # The Chinese name serves both for display and as the search keyword when scrolling past
+    # the 11 videos that ranking/region returns.
     name_zh: str | None = None
     group: str | None = None
     is_followed: bool = False
@@ -19,17 +19,17 @@ class FollowCategoriesRequest(BaseModel):
 
 
 class SnapshotPoint(BaseModel):
-    """1 điểm trên đường xu hướng của 1 chuyên mục."""
+    """1 point on the trend line of one category."""
 
     rid: int
     captured_at: datetime
     total_plays: int
     avg_plays: int
-    # Tổng điểm `pts` — điểm xếp hạng THẬT do Bilibili tự tính (tổng hợp
-    # view+like+coin+share+lưu+thời gian), verify bằng request thật 2026-09-16:
-    # thứ tự pts giảm dần khớp đúng thứ hạng trả về, kể cả khi lượt xem thô thì
-    # không (video xem nhiều hơn nhưng mới/ít tương tác hơn vẫn xếp sau). Đáng
-    # tin hơn `total_plays` để đo "độ hot thật" của 1 chuyên mục.
+    # Total `pts` score — the REAL ranking score Bilibili computes itself (aggregating
+    # views+likes+coins+shares+saves+time), verified with a real request 2026-09-16:
+    # descending pts order matches the returned ranking exactly, even when raw views
+    # do not (a video with more views but newer/less engagement still ranks lower). More
+    # reliable than `total_plays` for measuring the "real hotness" of a category.
     total_pts: int
     heat_score: float
 
@@ -48,50 +48,50 @@ class TrendingVideoRead(BaseModel):
     like_count: int | None = None
     duration_seconds: int | None = None
     cover_url: str | None = None
-    # 4 field dưới verify field-mapping bằng request thật tới `x/web-interface/view`
-    # (2026-09-16) — tên field thô của Bilibili (`review`/`video_review`) không tự
-    # giải thích, đối chiếu với `stat.reply`/`stat.danmaku` mới biết chắc ý nghĩa.
-    comment_count: int | None = None  # bình luận (ranking/search: `review`)
-    danmaku_count: int | None = None  # chú thích trôi (ranking: `video_review`; search: `danmaku`)
-    coin_count: int | None = None  # lượt tặng xu — chỉ ranking mới có, search không trả field này
-    # Điểm xếp hạng thật của Bilibili (`pts`) — chỉ ranking mới có (search không
-    # trả field này). None nghĩa là video này đến từ search, không phải đang
-    # xếp hạng thật — frontend dùng để phân biệt, không phải video nào cũng "hot".
+    # The 4 fields below had their field mapping verified with a real request to `x/web-interface/view`
+    # (2026-09-16) — Bilibili's raw field names (`review`/`video_review`) are not
+    # self-explanatory; only by comparing with `stat.reply`/`stat.danmaku` was the meaning certain.
+    comment_count: int | None = None  # comments (ranking/search: `review`)
+    danmaku_count: int | None = None  # scrolling comments (ranking: `video_review`; search: `danmaku`)
+    coin_count: int | None = None  # coins given — only ranking has it, search does not return this field
+    # Bilibili's real ranking score (`pts`) — only ranking has it (search does not
+    # return this field). None means this video came from search, not from a real
+    # ranking — the frontend uses it to tell them apart; not every video is "hot".
     heat_score: float | None = None
-    # Phase 20: gộp màn Khám phá — cho lưới Trending biết video này đã có trong
-    # thư viện (id thật trong DB) để hiện trạng thái tải/link "Video của tôi"
-    # ngay trên thẻ, không phải đoán qua bvid. None = chưa từng tải.
+    # Phase 20: merged Discovery screen — lets the Trending grid know this video is already in the
+    # library (real id in the DB) to show download status/"My videos" link
+    # right on the card, without guessing via bvid. None = never downloaded.
     video_id: int | None = None
     already_in_library: bool = False
     published_at: str | None = None  # ISO 8601 UTC
-    # Phase 22: id kênh thật (Bilibili: str(mid)) — có ở popular/search/ranking
-    # dưới field mid/owner.mid (xem trending_service._from_*_item). None nếu
-    # API không trả (hiếm).
+    # Phase 22: real channel id (Bilibili: str(mid)) — present in popular/search/ranking
+    # under field mid/owner.mid (see trending_service._from_*_item). None if the
+    # API does not return it (rare).
     channel_id: str | None = None
     channel_is_followed: bool = False
 
 
 class TrendingPageRead(BaseModel):
-    """1 trang video. `has_more` cho frontend biết còn gì để lướt tiếp không."""
+    """1 page of videos. `has_more` tells the frontend whether there is more to scroll."""
 
     videos: list[TrendingVideoRead]
     page: int
     has_more: bool
-    # "ranking" = bảng xếp hạng thật theo chuyên mục (đúng nghĩa "đang xu hướng");
-    # "popular" = danh sách phổ biến toàn trang Bilibili (tab "Tất cả", có phân
-    # trang thật, không gắn 1 chuyên mục); "search" = tìm theo từ khoá (tên
-    # chuyên mục khi lướt quá trang 1, hoặc ô tìm kiếm tự do) — rộng hơn nhưng
-    # lẫn cả video không liên quan, KHÔNG phải "đang xu hướng". Frontend hiển
-    # thị khác nhau theo từng nguồn, không nối liền như cùng 1 danh sách.
+    # "ranking" = the real per-category ranking (truly "trending");
+    # "popular" = the site-wide popular list of Bilibili ("All" tab, with real
+    # pagination, not tied to one category); "search" = search by keyword (the category
+    # name when scrolling past page 1, or the free search box) — broader but
+    # mixed with unrelated videos, NOT "trending". The frontend displays
+    # each source differently, not concatenated as one list.
     source: Literal["ranking", "popular", "search"] = "ranking"
-    # Chỉ có ý nghĩa khi source="search" và caller bật translate_keyword — báo
-    # dịch từ khoá thất bại (đã tự rơi về tìm nguyên văn) để UI cảnh báo, giống
-    # `translation_failed` của job crawl (xem crawl_service).
+    # Only meaningful when source="search" and the caller enabled translate_keyword — reports that
+    # keyword translation failed (it already fell back to verbatim search) so the UI can warn, like
+    # `translation_failed` of the crawl job (see crawl_service).
     translation_failed: bool = False
-    # Phase 22: True khi nguồn dữ liệu bị Bilibili risk-control chặn (chỉ áp
-    # dụng cho trang "video khác trong kênh" — xem channel_service.list_channel_videos).
-    # Khác hẳn "danh sách rỗng thật" — frontend phải hiện thông báo suy giảm,
-    # không phải "kênh này không có video".
+    # Phase 22: True when the data source was blocked by Bilibili risk control (only
+    # applies to the "other videos in the channel" page — see channel_service.list_channel_videos).
+    # Very different from a "truly empty list" — the frontend must show a degraded-state
+    # message, not "this channel has no videos".
     degraded: bool = False
 
 
@@ -108,7 +108,7 @@ class SetChannelFollowedRequest(BaseModel):
 
 
 class CategoryStatsRead(BaseModel):
-    """Thống kê 1 category, dùng vẽ chart so sánh mức độ quan tâm."""
+    """Stats of 1 category, used to draw a chart comparing the level of interest."""
 
     rid: int
     name: str
@@ -118,9 +118,9 @@ class CategoryStatsRead(BaseModel):
     avg_plays: int
     max_plays: int
     total_likes: int
-    # Tổng `pts` (điểm xếp hạng thật Bilibili) của các video đang rank trong
-    # chuyên mục — dùng làm chỉ số chính để so sánh "độ hot" giữa chuyên mục,
-    # thay cho `total_plays` (dễ bị lệch bởi 1 video cũ có view khủng nhưng
-    # không còn ai quan tâm thật sự, xem docstring `SnapshotPoint.total_pts`).
+    # Total `pts` (Bilibili's real ranking score) of the videos currently ranked in the
+    # category — the main metric to compare "hotness" between categories,
+    # replacing `total_plays` (easily skewed by one old video with huge views but
+    # that nobody really cares about any more, see the `SnapshotPoint.total_pts` docstring).
     total_pts: int
     top_video_title: str | None = None

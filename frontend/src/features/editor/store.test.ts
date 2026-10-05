@@ -33,7 +33,7 @@ beforeEach(() => {
 
 describe('splitClip', () => {
   it('cắt clip video thành 2 tại vị trí playhead', () => {
-    // Clip video 0 chiếm output 0→10; cắt tại giây 4.
+    // Video clip 0 occupies output 0→10; cut at second 4.
     useEditorStore.getState().splitClip(0, 0, 4)
 
     const clips = useEditorStore.getState().operations.tracks[0].clips
@@ -43,8 +43,8 @@ describe('splitClip', () => {
   })
 
   it('dời track_start cho nửa sau của clip audio', () => {
-    // Clip audio đặt tại track_start=2, dài 10s → output 2→12. Cắt tại giây 5
-    // nghĩa là offset 3 trong nguồn.
+    // The audio clip is placed at track_start=2, 10s long → output 2→12. Cutting at second 5
+    // means offset 3 in the source.
     useEditorStore.getState().splitClip(1, 0, 5)
 
     const clips = useEditorStore.getState().operations.tracks[1].clips
@@ -76,7 +76,7 @@ describe('duplicateClip', () => {
 
     const clips = useEditorStore.getState().operations.tracks[1].clips
     expect(clips[0].track_start).toBe(2)
-    // Bản gốc chiếm 2→12 nên bản sao bắt đầu ở 12.
+    // The original occupies 2→12 so the copy starts at 12.
     expect(clips[1].track_start).toBe(12)
   })
 })
@@ -164,7 +164,7 @@ describe('beginGesture/endGesture (undo sau khi kéo)', () => {
   it('gọi beginGesture lồng nhau không ghi đè snapshot gốc', () => {
     useEditorStore.getState().beginGesture()
     useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 11 })
-    useEditorStore.getState().beginGesture() // gọi lần 2 giữa chừng — phải bị bỏ qua
+    useEditorStore.getState().beginGesture() // called a 2nd time midway — must be ignored
     useEditorStore.getState().updateClipDuringGesture(0, 0, { end: 12 })
     useEditorStore.getState().endGesture()
 
@@ -188,7 +188,7 @@ describe('updateTrackClips', () => {
 
     const clips = useEditorStore.getState().operations.tracks[0].clips
     expect(clips.every((c) => c.font_color === 'FF0000')).toBe(true)
-    // 1 patch cho N clip = đúng 1 bước undo, không phải N bước.
+    // 1 patch for N clips = exactly 1 undo step, not N steps.
     expect(useEditorStore.getState().past).toHaveLength(1)
   })
 

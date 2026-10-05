@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button'
 import { VideoGridPanel } from './video-grid-panel'
 
 /**
- * Tab "Kênh đã theo dõi" ở màn Khám phá (Phase 22, quyết định đã chốt #2 —
- * 1 chip lọc trong hàng chip chuyên mục, không thêm mục điều hướng riêng để
- * không đi ngược hướng Phase 20 vừa gộp bớt điều hướng).
+ * The "Followed channels" tab on the Discovery screen (Phase 22, decision made #2 —
+ * 1 filter chip in the category chip row, no separate navigation entry added so as
+ * not to go against Phase 20, which just merged navigation entries).
  *
- * v1 đơn giản: chọn 1 kênh tại 1 thời điểm rồi xem video của kênh đó — tái
- * dùng nguyên `VideoGridPanel` vì `getChannelVideos` đã trả đúng hình dạng
- * `TrendingPage`. Gộp nhiều kênh thành 1 feed chung để sau nếu cần (xem plan).
+ * Simple v1: pick 1 channel at a time and view that channel's videos — reusing
+ * `VideoGridPanel` as-is because `getChannelVideos` already returns the exact shape of
+ * `TrendingPage`. Merging many channels into 1 common feed is left for later if needed (see the plan).
  */
 export function FollowedChannelsPanel() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(

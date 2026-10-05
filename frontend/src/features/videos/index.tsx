@@ -31,7 +31,7 @@ import { TranslatedTitle } from '@/components/translated-title'
 import { BatchPanel } from './batch-panel'
 import { ImportPanel } from './import-panel'
 
-/** Nhãn tiếng Việt cho trạng thái — tên enum của backend không dành cho người đọc. */
+/** Vietnamese labels for statuses — the backend enum names are not meant for readers. */
 const STATUS_LABELS: Record<string, string> = {
   queued: 'Chờ tải',
   downloading: 'Đang tải',
@@ -57,8 +57,8 @@ function VideoCard({ item }: { item: VideoFiles }) {
   const queryClient = useQueryClient()
   const [confirming, setConfirming] = useState(false)
 
-  // Tác vụ đang chạy trên video này — danh sách chỉ cần biết "đang làm gì".
-  // Dữ liệu do TaskMonitor đẩy vào cache qua SSE, không tự gọi API.
+  // The task running on this video — the list only needs to know "what is it doing".
+  // The data is pushed into the cache by TaskMonitor via SSE, no API call of its own.
   const tasks = useTaskProgress()
   const activeTasks = tasks.filter(
     (t) => t.video_id === item.video_id && t.is_running

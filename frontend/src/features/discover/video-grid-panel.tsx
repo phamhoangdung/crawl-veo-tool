@@ -45,9 +45,9 @@ function bilibiliEmbedUrl(bvid: string) {
   return `https://player.bilibili.com/player.html?bvid=${bvid}&page=1&high_quality=1&danmaku=0`
 }
 
-/** Gộp id/trạng thái thật của các video vừa được backend tạo/xác nhận vào
- * cache của lưới đang hiển thị — để thẻ chuyển sang "đang tải" ngay lập tức,
- * không phải đợi vòng refetch tiếp theo (Phase 20). */
+/** Merge the real id/state of the videos just created/confirmed by the backend into
+ * the cache of the grid currently displayed — so the card switches to "downloading" immediately,
+ * without waiting for the next refetch round (Phase 20). */
 function mergeLibraryStatus(
   queryKey: unknown[],
   matched: { bvid: string; video_id: number }[],
@@ -71,12 +71,12 @@ function mergeLibraryStatus(
   })
 }
 
-/** 1 thẻ video trong lưới — tự đồng bộ trạng thái tải qua SSE (`useVideoTaskProgress`)
- * khi đã có `video_id`. Trước Phase 20, tải chỉ làm được ở trang Crawl riêng
- * (bảng, không phải lưới) sau khi đã tick chọn ở đây rồi "thêm vào hàng đợi" —
- * hàng đợi đó không có màn hình nào hiển thị lại được, xem
- * docs/phases/phase-20-discovery-workspace.md mục Khảo sát điểm 1. */
-// Export để test riêng hành vi hiện trạng thái tải (không phải render cả lưới).
+/** 1 video card in the grid — syncs its download state itself over SSE (`useVideoTaskProgress`)
+ * once it has a `video_id`. Before Phase 20, downloading was only possible on the separate Crawl page
+ * (a table, not a grid) after ticking here and then "add to queue" —
+ * that queue had no screen that could show it again, see
+ * docs/phases/phase-20-discovery-workspace.md, Survey point 1. */
+// Exported so the download-state display behavior can be tested separately (without rendering the whole grid).
 export function VideoCard({
   video,
   isPicked,
@@ -177,10 +177,10 @@ export function VideoCard({
           {relativeDate && <span className='shrink-0'>{relativeDate}</span>}
         </div>
 
-        {/* Trạng thái tải — 3 nhánh: chưa tải / đang tải (SSE) / đã có sẵn.
-            `already_in_library` chỉ nghĩa là "có bản ghi trong DB", không phân
-            biệt được trạng thái pipeline xa hơn — task SSE mới nói được có
-            đang chạy hay không, còn lại coi là "đã có sẵn". */}
+        {/* Download state — 3 branches: not downloaded / downloading (SSE) / already available.
+            `already_in_library` only means "has a record in the DB", it cannot
+            tell further pipeline states apart — only the SSE task can say whether
+            it is running, everything else counts as "already available". */}
         {video.video_id === null && (
           <Button
             type='button'
@@ -236,12 +236,12 @@ export function VideoCard({
 }
 
 /**
- * Panel "đã chọn" bên phải (ẩn/hiện được) — phản hồi người dùng: chọn nhiều video trong 1
- * lưới dài rồi phải cuộn lại từ đầu mới thấy đã chọn những gì. Chỉ hiện khi
- * có ít nhất 1 video được chọn (không chiếm chỗ lúc không dùng), đứng yên khi
- * cuộn (`sticky`) để luôn thấy được danh sách + nút tải mà không cần tìm lại.
+ * The "selected" panel on the right (can be shown/hidden) — user feedback: picking many videos in one
+ * long grid and then having to scroll back from the top to see what was picked. Only shown when
+ * at least 1 video is selected (takes no space when unused), stays put while
+ * scrolling (`sticky`) so the list + download button are always visible without searching again.
  */
-// Export để test riêng (không phải dựng cả VideoGridPanel + mock infinite query).
+// Exported to test separately (without building the whole VideoGridPanel + mocking the infinite query).
 export function SelectedVideosCart({
   videos,
   onRemove,
@@ -255,7 +255,7 @@ export function SelectedVideosCart({
   onClear: () => void
   onDownload: () => void
   isDownloading: boolean
-  /** Có thì hiện nút thu gọn panel (danh sách vẫn giữ nguyên, chỉ ẩn khỏi màn). */
+  /** When present, shows a collapse button for the panel (the list is kept, only hidden from the screen). */
   onHide?: () => void
 }) {
   return (
@@ -315,9 +315,9 @@ export function SelectedVideosCart({
 }
 
 /**
- * Lưới video dùng chung cho 3 nguồn dữ liệu: xếp hạng theo chuyên mục, danh
- * sách phổ biến toàn trang ("Tất cả"), và tìm kiếm tự do — chỉ khác nhau ở
- * hàm tải trang, còn lại (chọn video, xem trước, tải, ngăn cách nguồn) dùng chung.
+ * A video grid shared by 3 data sources: ranking by category, the site-wide
+ * popular list ("All"), and free search — they differ only in the
+ * page-loading function, everything else (selecting videos, preview, download, source separator) is shared.
  */
 export function VideoGridPanel({
   queryKey,
@@ -328,7 +328,7 @@ export function VideoGridPanel({
 }) {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  // Nhớ lựa chọn ẩn/hiện panel "đã chọn" giữa các lần mở app.
+  // Remember the show/hide choice of the "selected" panel between app launches.
   const [showCart, setShowCart] = useState(() => {
     try {
       return localStorage.getItem(CART_VISIBLE_KEY) !== '0'
@@ -341,7 +341,7 @@ export function VideoGridPanel({
     try {
       localStorage.setItem(CART_VISIBLE_KEY, visible ? '1' : '0')
     } catch {
-      // localStorage không dùng được (chế độ riêng tư...) — chỉ mất phần ghi nhớ.
+      // localStorage is unavailable (private mode...) — only the remembered choice is lost.
     }
   }
   const [previewVideo, setPreviewVideo] = useState<TrendingVideo | null>(null)
@@ -355,10 +355,10 @@ export function VideoGridPanel({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    // `fetchPage` là prop, không phải state đóng gói giá trị ngoài `queryKey`:
-    // mọi nơi gọi component này đều nhét đúng giá trị phân biệt (rid/từ khoá
-    // tìm kiếm) vào CẢ `queryKey` lẫn closure của `fetchPage` cùng lúc — không
-    // có nguy cơ lệch cache dù rule tĩnh không thấy được điều đó.
+    // `fetchPage` is a prop, not state that packages a value outside `queryKey`:
+    // every caller of this component puts the distinguishing value (rid/search
+    // keyword) into BOTH `queryKey` and the `fetchPage` closure at the same time — there is
+    // no risk of a cache mismatch even though the static rule cannot see that.
     // eslint-disable-next-line @tanstack/query/exhaustive-deps
   } = useInfiniteQuery({
     queryKey,
@@ -366,18 +366,18 @@ export function VideoGridPanel({
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? lastPage.page + 1 : undefined,
-    // Giữ dữ liệu đã xem trong 5 phút để quay lại tab không phải tải lại;
-    // xếp hạng Bilibili đổi chậm nên không sợ lệch.
+    // Keep viewed data for 5 minutes so returning to the tab does not reload;
+    // the Bilibili ranking changes slowly so there is no fear of drift.
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   })
 
-  // Trang "ranking"/"popular" (đúng nghĩa đang hot) và trang "search" (chỉ để
-  // lướt thêm, có thể lẫn video không liên quan) có thể trả trùng video — lọc
-  // trùng, đồng thời nhớ video đầu tiên đến từ search SAU ÍT NHẤT 1 trang
-  // không phải search, để chèn ngăn cách rõ. Không chèn ngăn cách khi TOÀN BỘ
-  // kết quả đều là search ngay từ trang 1 (tìm kiếm tự do) — lúc đó không có
-  // gì để "so" với, ngăn cách sẽ vô nghĩa.
+  // "ranking"/"popular" pages (truly hot) and "search" pages (only for
+  // scrolling further, may mix in unrelated videos) can return duplicate videos — dedupe
+  // them, and also remember the first video coming from search AFTER AT LEAST 1 page
+  // that is not search, to insert a clear separator. No separator is inserted when ALL
+  // results are search from page 1 (free search) — there is then nothing
+  // to "compare" against, and a separator would be meaningless.
   const { videos, firstSearchBvid } = useMemo(() => {
     const seen = new Set<string>()
     const flat: TrendingVideo[] = []
@@ -401,8 +401,8 @@ export function VideoGridPanel({
     return { videos: flat, firstSearchBvid }
   }, [data])
 
-  // Chỉ trang đầu của nguồn "search" có bật dịch mới có field này — ranking/
-  // popular luôn undefined, không hiện cảnh báo nhầm.
+  // Only the first page of a "search" source with translation on has this field — ranking/
+  // popular is always undefined, so no warning is shown wrongly.
   const translationFailed = data?.pages[0]?.translation_failed ?? false
   useEffect(() => {
     if (translationFailed) {
@@ -425,9 +425,9 @@ export function VideoGridPanel({
         job.videos.map((v) => ({ bvid: v.platform_video_id, video_id: v.id })),
         queryClient
       )
-      // Popup xem trước (nếu đang mở đúng video vừa tải) không đọc từ cache
-      // lưới — đồng bộ tay để thanh % hiện ngay trong popup, không phải đóng
-      // popup ra mới thấy đang tải.
+      // The preview popup (if open on exactly the video just downloaded) does not read from the
+      // grid cache — sync by hand so the % bar shows right away in the popup, without having to close the
+      // popup to see it downloading.
       setPreviewVideo((prev) => {
         if (!prev) return prev
         const match = job.videos.find((v) => v.platform_video_id === prev.bvid)
@@ -522,9 +522,9 @@ export function VideoGridPanel({
         )}
       </div>
 
-      {/* Panel "đã chọn" đứng yên bên phải khi cuộn — phản hồi người dùng:
-          trước đây chọn nhiều video trong lưới dài rồi phải cuộn lại từ đầu
-          mới thấy đã chọn gì, nút tải cũng chỉ nằm trên đầu trang. */}
+      {/* The "selected" panel stays put on the right while scrolling — user feedback:
+          previously after picking many videos in a long grid you had to scroll back from the top
+          to see what was picked, and the download button was only at the top of the page. */}
       <div className='flex flex-col items-start gap-4 sm:flex-row'>
         <div className='min-w-0 flex-1 space-y-4'>
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
@@ -552,7 +552,7 @@ export function VideoGridPanel({
             ))}
           </div>
 
-          {/* Sentinel: lọt vào tầm nhìn thì tải trang tiếp theo. */}
+          {/* Sentinel: when it enters view, load the next page. */}
           <div ref={sentinelRef} className='h-px' />
 
           {isFetchingNextPage && (

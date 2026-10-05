@@ -1,9 +1,9 @@
-"""Phase 21 — tải đa luồng qua HTTP Range. Test riêng khỏi
-test_download_service.py (test Phase 20 — giới hạn số video) vì đây test 1
-tầng khác hẳn: giới hạn số KẾT NỐI cho MỖI video.
+"""Phase 21 — multi-stream download via HTTP Range. Tested separately from
+test_download_service.py (the Phase 20 test — limiting the number of videos) because this tests 1
+very different layer: limiting the number of CONNECTIONS per video.
 
-Tiêu chí quan trọng nhất (xem Definition of Done ở phase-21): file tải theo
-Range phải GIỐNG HỆT file tải 1 luồng, byte-for-byte — không chỉ "gần đúng".
+The most important criterion (see Definition of Done in phase-21): a file downloaded by
+Range must be IDENTICAL to the single-stream file, byte-for-byte — not just "approximately".
 """
 
 import asyncio
@@ -18,10 +18,10 @@ from app.services import download_service, progress_service
 
 @pytest.fixture(autouse=True)
 def _small_part_threshold(monkeypatch: pytest.MonkeyPatch):
-    """`download_part_min_bytes` mặc định 8MB — quá lớn cho test đơn vị (tải
-    thật 8MB mỗi test thì chậm). Hạ xuống 200 byte để các test dùng nội dung
-    vài trăm byte/vài chục KB vẫn thật sự đi qua nhánh chia phần, không lặng
-    lẽ rơi về fallback vì "chưa đủ lớn"."""
+    """`download_part_min_bytes` defaults to 8MB — too large for a unit test (really downloading
+    8MB per test would be slow). Lower it to 200 bytes so tests using content of
+    a few hundred bytes/a few tens of KB still really go through the split branch, instead of silently
+    falling back because "not big enough"."""
     monkeypatch.setenv("DOWNLOAD_PART_MIN_BYTES", "200")
     get_settings.cache_clear()
     yield
@@ -29,10 +29,10 @@ def _small_part_threshold(monkeypatch: pytest.MonkeyPatch):
 
 
 def _content(size: int) -> bytes:
-    """Nội dung giả nhưng KHÔNG lặp lại đều — nếu code ghi nhầm offset (vd lệch
-    1 byte, hoặc 2 phần ghi đè lên nhau), so sánh với nội dung ngẫu nhiên kiểu
-    này chắc chắn phát hiện ra; nội dung toàn 1 byte lặp lại (vd b"\\x00" * n)
-    sẽ không phát hiện được lỗi lệch offset."""
+    """Fake content that does NOT repeat evenly — if the code writes at a wrong offset (e.g. off by
+    1 byte, or 2 parts overwriting each other), comparing with random-looking content like
+    this will certainly detect it; content that is one repeated byte (e.g. b"\\x00" * n)
+    would not detect an offset error."""
     return bytes((i * 2654435761) % 256 for i in range(size))
 
 
@@ -119,8 +119,8 @@ class TestProbe:
 
 
 class TestDownloadStreamMatchesSingleConnection:
-    """Tiêu chí quan trọng nhất: file tải đa luồng phải giống hệt file tải 1
-    luồng, byte-for-byte — không phải "gần đúng" (xem DoD phase-21)."""
+    """The most important criterion: the multi-stream file must be identical to the single-
+    stream file, byte-for-byte — not "approximately" (see DoD phase-21)."""
 
     @pytest.mark.anyio
     async def test_ranged_output_matches_single_connection_output(self, tmp_path) -> None:
@@ -151,9 +151,9 @@ class TestDownloadStreamMatchesSingleConnection:
 
     @pytest.mark.anyio
     async def test_connections_1_never_sends_range_header(self, tmp_path) -> None:
-        """`connections<=1` phải đi thẳng đường cũ (fallback), không qua nhánh
-        chia phần — kể cả khi server có hỗ trợ Range (xem thiết kế phase-21:
-        mặc định không đổi hành vi cũ)."""
+        """`connections<=1` must go straight to the old path (fallback), not through the
+        split branch — even when the server supports Range (see the phase-21 design:
+        the default does not change the old behavior)."""
         content = _content(1000)
         seen_range_header = False
 
@@ -192,7 +192,7 @@ class TestDownloadStreamMatchesSingleConnection:
 
     @pytest.mark.anyio
     async def test_falls_back_when_size_below_threshold(self, tmp_path) -> None:
-        content = _content(100)  # nhỏ hơn download_part_min_bytes mặc định
+        content = _content(100)  # smaller than the default download_part_min_bytes
         transport = _mock_ranged_transport(content)
 
         async with httpx.AsyncClient(transport=transport) as client:
@@ -220,13 +220,13 @@ class TestDownloadStreamMatchesSingleConnection:
 
 
 class TestConnectionSlotsLimit:
-    """Semaphore kết nối phải giới hạn đúng số worker Range chạy thật cùng lúc
-    — bất kể 1 video xin nhiều phần hay nhiều video cùng tải (Phase 20+21
-    dùng chung 1 hàng rào, xem docs/phases/phase-21-parallel-download.md)."""
+    """The connection semaphore must limit exactly the number of Range workers really running at once
+    — regardless of 1 video asking for many parts or many videos downloading (Phase 20+21
+    share 1 barrier, see docs/phases/phase-21-parallel-download.md)."""
 
     @pytest.mark.anyio
     async def test_limits_concurrent_range_requests(self, tmp_path) -> None:
-        size = 800  # > ngưỡng test (200) để chắc chắn đi qua nhánh chia phần
+        size = 800  # > the test threshold (200) to be sure it goes through the split branch
         content = _content(size)
         concurrent = 0
         max_concurrent = 0
@@ -300,7 +300,7 @@ class TestRangePartRetry:
 
         assert dest.read_bytes() == content
         task = next(p for p in progress_service.snapshot() if p.video_id == 1)
-        # Đúng 40 byte, không phải 80 (nếu retry cộng dồn nhầm cả lần lỗi).
+        # Exactly 40 bytes, not 80 (if a retry wrongly accumulated the failed attempt too).
         assert task.current == 40
 
     @pytest.mark.anyio
@@ -321,10 +321,10 @@ class TestRangePartRetry:
 
 
 class TestDownloadBilibiliVideoSlot:
-    """`_download_bilibili_video_slot` — lớp keo nối `get_play_streams` → tải
-    video+audio SONG SONG → ghép ffmpeg. Trọng tâm: 1 stage "downloading" duy
-    nhất với tổng dung lượng = video + audio, không phải 2 chặng nối tiếp như
-    trước Phase 21 (xem thiết kế trong phase-21-parallel-download.md)."""
+    """`_download_bilibili_video_slot` — the glue layer linking `get_play_streams` → downloading
+    video+audio IN PARALLEL → ffmpeg merge. Focus: a single "downloading" stage with
+    total size = video + audio, not 2 sequential stages as
+    before Phase 21 (see the design in phase-21-parallel-download.md)."""
 
     @pytest.mark.anyio
     async def test_merges_video_and_audio_into_single_stage_total(
@@ -384,12 +384,12 @@ class TestDownloadBilibiliVideoSlot:
         merge_calls = []
 
         def fake_merge(video_path, audio_path, output_path):
-            # Đọc NGAY trong lúc ghép — hàm thật xoá 2 file tạm này ngay sau
-            # khi ghép xong, đọc lại sau khi hàm trả về sẽ luôn ra FileNotFound.
+            # Read RIGHT while merging — the real function deletes these 2 temp files right after
+            # the merge finishes, reading afterwards would always give FileNotFound.
             merge_calls.append(
                 (video_path.read_bytes(), audio_path.read_bytes(), output_path)
             )
-            # ffmpeg thật sẽ tạo ra file output — giả lập bằng cách ghi tạm.
+            # Real ffmpeg would create the output file — simulate by writing it temporarily.
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_bytes(b"fake merged mp4")
 
@@ -416,8 +416,8 @@ class TestDownloadBilibiliVideoSlot:
         assert merged_video_bytes == video_bytes
         assert merged_audio_bytes == audio_bytes
 
-        # Đúng 1 chặng "downloading" duy nhất, tổng = video + audio — không
-        # phải 2 chặng "video" rồi "audio" nối tiếp như hành vi trước Phase 21.
+        # Exactly 1 "downloading" stage, total = video + audio — not
+        # 2 sequential "video" then "audio" stages like the behavior before Phase 21.
         downloading_stages = [s for s in stages_seen if s[0] == "downloading"]
         assert downloading_stages == [("downloading", len(video_bytes) + len(audio_bytes))]
         assert ("video", None) not in stages_seen
@@ -427,9 +427,9 @@ class TestDownloadBilibiliVideoSlot:
 class TestRangeNotHonored:
     @pytest.mark.anyio
     async def test_falls_back_to_whole_file_when_cdn_ignores_range(self, tmp_path) -> None:
-        """CDN báo `accept-ranges: bytes` ở HEAD nhưng GET thật lại trả 200
-        (cả file) thay vì 206 — hiếm nhưng đã ghi nhận, không được ghi đè lung
-        tung tạo file hỏng (xem docs/phases/phase-21-parallel-download.md)."""
+        """The CDN reports `accept-ranges: bytes` on HEAD but the real GET returns 200
+        (the whole file) instead of 206 — rare but recorded, it must not overwrite at
+        random and create a broken file (see docs/phases/phase-21-parallel-download.md)."""
         content = _content(1000)
 
         def handle(request: httpx.Request) -> httpx.Response:
@@ -437,7 +437,7 @@ class TestRangeNotHonored:
                 return httpx.Response(
                     200, headers={"content-length": "1000", "accept-ranges": "bytes"}
                 )
-            # Nói dối: trả 200 + cả file thay vì 206 dù có header Range.
+            # Lying: return 200 + the whole file instead of 206 despite the Range header.
             return httpx.Response(200, content=content)
 
         transport = httpx.MockTransport(handle)

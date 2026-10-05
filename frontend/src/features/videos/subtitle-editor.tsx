@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 
-/** Biến thể file nào có sẵn để xem trước — ưu tiên bản đã xử lý nhiều nhất. */
+/** Which file variants are available for preview — prefer the most processed version. */
 function pickVariant(available: { burned: boolean; dubbed: boolean; original: boolean }) {
   if (available.burned) return 'burned'
   if (available.dubbed) return 'dubbed'
@@ -37,9 +37,9 @@ type EditorProps = {
   onOpenChange: (open: boolean) => void
 }
 
-/** Tách riêng + bọc `memo`: gõ chữ ở 1 câu trước đây chạy lại hàm render của
- * TOÀN BỘ danh sách (vì `.map` nội tuyến trong component cha) — giờ chỉ hàng
- * đang gõ render lại, các hàng khác giữ nguyên vì props không đổi. */
+/** Split out + wrapped in `memo`: typing in 1 sentence used to re-run the render function of
+ * THE WHOLE list (because of the inline `.map` in the parent component) — now only the row
+ * being typed in re-renders, the other rows stay as they are because their props do not change. */
 const SegmentRow = memo(function SegmentRow({
   segment,
   index,
@@ -106,8 +106,8 @@ const SegmentRow = memo(function SegmentRow({
 })
 
 /**
- * Bọc ngoài để reset bản nháp bằng `key` thay vì dùng effect đồng bộ state —
- * mỗi lần mở lại (hoặc phụ đề đổi vì vừa dịch xong) là một instance mới.
+ * Outer wrapper to reset the draft via `key` instead of using an effect to sync state —
+ * every time it reopens (or the subtitles change because a translation just finished) it is a new instance.
  */
 export function SubtitleEditor(props: EditorProps) {
   if (!props.open) return null
@@ -144,23 +144,23 @@ function SubtitleEditorContent({
     [draft, segments]
   )
 
-  // Danh sách vai đã có (từ bước "Phân vai người nói") để đổ vào dropdown sửa
-  // tay — chỉ hiện khi ít nhất 1 đoạn đã có speaker, không ép mọi video phải
-  // phân vai mới sửa được phụ đề.
+  // The list of speakers that exist (from the "Speaker separation" step) to fill the dropdown for hand
+  // editing — only shown when at least 1 segment has a speaker, not forcing every video to
+  // have speakers separated before its subtitles can be edited.
   const knownSpeakers = useMemo(() => {
     const set = new Set(segments.map((s) => s.speaker).filter(Boolean))
     return Array.from(set).sort()
   }, [segments])
 
-  // Câu đang phát — dùng để tô sáng.
+  // The sentence being played — used for highlighting.
   const activeIndex = useMemo(
     () => draft.findIndex((s) => currentTime >= s.start && currentTime < s.end),
     [draft, currentTime]
   )
 
-  // Ảo hoá danh sách: video dài (faster-whisper ra ~1 segment/vài giây) có thể
-  // ra 500-1000+ câu — dựng hết cả list = 500-1000+ Textarea DOM node cùng lúc.
-  // `measureElement` đo chiều cao thật từng hàng (không cố định, tuỳ nội dung).
+  // Virtualize the list: a long video (faster-whisper yields ~1 segment per few seconds) can
+  // produce 500-1000+ sentences — building the whole list = 500-1000+ Textarea DOM nodes at once.
+  // `measureElement` measures the real height of each row (not fixed, depending on content).
   const rowVirtualizer = useVirtualizer({
     count: draft.length,
     getScrollElement: () => listScrollRef.current,
@@ -168,10 +168,10 @@ function SubtitleEditorContent({
     overscan: 8,
   })
 
-  // Bẫy đã tự đo được: `ResizeObserver` của virtualizer không nhận đúng kích
-  // thước container ở lần đo ĐẦU TIÊN khi nằm trong Radix Dialog (dialog vẫn
-  // đang định vị/animate lúc đó) — danh sách ra rỗng dù container đã có kích
-  // thước thật. Ép 1 lần re-render ngay sau mount để virtualizer đo lại đúng.
+  // A trap found by measuring: the virtualizer's `ResizeObserver` does not get the right container
+  // size on the FIRST measurement when inside a Radix Dialog (the dialog is still
+  // positioning/animating at that time) — the list comes out empty even though the container already has a
+  // real size. Force 1 re-render right after mount so the virtualizer measures again correctly.
   const [, forceRemeasure] = useState(0)
   useEffect(() => {
     forceRemeasure((n) => n + 1)
@@ -186,9 +186,9 @@ function SubtitleEditorContent({
     onError: () => toast.error('Không lưu được phụ đề.'),
   })
 
-  // useCallback: giữ nguyên identity giữa các lần render để `SegmentRow`
-  // (bọc `memo`) không bị buộc render lại chỉ vì cha render lại — nếu không,
-  // gõ 1 ký tự ở câu này vẫn kéo theo tính lại hàm render của MỌI câu khác.
+  // useCallback: keep the identity stable between renders so `SegmentRow`
+  // (wrapped in `memo`) is not forced to re-render just because the parent re-renders — otherwise,
+  // typing 1 character in this sentence would still trigger recomputing the render function of EVERY other sentence.
   const updateSegment = useCallback((index: number, patch: Partial<TranscriptSegment>) => {
     setDraft((prev) =>
       prev.map((segment, i) => (i === index ? { ...segment, ...patch } : segment))
@@ -238,7 +238,7 @@ function SubtitleEditorContent({
               </p>
             )}
 
-            {/* Phụ đề của câu đang phát, hiện to để đọc được khi xem. */}
+            {/* The subtitle of the sentence being played, shown large to be readable while watching. */}
             <div className='min-h-20 rounded-lg border bg-muted/40 p-3'>
               {activeIndex >= 0 ? (
                 <>

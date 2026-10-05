@@ -73,7 +73,7 @@ describe('useVideoTaskProgress', () => {
   it('thấy được khi tác vụ đã xong', async () => {
     await renderWith([task({ is_running: false, percent: 100 })])
 
-    // Đây là tín hiệu để dòng trong bảng đổi trạng thái khỏi "downloading".
+    // This is the signal for the table row to change state away from "downloading".
     await expect
       .element(document.querySelector<HTMLElement>('[data-testid=out]')!)
       .toHaveTextContent('100|false')

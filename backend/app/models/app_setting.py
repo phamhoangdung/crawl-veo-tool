@@ -7,17 +7,17 @@ from app.core.db import Base
 
 
 class AppSetting(Base):
-    """Cài đặt người dùng tự chỉnh, lưu bền qua restart — Phase 21 (tốc độ
-    tải). Đây là bảng cài đặt ĐẦU TIÊN của dự án; trước đây mọi cấu hình runtime
-    chỉ đọc được từ env (`core/config.py::Settings`), không sửa được từ UI.
+    """User-adjustable settings, persisted across restarts — Phase 21 (download
+    speed). This is the project's FIRST settings table; previously all runtime config
+    could only be read from env (`core/config.py::Settings`) and not edited from the UI.
 
-    Dạng khoá-giá trị theo `user_id` thay vì mỗi cài đặt 1 cột riêng — thêm cài
-    đặt mới không cần migration, và khớp sẵn với multi-tenant ở Phase 18 (mỗi
-    user có bộ cài đặt riêng ngay từ đầu, không phải sửa lại schema).
+    Key-value per `user_id` instead of one column per setting — a new setting
+    needs no migration, and it already fits multi-tenant in Phase 18 (each
+    user has their own settings from the start, no schema rework).
 
-    `value` luôn lưu dạng chuỗi (số/bool tự ép ở `settings_service`) — đơn giản
-    hơn JSON column cho một bảng chỉ vài chục dòng, dễ đọc thẳng trong DB khi
-    debug.
+    `value` is always stored as a string (numbers/bools are coerced in `settings_service`) — simpler
+    than a JSON column for a table of a few dozen rows, and easy to read straight in the DB when
+    debugging.
     """
 
     __tablename__ = "app_settings"

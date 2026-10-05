@@ -1,26 +1,26 @@
-"""VENDORED — thuật toán ký `a_bogus` của Douyin (chống bot cho các endpoint web,
-bao gồm tìm kiếm từ khoá). Copy gần như nguyên văn (chỉ bỏ khối demo
-`__main__`) từ:
+"""VENDORED — Douyin's `a_bogus` signing algorithm (anti-bot for web endpoints,
+including keyword search). Copied almost verbatim (only the `__main__` demo
+block removed) from:
 
-    Nguồn : https://github.com/Johnserf-Seed/f2 (file f2/utils/abogus.py)
-    Phiên bản vendor: f2==0.0.1.7 (pip, 2026-09-15)
-    License nguồn: Apache License 2.0 (JohnserfSeed)
+    Source : https://github.com/Johnserf-Seed/f2 (file f2/utils/abogus.py)
+    Vendored version: f2==0.0.1.7 (pip, 2026-09-15)
+    Source license: Apache License 2.0 (JohnserfSeed)
 
-**Vì sao vendor thay vì `pip install f2`:** f2 là 1 tool CLI đầy đủ tính năng,
-kéo theo ~20 dependency nặng (rich, click, qrcode, pyexecjs, browser-cookie3,
-aiosqlite, protobuf, m3u8...) không liên quan gì đến việc ký request — không
-đáng để gánh vào bundle desktop (Phase 12, PyInstaller) chỉ để dùng 1 thuật
-toán ký tự thân tự đủ (chỉ phụ thuộc `gmssl`). Xem
-docs/phases/phase-3-multiprovider-douyin.md, "Ghi chú 2026-09-15" để biết đầy
-đủ lý do + cách đối chiếu lại khi Douyin đổi thuật toán.
+**Why vendor instead of `pip install f2`:** f2 is a full-featured CLI tool that
+pulls in ~20 heavy dependencies (rich, click, qrcode, pyexecjs, browser-cookie3,
+aiosqlite, protobuf, m3u8...) unrelated to request signing — not
+worth carrying into the desktop bundle (Phase 12, PyInstaller) just to use a single
+self-contained signing algorithm (it only depends on `gmssl`). See
+docs/phases/phase-3-multiprovider-douyin.md, "Ghi chú 2026-09-15" for the full
+reasons + how to re-check when Douyin changes the algorithm.
 
-**CẢNH BÁO BẢO TRÌ:** đây là thuật toán ByteDance cố tình làm rối để chống
-scraper — họ đổi định kỳ. Khi endpoint ký bằng file này bắt đầu trả lỗi lạ
-(không phải "cần đăng nhập" quen thuộc), việc cần làm là lấy lại phiên bản mới
-nhất của `f2/utils/abogus.py` từ repo trên rồi dán đè vào đây — KHÔNG tự sửa
-tay logic bit-shift/mảng số bên dưới, chỉ đồng bộ lại nguyên văn.
+**MAINTENANCE WARNING:** this is an algorithm ByteDance deliberately obfuscates to stop
+scrapers — they change it periodically. When an endpoint signed with this file starts returning odd errors
+(not the familiar "login required"), the fix is to fetch the newest version
+of `f2/utils/abogus.py` from the repo above and paste it over this file — do NOT hand-edit
+the bit-shift/number-array logic below, only re-sync it verbatim.
 
-Không sửa logic bên trong file này ngoài việc đồng bộ với upstream.
+Do not change the logic inside this file other than syncing with upstream.
 """
 
 import random
@@ -132,7 +132,7 @@ class CryptoUtility:
                 self.big_array[1] = initial_value
                 self.big_array[index_b] = index_b
             else:
-                sum_initial = initial_value + value_e  # noqa: F821 — gán ở cuối vòng lặp trước, nguyên văn upstream
+                sum_initial = initial_value + value_e  # noqa: F821 — assigned at the end of the previous loop, verbatim upstream
 
             char_value = ord(char)
             sum_initial %= len(self.big_array)
@@ -267,7 +267,7 @@ class ABogus:
         self,
         fp: str = "",
         user_agent: str = "",
-        options: list[int] = [0, 1, 14],  # noqa: B006 — nguyên văn upstream, không đổi để dễ đối chiếu resync
+        options: list[int] = [0, 1, 14],  # noqa: B006 — verbatim upstream, unchanged to ease re-sync
     ):
         self.aid = 6383
         self.pageId = 0
@@ -429,5 +429,5 @@ class ABogus:
         )
 
         abogus = self.crypto_utility.abogus_encode(abogus_bytes_str, 0)
-        params = "%s&a_bogus=%s" % (params, abogus)  # noqa: UP031 — nguyên văn upstream
+        params = "%s&a_bogus=%s" % (params, abogus)  # noqa: UP031 — verbatim upstream
         return (params, abogus, self.user_agent)

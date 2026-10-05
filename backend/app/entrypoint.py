@@ -1,35 +1,39 @@
-"""Điểm khởi động cho bản đóng gói (Phase 12) — PyInstaller compile file này thành
-executable, Tauri gọi lên làm sidecar. Gọi `uvicorn.run()` trực tiếp bằng code
-thay vì qua CLI `--reload` như `scripts/run-backend.mjs` dùng ở bản dev: reload
-mode dùng subprocess watcher (WatchFiles) không tương thích với PyInstaller
-(watcher cần theo dõi file mã nguồn — bản đóng gói không có mã nguồn dạng file
-rời để theo dõi).
+"""Entry point for the packaged build (Phase 12) — PyInstaller compiles this file into an
+executable that Tauri launches as a sidecar. Calls `uvicorn.run()` directly in code
+instead of through the `--reload` CLI that `scripts/run-backend.mjs` uses in dev: reload
+mode uses a subprocess watcher (WatchFiles) which is incompatible with PyInstaller
+(the watcher needs to follow source files — the packaged build has no loose source
+files to follow).
 """
 
 import multiprocessing
 import os
 import sys
 
-# Cờ để `adapters/demucs.py` chạy lại chính executable này làm tiến trình Demucs
-# riêng (bản đóng gói không có `python -m demucs` vì không có interpreter rời).
+# Flag so `adapters/demucs.py` can re-run this very executable as a separate Demucs
+# process (the packaged build has no `python -m demucs` since there is no standalone interpreter).
 DEMUCS_FLAG = "--run-demucs"
 
 if __name__ == "__main__":
-    # Bản đóng gói trên Windows: `ProcessPoolExecutor` (core/worker_pool.py) sinh
-    # worker bằng cách chạy lại chính file .exe này với cờ `--multiprocessing-fork`.
-    # Thiếu dòng này, worker chạy lại cả đoạn khởi động uvicorn bên dưới (đụng cổng
-    # đang bận) rồi thoát ngay -> "A child process terminated abruptly".
+    # Packaged build on Windows: `ProcessPoolExecutor` (core/worker_pool.py) spawns
+    # workers by re-running this .exe with the `--multiprocessing-fork` flag.
+    # Without this line, workers would re-run the whole uvicorn startup below (hitting the busy
+    # port) and exit immediately -> "A child process terminated abruptly".
     multiprocessing.freeze_support()
 
-    # Tauri chạy backend không có console: stdout/stderr có thể là None, uvicorn và
-    # tqdm (Demucs) gọi .isatty()/.write() lên đó sẽ nổ AttributeError. Nhật ký thật
-    # đã ghi ra file (logging_setup).
+    # Tauri runs the backend without a console: stdout/stderr may be None, and uvicorn and
+    # tqdm (Demucs) call .isatty()/.write() on them, which would raise AttributeError. The real
+    # log is already written to a file (logging_setup).
     for name in ("stdout", "stderr"):
         if getattr(sys, name) is None:
             setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
 
     if len(sys.argv) > 1 and sys.argv[1] == DEMUCS_FLAG:
-        # Import trễ + nằm trước `app.main` để tiến trình Demucs không phải nạp cả server.
+        # Late import, before `app.main`, so the Demucs process does not load the whole
+        # server. The AI pack must be on sys.path first (demucs/torch live there).
+        from app.core import packs
+
+        packs.require_ai()
         from demucs.separate import main as demucs_main
 
         demucs_main(sys.argv[2:])

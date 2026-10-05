@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 /**
- * Douyin mới làm tới bước thăm dò, chưa tải được video.
+ * Douyin has only reached the probing step, videos cannot be downloaded yet.
  *
- * Nói thẳng điều đó trên giao diện thay vì hiện một ô tìm kiếm trông y hệt
- * Bilibili rồi để người dùng bấm và nhận lỗi khó hiểu. Bước thăm dò không phải
- * làm cho có: nó in ra đúng những trường mà API Douyin trả về, tức là thứ cần
- * biết để viết phần bóc tách link không watermark — mà chỉ cookie thật mới cho biết.
+ * Say so plainly on the UI instead of showing a search box that looks identical to
+ * Bilibili's and letting the user click and get a confusing error. The probing step is not
+ * just for show: it prints exactly the fields the Douyin API returns, which is what is needed to
+ * know to write the no-watermark link extraction — and only a real cookie can reveal it.
  */
 export function DouyinPanel() {
   const [shareUrl, setShareUrl] = useState('')

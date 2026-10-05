@@ -76,8 +76,8 @@ class GenerationModeResponse(BaseModel):
 
 
 class ExportToLibraryResponse(BaseModel):
-    """Kết quả đưa asset vào kho dùng chung — `asset_id` là id trong kho đó
-    (chuỗi), khác id của `GeneratedAsset` (số)."""
+    """Result of putting an asset into the shared library — `asset_id` is the id in that library
+    (a string), unlike the id of `GeneratedAsset` (a number)."""
 
     asset_id: str
     name: str
@@ -85,7 +85,7 @@ class ExportToLibraryResponse(BaseModel):
 
 
 class GenerationJobRead(BaseModel):
-    """Một lần sinh chạy nền — client hỏi lại bằng id để biết xong chưa."""
+    """A background generation run — the client polls by id to know whether it is done."""
 
     id: str
     kind: str

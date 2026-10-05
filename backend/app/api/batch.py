@@ -1,7 +1,7 @@
-"""Chạy pipeline hàng loạt — dùng được cả từ UI lẫn từ n8n/script ngoài.
+"""Run the pipeline in bulk — usable from both the UI and n8n/external scripts.
 
-Thiết kế cho máy gọi: 1 request khởi động cả batch rồi trả về ngay, tiến độ đọc
-qua endpoint riêng. n8n không phải giữ kết nối mở suốt hàng giờ.
+Designed for machine callers: 1 request starts the whole batch and returns immediately, with progress read
+through a separate endpoint. n8n does not have to keep a connection open for hours.
 """
 
 import asyncio
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/batch", tags=["batch"])
 
 class BatchStartRequest(BaseModel):
     video_ids: list[int] = Field(..., min_length=1)
-    # Bỏ trống thì chạy pipeline mặc định (tải → tách lời → dịch → lồng tiếng).
+    # When empty, run the default pipeline (download → transcribe → translate → dub).
     steps: list[str] | None = None
     concurrency: int = Field(default=batch_service.DEFAULT_CONCURRENCY, ge=1, le=4)
 
@@ -65,7 +65,7 @@ def _to_status(job: batch_service.BatchJob) -> BatchStatusRead:
 async def start_batch(
     payload: BatchStartRequest, background: BackgroundTasks
 ) -> BatchStatusRead:
-    """Khởi động batch rồi trả về ngay — tiến độ xem ở `GET /api/batch/status`."""
+    """Start the batch and return immediately — see progress at `GET /api/batch/status`."""
     current = batch_service.get_current()
     if current is not None and current.is_running:
         raise HTTPException(
@@ -77,7 +77,7 @@ async def start_batch(
     if invalid:
         raise HTTPException(status_code=400, detail=f"Bước không hợp lệ: {sorted(invalid)}")
 
-    # Tạo job trước để trả trạng thái ban đầu, rồi chạy nền.
+    # Create the job first to return the initial state, then run in the background.
     job = await batch_service.prepare_batch(
         SessionLocal, payload.video_ids, payload.steps, payload.concurrency
     )
@@ -93,11 +93,11 @@ def batch_status() -> BatchStatusRead | None:
 
 @router.post("/cancel")
 def cancel_batch() -> dict[str, bool]:
-    """Dừng sau khi video đang chạy xong — không cắt ngang để khỏi bỏ file dở."""
+    """Stop after the currently running video finishes — do not cut in midway so no half-written files are left."""
     return {"cancelled": batch_service.cancel_current()}
 
 
 @router.get("/pending-videos", response_model=list[int])
 def pending_videos(limit: int = 50) -> list[int]:
-    """ID các video chưa xử lý xong — n8n gọi cái này rồi đưa thẳng vào /start."""
+    """IDs of videos not fully processed yet — n8n calls this and feeds it straight into /start."""
     return batch_service.list_pending_video_ids(SessionLocal, limit=limit)

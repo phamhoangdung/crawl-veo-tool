@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-import app.models  # noqa: F401 — nạp toàn bộ model để create_all thấy hết bảng
+import app.models  # noqa: F401 — load every model so create_all sees every table
 from app.core.db import Base
 from app.models.translation_cache import TranslationCache, make_key
 from app.models.user import User
@@ -27,7 +27,7 @@ class TestMakeKey:
         assert make_key("匹克球", "zh", "vi") == make_key("匹克球", "zh", "vi")
 
     def test_whitespace_normalized(self) -> None:
-        """Cùng tiêu đề chỉ khác thừa dấu cách thì không nên tính 2 lần dịch."""
+        """The same title differing only by extra spaces should not count as 2 translations."""
         assert make_key("  匹克球  规则 ", "zh", "vi") == make_key("匹克球 规则", "zh", "vi")
 
     def test_different_language_pair_different_key(self) -> None:
@@ -38,8 +38,8 @@ class TestMakeKey:
 
 
 class TestTranslateCached:
-    """Cache là điểm cốt lõi: tooltip gọi mỗi lần hover nên không cache thì rê
-    chuột qua bảng 40 dòng vài lượt là hết quota."""
+    """The cache is the core point: the tooltip fires on every hover so without a cache a few passes of the
+    mouse over a 40-row table exhausts the quota."""
 
     @pytest.mark.anyio
     async def test_second_call_does_not_hit_api(self, db: Session) -> None:
@@ -75,7 +75,7 @@ class TestTranslateCached:
 
     @pytest.mark.anyio
     async def test_counts_hits(self, db: Session) -> None:
-        """hit_count để biết cache có thật sự hiệu quả hay không."""
+        """hit_count lets us know whether the cache is really effective."""
 
         async def fake(db_, uid, text, src, tgt):
             return "x"
@@ -86,7 +86,7 @@ class TestTranslateCached:
 
         row = db.get(TranslationCache, make_key("同一个标题", "zh", "vi"))
         assert row is not None
-        # 3 lần gọi = 1 lần dịch + 2 lần dùng lại.
+        # 3 calls = 1 translation + 2 reuses.
         assert row.hit_count == 2
 
     @pytest.mark.anyio
@@ -102,7 +102,7 @@ class TestTranslateCached:
 
     @pytest.mark.anyio
     async def test_failure_is_not_cached(self, db: Session) -> None:
-        """Lỗi hết quota không được lưu — lần sau còn quota phải dịch lại được."""
+        """A quota error must not be stored — next time, with quota available, it must be translatable again."""
 
         async def failing(db_, uid, text, src, tgt):
             raise translate_service.AllProvidersExhaustedError("hết quota")

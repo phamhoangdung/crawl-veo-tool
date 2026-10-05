@@ -1,7 +1,7 @@
-"""Quản lý file đã tải: liệt kê, tính dung lượng, xoá.
+"""Manage downloaded files: list, compute size, delete.
 
-Tool chạy local nên người dùng cần thấy file thật đang chiếm bao nhiêu đĩa và
-xoá được thứ không cần nữa — khác với web app nơi file nằm trên server.
+The tool runs locally so users need to see how much disk the real files take and
+to delete what is no longer needed — unlike a web app where files live on the server.
 """
 
 import logging
@@ -50,7 +50,7 @@ def _entry(variant: str, raw_path: str | None) -> FileEntry | None:
 
 
 def list_video_files(db: Session, user_id: int) -> list[VideoFiles]:
-    """Mọi video đã có ít nhất 1 file trên đĩa, kèm dung lượng thật."""
+    """Every video with at least 1 file on disk, with its real size."""
     videos = (
         db.query(Video)
         .filter(Video.user_id == user_id, Video.local_path.isnot(None))
@@ -85,7 +85,7 @@ def list_video_files(db: Session, user_id: int) -> list[VideoFiles]:
 
 
 def get_storage_summary(db: Session, user_id: int) -> dict[str, object]:
-    """Tổng quan dung lượng, gồm cả file mồ côi không còn video nào trỏ tới."""
+    """Storage overview, including orphan files that no video points to any more."""
     entries = list_video_files(db, user_id)
     tracked_dirs = {e.video_dir for e in entries if e.video_dir}
 
@@ -110,7 +110,7 @@ def get_storage_summary(db: Session, user_id: int) -> dict[str, object]:
 
 
 def delete_variant(db: Session, video_id: int, variant: str) -> bool:
-    """Xoá 1 biến thể file, xoá cả đường dẫn trong DB. Trả về True nếu đã xoá file."""
+    """Delete 1 file variant, also clearing the path in the DB. Returns True if the file was deleted."""
     video = db.get(Video, video_id)
     if video is None:
         raise ValueError("Video không tồn tại")
@@ -135,8 +135,8 @@ def delete_variant(db: Session, video_id: int, variant: str) -> bool:
         deleted = True
 
     setattr(video, field, None)
-    # Xoá file gốc thì video phải quay về trạng thái chưa tải, nếu không UI vẫn
-    # tưởng file còn đó và các bước sau sẽ lỗi khi mở file.
+    # If the source file is deleted the video must return to the not-downloaded state, otherwise the UI still
+    # thinks the file is there and later steps will fail when opening the file.
     if variant == "original":
         video.status = VideoStatus.QUEUED
     db.commit()
@@ -144,7 +144,7 @@ def delete_variant(db: Session, video_id: int, variant: str) -> bool:
 
 
 def delete_video_files(db: Session, video_id: int) -> int:
-    """Xoá toàn bộ thư mục của 1 video. Trả về số byte đã giải phóng."""
+    """Delete the whole directory of 1 video. Returns the number of bytes freed."""
     video = db.get(Video, video_id)
     if video is None:
         raise ValueError("Video không tồn tại")
@@ -166,7 +166,7 @@ def delete_video_files(db: Session, video_id: int) -> int:
 
 
 def delete_orphan_files(db: Session, user_id: int) -> int:
-    """Xoá thư mục không còn video nào trỏ tới (do xoá bản ghi hoặc job lỗi)."""
+    """Delete directories no video points to any more (after deleting a record or a failed job)."""
     entries = list_video_files(db, user_id)
     tracked_dirs = {e.video_dir for e in entries if e.video_dir}
 
@@ -182,7 +182,7 @@ def delete_orphan_files(db: Session, user_id: int) -> int:
             if video_dir.is_dir() and str(video_dir) not in tracked_dirs:
                 freed += sum(f.stat().st_size for f in video_dir.rglob("*") if f.is_file())
                 shutil.rmtree(video_dir, ignore_errors=True)
-        # Job không còn video nào thì bỏ luôn thư mục rỗng.
+        # If a job has no videos left, also remove the empty directory.
         if not any(job_dir.iterdir()):
             job_dir.rmdir()
 
@@ -190,7 +190,7 @@ def delete_orphan_files(db: Session, user_id: int) -> int:
 
 
 def get_dashboard_stats(db: Session, user_id: int) -> dict[str, int]:
-    """Đếm video theo tiến độ pipeline để hiển thị ở trang tổng quan."""
+    """Count videos by pipeline progress to display on the overview page."""
     videos = db.query(Video).filter(Video.user_id == user_id).all()
 
     downloaded = sum(1 for v in videos if v.local_path)

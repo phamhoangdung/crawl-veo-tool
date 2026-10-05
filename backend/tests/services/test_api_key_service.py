@@ -23,8 +23,8 @@ def db() -> Session:
 
 class TestAddAndList:
     def test_add_key_does_not_upsert_creates_new_row_each_time(self, db: Session) -> None:
-        """Khác bản 1-key/provider cũ: thêm 2 key cùng provider phải ra 2 row riêng,
-        không ghi đè nhau (đúng mục tiêu pool nhiều key/provider)."""
+        """Unlike the old 1-key/provider version: adding 2 keys of the same provider must produce 2 separate rows,
+        not overwriting each other (the whole point of a multi-key/provider pool)."""
         api_key_service.add_key(db, 1, "openai", "key-a", label="Key A")
         api_key_service.add_key(db, 1, "openai", "key-b", label="Key B")
 
@@ -34,8 +34,8 @@ class TestAddAndList:
         assert all(k.status == ApiKeyStatus.ACTIVE for k in keys)
 
     def test_get_decrypted_key_does_not_mutate_usage_stats(self, db: Session) -> None:
-        """get_decrypted_key chỉ "peek" (cost_service dùng để kiểm tra có key hay
-        không) — không được cập nhật last_used_at/request_count như pick thật."""
+        """get_decrypted_key only "peeks" (cost_service uses it to check whether a key exists
+        or not) — it must not update last_used_at/request_count like a real pick."""
         key = api_key_service.add_key(db, 1, "openai", "key-a")
 
         result = api_key_service.get_decrypted_key(db, 1, "openai")
@@ -61,22 +61,22 @@ class TestPickKeyForTask:
         assert picked.last_used_at is not None
 
     def test_rotates_to_least_recently_used_key(self, db: Session) -> None:
-        """2 key cùng provider: key chưa dùng lần nào phải được ưu tiên trước key đã
-        dùng — đúng round-robin/LRU thay vì luôn trả về key đầu tiên."""
+        """2 keys of the same provider: a never-used key must be preferred over an already
+        used one — real round-robin/LRU instead of always returning the first key."""
         key_a = api_key_service.add_key(db, 1, "openai", "key-a")
         key_b = api_key_service.add_key(db, 1, "openai", "key-b")
 
         first_pick = api_key_service.pick_key_for_task(db, 1, "openai")
-        assert first_pick.id == key_a.id  # cả 2 chưa dùng, id nhỏ hơn (insert trước) được chọn trước
+        assert first_pick.id == key_a.id  # neither used yet, the smaller id (inserted first) is picked first
 
         second_pick = api_key_service.pick_key_for_task(db, 1, "openai")
-        assert second_pick.id == key_b.id  # key_a vừa dùng nên tới lượt key_b
+        assert second_pick.id == key_b.id  # key_a was just used so it is key_b's turn
 
     def test_skips_key_in_cooldown(self, db: Session) -> None:
         key_a = api_key_service.add_key(db, 1, "openai", "key-a")
         api_key_service.add_key(db, 1, "openai", "key-b")
 
-        api_key_service.pick_key_for_task(db, 1, "openai")  # chọn key_a
+        api_key_service.pick_key_for_task(db, 1, "openai")  # picks key_a
         api_key_service.mark_key_result(db, key_a.id, success=False)  # key_a -> cooldown
 
         picked = api_key_service.pick_key_for_task(db, 1, "openai")
@@ -92,7 +92,7 @@ class TestPickKeyForTask:
     def test_reactivates_key_after_cooldown_expires(self, db: Session) -> None:
         key = api_key_service.add_key(db, 1, "openai", "key-a")
         api_key_service.mark_key_result(db, key.id, success=False)
-        # Giả lập cooldown đã hết hạn (đặt về quá khứ) thay vì chờ thật 60 phút.
+        # Simulate the cooldown having expired (set to the past) instead of really waiting 60 minutes.
         key.cooldown_until = datetime.now(timezone.utc) - timedelta(seconds=1)
         db.commit()
 
@@ -129,10 +129,10 @@ class TestMarkKeyResult:
         assert key.status == ApiKeyStatus.COOLDOWN
         assert key.error_count == 1
         assert key.cooldown_until is not None
-        # SQLite làm mất tzinfo khi round-trip qua DB (DateTime(timezone=True) không
-        # thực sự giữ offset trên dialect này) — so sánh naive-naive để tránh
-        # TypeError, không phải dấu hiệu lỗi logic (query filter ở service dùng
-        # SQLAlchemy bind param nên vẫn so sánh đúng, xem test_reactivates_key_after_cooldown_expires).
+        # SQLite loses tzinfo on a round trip through the DB (DateTime(timezone=True) does not
+        # really keep the offset on this dialect) — compare naive-to-naive to avoid a
+        # TypeError, not a sign of a logic error (the query filter in the service uses
+        # a SQLAlchemy bind param so it still compares correctly, see test_reactivates_key_after_cooldown_expires).
         assert key.cooldown_until > datetime.now(timezone.utc).replace(tzinfo=None)
 
 

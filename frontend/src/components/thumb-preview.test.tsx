@@ -17,14 +17,14 @@ describe('ThumbPreview', () => {
     const imgs = [...document.querySelectorAll('img')]
     expect(imgs.length).toBeGreaterThan(1)
     const largest = Math.max(...imgs.map((i) => i.getBoundingClientRect().width))
-    // Thumb 112px -> ảnh xem trước 320px (w-80).
+    // Thumb 112px -> preview image 320px (w-80).
     expect(largest).toBeGreaterThan(thumbWidth * 2)
   })
 
   it('không bọc tooltip khi không có ảnh', async () => {
     await render(<ThumbPreview src={null} className='w-28' />)
 
-    // Hiện khung rỗng to lên thì chẳng để làm gì.
+    // Showing a big empty frame serves no purpose.
     expect(document.querySelector('button')).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
-"""Cắt clip ngắn dọc 9:16 từ video dài — tái dùng render_timeline() của Phase 13,
-không viết logic render riêng. Xem docs/phases/phase-11-shorts-crosspost.md."""
+"""Cut short vertical 9:16 clips from a long video — reusing Phase 13's render_timeline(),
+with no separate render logic. See docs/phases/phase-11-shorts-crosspost.md."""
 
 from pathlib import Path
 
@@ -15,9 +15,9 @@ def build_clip_timeline(
     crop: dict | None = None,
     cta_text: str | None = None,
 ) -> dict:
-    """Dựng "edit operations" (Phase 13) cho 1 clip cắt từ `start` tới `end` của
-    video gốc — mốc thời gian trong caption/CTA được dịch về hệ quy chiếu MỚI của
-    clip (trừ đi `start`), vì clip là 1 video độc lập bắt đầu từ 0."""
+    """Build the "edit operations" (Phase 13) for 1 clip cut from `start` to `end` of the
+    source video — the timestamps in captions/CTA are shifted to the clip's NEW reference frame
+    (minus `start`), because the clip is an independent video starting from 0."""
     if end <= start:
         raise ValueError("'end' phải lớn hơn 'start'")
 

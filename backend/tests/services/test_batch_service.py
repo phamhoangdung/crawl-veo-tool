@@ -14,7 +14,7 @@ def session_factory():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
-    # Pragma foreign_keys=ON là toàn cục (core/db.py) nên User phải commit trước Job.
+    # Pragma foreign_keys=ON is global (core/db.py) so the User must be committed before the Job.
     with factory() as db:
         db.add(User(id=1))
         db.commit()
@@ -50,7 +50,7 @@ def _reset_current():
 
 
 class TestPickPendingSteps:
-    """Chạy lại batch không được làm lại bước đã có kết quả."""
+    """Re-running a batch must not redo steps that already have a result."""
 
     def test_skips_completed_steps(self) -> None:
         video = Video(
@@ -82,7 +82,7 @@ class TestPickPendingSteps:
 class TestPrepareBatch:
     @pytest.mark.anyio
     async def test_marks_missing_videos_as_failed(self, session_factory) -> None:
-        """Id không tồn tại phải báo lại, nếu không người gọi tưởng đã chạy."""
+        """A nonexistent id must be reported back, otherwise the caller thinks it ran."""
         _add_video(session_factory, 1)
         job = await batch_service.prepare_batch(session_factory, [1, 999])
 

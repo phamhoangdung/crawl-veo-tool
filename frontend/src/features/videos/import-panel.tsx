@@ -29,8 +29,8 @@ type Item = {
 
 let nextKey = 1
 
-/** Nhập video đã có sẵn trên máy (kéo thả hoặc chọn file) để đi tiếp pipeline
- * tách lời → dịch → lồng tiếng như video tải từ nền tảng. */
+/** Import videos already on the machine (drag and drop or pick files) to continue through the pipeline
+ * transcribe → translate → dub like a video downloaded from a platform. */
 export function ImportPanel({ className }: { className?: string }) {
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -89,7 +89,7 @@ export function ImportPanel({ className }: { className?: string }) {
       })),
       ...prev,
     ])
-    // Lần lượt từng file: hiện tiến độ riêng, không dồn nhiều request lớn cùng lúc.
+    // One file at a time: show separate progress, do not pile up many large requests at once.
     queue.current.push(...entries)
     void drainQueue()
   }

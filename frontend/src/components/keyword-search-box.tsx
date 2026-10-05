@@ -6,24 +6,24 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 /**
- * Ô tìm kiếm theo từ khoá dùng chung cho trang Crawl và Trending — cả 2 đều
- * search trên Bilibili, vốn chỉ ra kết quả tốt với từ khoá tiếng Trung. Trước
- * đây mỗi trang tự viết JSX riêng nên tuỳ chọn "dịch sang tiếng Trung" chỉ có
- * ở trang Crawl mà thiếu hẳn ở Trending — component chung này đảm bảo thêm
- * tính năng tìm kiếm ở đâu cũng có sẵn tuỳ chọn dịch, không lệch nhau nữa.
+ * A keyword search box shared by the Crawl and Trending pages — both
+ * search on Bilibili, which only gives good results with Chinese keywords. Previously
+ * each page wrote its own JSX so the "translate to Chinese" option only existed
+ * on the Crawl page and was missing entirely from Trending — this shared component ensures that wherever a
+ * search feature is added, the translate option is there too, no longer drifting apart.
  */
 export interface KeywordSearchBoxProps {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
   placeholder: string
-  /** Mặc định 'Tìm'. */
+  /** Defaults to 'Tìm'. */
   submitLabel?: string
   pendingLabel?: string
   isPending?: boolean
   translateKeyword: boolean
   onTranslateKeywordChange: (value: boolean) => void
-  /** Hiện nút xoá tìm kiếm (Trending dùng để quay lại danh sách mặc định). */
+  /** Show the clear-search button (Trending uses it to return to the default list). */
   onClear?: () => void
   className?: string
   inputClassName?: string

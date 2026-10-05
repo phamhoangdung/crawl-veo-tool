@@ -19,7 +19,7 @@ from app.services import category_service, trending_service
 
 router = APIRouter(prefix="/api/trending/bilibili", tags=["trending"])
 
-# MVP: 1 user cố định — xem app/api/crawl.py.
+# MVP: 1 fixed user — see app/api/crawl.py.
 _DEFAULT_USER_ID = 1
 
 
@@ -34,10 +34,10 @@ def _to_read(category: Category) -> CategoryRead:
 
 
 def _queue_translation_if_pending(background_tasks: BackgroundTasks, db: Session) -> None:
-    """Dịch tên chuyên mục chạy NỀN, không chặn response — chỉ xếp hàng khi thật
-    sự còn mục chưa dịch, tránh tốn 1 query đếm + spawn task thừa mỗi lần load
-    trang. An toàn dùng chung `db` của request: FastAPI đảm bảo cleanup của
-    dependency `yield` (đóng session) chạy SAU khi background task xong."""
+    """Translate category names in the BACKGROUND, without blocking the response — only queue when there
+    really are untranslated entries, avoiding 1 count query + a spare task spawn on every page
+    load. Safe to share the request's `db`: FastAPI guarantees the cleanup of the `yield`
+    dependency (closing the session) runs AFTER the background task finishes."""
     if category_service.count_pending_translations(db) > 0:
         background_tasks.add_task(
             category_service.translate_missing_names, db, _DEFAULT_USER_ID
@@ -48,10 +48,10 @@ def _queue_translation_if_pending(background_tasks: BackgroundTasks, db: Session
 async def categories(
     background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ) -> list[CategoryRead]:
-    """Chuyên mục đã phát hiện, lấy từ DB (không hardcode — xem category_service).
+    """Categories already discovered, from the DB (not hardcoded — see category_service).
 
-    Mỗi lần gọi cũng tự động dịch nốt tên còn thiếu ở nền — người dùng không cần
-    bấm "Quét chuyên mục mới" nhiều lần chỉ để chờ dịch xong hết backlog.
+    Every call also translates any missing names in the background — the user does not need to
+    click "Scan new categories" many times just to wait for the whole backlog to finish.
     """
     _queue_translation_if_pending(background_tasks, db)
     rows = db.query(Category).order_by(Category.rid).all()
@@ -62,8 +62,8 @@ async def categories(
 async def refresh_categories(
     background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ) -> list[CategoryRead]:
-    """Quét API Bilibili tìm chuyên mục mới; dịch tên chạy nền (xem docstring
-    `_queue_translation_if_pending`) — response trả về ngay, không chờ dịch."""
+    """Scan the Bilibili API for new categories; translate names in the background (see the
+    `_queue_translation_if_pending` docstring) — the response returns right away, without waiting for translation."""
     await category_service.discover_categories(db)
     _queue_translation_if_pending(background_tasks, db)
     rows = db.query(Category).order_by(Category.rid).all()
@@ -87,8 +87,8 @@ async def get_followed(db: Session = Depends(get_db)) -> list[int]:
 async def popular(
     page: int = 1, page_size: int = 20, db: Session = Depends(get_db)
 ) -> TrendingPageRead:
-    """Danh sách phổ biến toàn trang Bilibili — dùng cho tab "Tất cả" (không
-    giới hạn theo chuyên mục), có phân trang thật."""
+    """Site-wide popular list of Bilibili — used for the "All" tab (not
+    limited by category), with real pagination."""
     return await trending_service.get_bilibili_popular_page(db, page=page, page_size=page_size)
 
 
@@ -99,11 +99,11 @@ async def search(
     translate_keyword: bool = False,
     db: Session = Depends(get_db),
 ) -> TrendingPageRead:
-    """Tìm kiếm tự do theo từ khoá bất kỳ — không giới hạn trong 1 chuyên mục.
+    """Free search by any keyword — not limited to 1 category.
 
-    `translate_keyword` giống hệt tuỳ chọn cùng tên ở trang Crawl (`POST
-    /api/jobs`) — trước đây trang Trending thiếu tuỳ chọn này dù dùng cùng
-    nguồn Bilibili, search tiếng Việt gần như luôn ra 0 kết quả.
+    `translate_keyword` is identical to the option of the same name on the Crawl page (`POST
+    /api/jobs`) — previously the Trending page lacked this option despite using the same
+    Bilibili source, and Vietnamese search almost always returned 0 results.
     """
     return await trending_service.search_bilibili(
         db, _DEFAULT_USER_ID, keyword, page=page, translate_keyword=translate_keyword
@@ -112,8 +112,8 @@ async def search(
 
 @router.get("/related", response_model=TrendingPageRead)
 async def related(bvid: str, db: Session = Depends(get_db)) -> TrendingPageRead:
-    """Video liên quan (Phase 22) — dùng cho dải "Video tương tự" trong popup
-    xem trước. Endpoint công khai, không cần WBI, rủi ro risk-control thấp."""
+    """Related videos (Phase 22) — used for the "Similar videos" strip in the preview
+    popup. Public endpoint, no WBI needed, low risk-control exposure."""
     return await trending_service.get_related(db, bvid)
 
 
@@ -121,15 +121,15 @@ async def related(bvid: str, db: Session = Depends(get_db)) -> TrendingPageRead:
 async def channel_videos(
     channel_id: str, page: int = 1, db: Session = Depends(get_db)
 ) -> TrendingPageRead:
-    """Video khác trong 1 kênh (Phase 22) — có thể trả `degraded=True` khi bị
-    Bilibili risk-control chặn (đo thật 2026-09-22: rủi ro này RẤT cao, xem
-    docstring `channel_service.ChannelVideosResult`). Frontend phải hiện đúng
-    thông báo suy giảm, không coi là danh sách rỗng."""
+    """Other videos of 1 channel (Phase 22) — may return `degraded=True` when blocked by
+    Bilibili risk control (measured 2026-09-22: this risk is VERY high, see the
+    `channel_service.ChannelVideosResult` docstring). The frontend must show the proper
+    degraded-state message, not treat it as an empty list."""
     return await trending_service.get_channel_videos(db, channel_id, page=page)
 
 
-# Bilibili chỉ có bảng xếp hạng 3 ngày và 7 ngày — đã đo thật: day=1/30/90/365
-# đều trả lỗi -400. Chặn ở đây để trả 422 rõ ràng thay vì 500 khó hiểu.
+# Bilibili only has 3-day and 7-day rankings — measured: day=1/30/90/365
+# all return error -400. Block here to return a clear 422 instead of a confusing 500.
 RankingDays = Literal[3, 7]
 
 
@@ -144,7 +144,7 @@ async def ranking(
 async def category_page(
     rid: int, page: int = 1, day: RankingDays = 3, db: Session = Depends(get_db)
 ) -> TrendingPageRead:
-    """1 trang video của chuyên mục — dùng cho infinite scroll ở trang Trending."""
+    """1 page of videos of a category — used for infinite scroll on the Trending page."""
     return await trending_service.get_category_page(db, rid=rid, page=page, day=day)
 
 
@@ -154,7 +154,7 @@ async def stats(
     day: int = 3,
     db: Session = Depends(get_db),
 ) -> list[CategoryStatsRead]:
-    """Số liệu hiện tại của từng chuyên mục; mỗi lần gọi ghi thêm 1 điểm lịch sử."""
+    """Current numbers of each category; every call records 1 more history point."""
     parsed = [int(part) for part in rids.split(",") if part.strip().isdigit()]
     return await trending_service.get_categories_stats(db, parsed, day=day)
 
@@ -165,7 +165,7 @@ async def history(
     days: int = 30,
     db: Session = Depends(get_db),
 ) -> list[CategoryHistoryRead]:
-    """Lịch sử số liệu đã tích luỹ, dùng vẽ đường xu hướng theo thời gian."""
+    """Accumulated history of the numbers, used to draw the trend line over time."""
     parsed = [int(part) for part in rids.split(",") if part.strip().isdigit()]
     snapshots = category_service.get_history(db, parsed, days=days)
 

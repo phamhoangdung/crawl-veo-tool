@@ -18,7 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-/** Scope mặc định tick sẵn — đủ để agent chạy trọn luồng sinh ảnh/video. */
+/** Scopes ticked by default — enough for an agent to run the whole image/video generation flow. */
 const DEFAULT_SCOPES = ['assets:read', 'assets:write', 'gen:write', 'jobs:read', 'cost:read']
 
 const SCOPE_HINT: Record<string, string> = {

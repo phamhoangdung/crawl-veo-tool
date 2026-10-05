@@ -8,18 +8,18 @@ from app.core.db import Base
 
 
 class TranslationCache(Base):
-    """Bản dịch đã có, khoá theo NỘI DUNG text thay vì theo video.
+    """Existing translation, keyed by the text CONTENT rather than by video.
 
-    Lý do: tooltip dịch tiêu đề gọi mỗi lần hover, không cache thì chỉ cần rê
-    chuột qua bảng 40 dòng vài lượt là hết quota. Khoá theo nội dung nên nhiều
-    video trùng tiêu đề (rất hay gặp với video re-up) chỉ tốn 1 lần dịch, và
-    cache dùng lại được cho text ngoài bảng crawl.
+    Reason: the title-translation tooltip fires on every hover; without a cache a few passes of the
+    mouse over a 40-row table would exhaust the quota. Keyed by content, so many
+    videos with the same title (very common with re-uploads) cost a single translation, and the
+    cache can be reused for text outside the crawl table.
     """
 
     __tablename__ = "translation_cache"
 
-    # Hash của (text, cặp ngôn ngữ) làm khoá chính: text có thể dài hơn giới hạn
-    # index của SQLite, còn hash thì luôn cố định 64 ký tự.
+    # Hash of (text, language pair) as the primary key: text can exceed SQLite's
+    # index size limit, while a hash is always a fixed 64 characters.
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     source_text: Mapped[str] = mapped_column(Text)
     translated_text: Mapped[str] = mapped_column(Text)
@@ -32,8 +32,8 @@ class TranslationCache(Base):
 
 
 def make_key(text: str, source_lang: str, target_lang: str) -> str:
-    """Chuẩn hoá khoảng trắng trước khi hash — cùng một tiêu đề chỉ khác thừa
-    dấu cách thì không nên tính là 2 lần dịch."""
+    """Normalize whitespace before hashing — the same title that differs only by extra
+    spaces should not count as 2 translations."""
     normalized = " ".join(text.split())
     raw = f"{source_lang}|{target_lang}|{normalized}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

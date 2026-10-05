@@ -7,7 +7,7 @@ from app.core.db import Base
 
 
 class User(Base):
-    """MVP chỉ có 1 user cố định; field này tồn tại để lên multi-tenant sau không phải migrate."""
+    """The MVP has a single fixed user; this field exists so going multi-tenant later needs no migration."""
 
     __tablename__ = "users"
 

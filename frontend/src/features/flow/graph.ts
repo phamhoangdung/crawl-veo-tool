@@ -1,16 +1,16 @@
-/** Toán graph thuần cho canvas dựng video — tách khỏi component để test được,
- *  cùng cách `features/editor/layout.ts` làm.
+/** Pure graph math for the video-building canvas — split out of the component so it can be tested,
+ *  the same way `features/editor/layout.ts` does.
  *
- *  Ràng buộc cốt lõi: chuỗi cảnh phải **tuyến tính**. `ffmpeg.render_timeline`
- *  (backend, app/adapters/ffmpeg.py) nhận đúng 1 track video, nên graph phân
- *  nhánh sẽ dựng được thứ mà renderer không diễn đạt nổi.
+ *  Core constraint: the scene chain must be **linear**. `ffmpeg.render_timeline`
+ *  (backend, app/adapters/ffmpeg.py) accepts exactly 1 video track, so a branching
+ *  graph would build something the renderer cannot express.
  */
 
 export const SCENE_NODE_WIDTH = 260
 export const SCENE_NODE_GAP = 60
 export const CHARACTER_NODE_WIDTH = 180
-/** Tiền tố id node nhân vật trên canvas — phân biệt với id cảnh (cùng là số,
- *  khác bảng) mà không phải nhét 2 ý nghĩa vào 1 field như id âm. */
+/** Id prefix of character nodes on the canvas — distinguishes them from scene ids (both numbers,
+ *  from different tables) without stuffing 2 meanings into 1 field like a negative id. */
 export const CHARACTER_NODE_PREFIX = 'char-'
 
 export interface GraphNode {
@@ -28,7 +28,7 @@ export interface GraphValidation {
   errors: string[]
 }
 
-/** Thứ tự phát suy ra từ các cạnh. Trả [] nếu graph không hợp lệ. */
+/** The playback order derived from the edges. Returns [] if the graph is invalid. */
 export function toSceneOrder(nodes: GraphNode[], edges: GraphEdge[]): string[] {
   if (nodes.length === 0) return []
 
@@ -38,7 +38,7 @@ export function toSceneOrder(nodes: GraphNode[], edges: GraphEdge[]): string[] {
 
   for (const edge of edges) {
     if (!incoming.has(edge.source) || !incoming.has(edge.target)) return []
-    // Đã có cạnh ra từ source hoặc cạnh vào target = phân nhánh, không tuyến tính.
+    // An outgoing edge already exists from source, or an incoming edge to target = branching, not linear.
     if (nextOf.has(edge.source)) return []
     incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1)
     if ((incoming.get(edge.target) ?? 0) > 1) return []
@@ -52,13 +52,13 @@ export function toSceneOrder(nodes: GraphNode[], edges: GraphEdge[]): string[] {
   const seen = new Set<string>()
   let current: string | undefined = starts[0].id
   while (current !== undefined) {
-    if (seen.has(current)) return [] // chu trình
+    if (seen.has(current)) return [] // cycle
     seen.add(current)
     order.push(current)
     current = nextOf.get(current)
   }
 
-  // Còn node chưa nối vào chuỗi = graph rời rạc.
+  // A node not connected into the chain = a disconnected graph.
   return order.length === nodes.length ? order : []
 }
 
@@ -90,7 +90,7 @@ export function validateGraph(nodes: GraphNode[], edges: GraphEdge[]): GraphVali
   return { ok: errors.length === 0, errors }
 }
 
-/** Vị trí mặc định khi chưa lưu canvas: xếp ngang thành hàng. */
+/** Default position when the canvas is not saved yet: laid out horizontally in a row. */
 export function autoLayoutLinear(count: number): { x: number; y: number }[] {
   return Array.from({ length: count }, (_, index) => ({
     x: index * (SCENE_NODE_WIDTH + SCENE_NODE_GAP),
@@ -98,8 +98,8 @@ export function autoLayoutLinear(count: number): { x: number; y: number }[] {
   }))
 }
 
-/** Cạnh suy ra từ thứ tự cảnh — nguồn sự thật của thứ tự là `order_index` ở
- *  backend, canvas chỉ vẽ lại cho dễ nhìn. */
+/** Edges derived from the scene order — the source of truth of the order is `order_index` in the
+ *  backend, the canvas only redraws it for readability. */
 export function edgesFromOrder(sceneIds: number[]): GraphEdge[] {
   return sceneIds.slice(0, -1).map((id, index) => ({
     source: String(id),
@@ -109,18 +109,18 @@ export function edgesFromOrder(sceneIds: number[]): GraphEdge[] {
 
 const MENTION_PATTERN = /@([a-z0-9_]+)/g
 
-/** Rút các @tên được nhắc trong prompt, khử trùng, không phân biệt hoa
- *  thường — cùng quy ước với `features/ai-studio/components/keyframe-step.tsx`. */
+/** Extract the @names mentioned in the prompt, deduplicated, case
+ *  insensitive — the same convention as `features/ai-studio/components/keyframe-step.tsx`. */
 export function parseMentions(prompt: string): string[] {
   const matches = prompt.toLowerCase().match(MENTION_PATTERN) ?? []
   return Array.from(new Set(matches.map((m) => m.slice(1))))
 }
 
-/** Cạnh nhân vật → cảnh, suy ra từ @mention trong prompt — không lưu thành
- *  trạng thái riêng để tránh 2 nguồn sự thật (canvas vs text prompt). Nối rồi
- *  tháo cạnh này chỉ là cách trực quan để chèn/xoá @tên trong prompt.
- *  `characters` chỉ nên là các nhân vật đang có mặt trên canvas, không phải
- *  toàn bộ kho tham chiếu — mention chưa kéo ra canvas thì không vẽ cạnh. */
+/** Character → scene edges, derived from the @mention in the prompt — not stored as
+ *  separate state to avoid 2 sources of truth (canvas vs prompt text). Connecting then
+ *  removing this edge is only a visual way to insert/remove @name in the prompt.
+ *  `characters` should only be the characters currently present on the canvas, not
+ *  the whole reference library — a mention not dragged onto the canvas gets no edge. */
 export function characterEdgesFromMentions(
   scenes: { id: number; prompt: string }[],
   characters: { id: number; name: string }[]

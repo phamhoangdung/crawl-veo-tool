@@ -60,8 +60,8 @@ const VARIANT_LABELS: Record<string, string> = {
 }
 
 /**
- * Các bước xử lý. `requires` là điều kiện tiên quyết — hiển thị lý do khoá nút
- * thay vì để người dùng bấm rồi nhận lỗi 400 từ backend.
+ * Processing steps. `requires` is a prerequisite — shows the reason a button is locked
+ * instead of letting the user click and get a 400 error from the backend.
  */
 type StepContext = {
   hasFile: boolean
@@ -69,8 +69,8 @@ type StepContext = {
   hasTranslation: boolean
 }
 
-/** Tuỳ chọn của một bước, hiện ngay trên nút chạy. Trước đây chỉ đổi được bằng
- * cách sửa query param — tức là người dùng thật không đổi được. */
+/** Options of a step, shown right on the run button. Previously only changeable by
+ * editing query params — meaning real users could not change them. */
 type StepOption =
   | {
       key: string
@@ -189,8 +189,8 @@ const STEPS: StepDef[] = [
         type: 'select',
         label: 'Font chữ',
         default: 'be-vietnam-pro',
-        // Khớp id trong backend `font_service.py` — cả 4 đều có subset
-        // "vietnamese" chính thức trên Google Fonts (đã kiểm tra glyph dấu).
+        // Matches the ids in the backend `font_service.py` — all 4 have the official
+        // "vietnamese" subset on Google Fonts (diacritic glyphs checked).
         choices: [
           { value: 'be-vietnam-pro', label: 'Be Vietnam Pro' },
           { value: 'barlow', label: 'Barlow' },
@@ -225,13 +225,13 @@ function StepCard({
 }) {
   const queryClient = useQueryClient()
 
-  // Tiến độ của đúng tác vụ này, đọc từ cache do SSE cập nhật.
+  // Progress of exactly this task, read from the cache updated by SSE.
   const tasks = useTaskProgress()
   const task = tasks.find((t) => t.video_id === videoId && t.kind === step.kind)
   const isRunning = task?.is_running ?? false
 
-  // Khởi tạo từ `default` của từng tuỳ chọn ngay trong `useState` chứ không đồng
-  // bộ bằng effect — STEPS là hằng số, không có gì để đồng bộ lại.
+  // Initialize from each option's `default` right in `useState` rather than syncing
+  // with an effect — STEPS is a constant, there is nothing to sync again.
   const [optionValues, setOptionValues] = useState<StepOptionValues>(() =>
     Object.fromEntries((step.options ?? []).map((o) => [o.key, o.default]))
   )
@@ -370,7 +370,7 @@ function StepCard({
                   : isDone
                     ? 'bg-green-500'
                     : 'bg-primary transition-[width] duration-300',
-                // Chặng không đo được (whisper, demucs) — sọc động thay vì đứng im.
+                // A stage that cannot be measured (whisper, demucs) — animated stripes instead of standing still.
                 isRunning && !task.total && 'animate-pulse'
               )}
               style={{
@@ -400,8 +400,8 @@ function StepCard({
 }
 
 export function VideoDetail() {
-  // Lấy id từ URL thay vì props: route file chỉ nên export Route để fast-refresh
-  // hoạt động.
+  // Take the id from the URL instead of props: a route file should only export Route so fast-refresh
+  // works.
   const { videoId: rawVideoId } = useParams({
     from: '/_authenticated/videos/$videoId',
   })
@@ -409,9 +409,9 @@ export function VideoDetail() {
 
   const queryClient = useQueryClient()
   const [editorOpen, setEditorOpen] = useState(false)
-  // Theo dõi tab đang mở để ẩn khối ảnh bìa/tiêu đề/badge khi ở tab "Dựng
-  // video" — khung preview trong đó đã hiện video rồi, khối này chỉ chiếm
-  // thêm chỗ dọc mà không cần thiết lúc đang sửa.
+  // Track the open tab to hide the cover image/title/badge block when on the "Dựng
+  // video" tab — the preview frame in there already shows the video, and this block only takes
+  // extra vertical space unnecessarily while editing.
   const [activeTab, setActiveTab] = useState('pipeline')
 
   const { data: files, isLoading: filesLoading } = useQuery({
@@ -424,8 +424,8 @@ export function VideoDetail() {
     queryFn: () => getVideoDetail(videoId),
   })
 
-  // Phân vai người nói là tuỳ chọn (Cài đặt > Lồng tiếng, mặc định tắt) — tắt thì
-  // ẩn bước "Phân vai" và tab "Giọng đọc" cho gọn.
+  // Speaker separation is optional (Settings > Dubbing, off by default) — when off,
+  // hide the "Speakers" step and the "Voices" tab to keep things tidy.
   const { data: appSettings } = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
@@ -519,9 +519,9 @@ export function VideoDetail() {
               </p>
             )}
 
-            {/* 3 tab cho 3 việc khác nhau: chạy pipeline, soát phụ đề, dựng
-                video. Đổ hết lên 1 trang thì thành 7 card ngang hàng, không
-                thấy đâu là việc đang cần làm. */}
+            {/* 3 tabs for 3 different jobs: run the pipeline, review subtitles, build
+                the video. Dumping everything on 1 page makes 7 cards side by side, with
+                no way to see which job is currently needed. */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className='space-y-6'>
               <TabsList>
                 <TabsTrigger value='pipeline'>Xử lý</TabsTrigger>
@@ -543,8 +543,8 @@ export function VideoDetail() {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Các bước xử lý là việc chính nên chiếm phần lớn; File là thông
-                  tin phụ, đặt cột hẹp bên cạnh. */}
+              {/* Processing steps are the main job so they take most of the space; Files is
+                  secondary info, placed in a narrow column beside it. */}
               <TabsContent value='pipeline' className='grid gap-6 lg:grid-cols-5'>
               <div className='space-y-6 lg:order-2 lg:col-span-2'>
                 <Card>
@@ -670,13 +670,13 @@ export function VideoDetail() {
                     gợi ý, bạn kéo-chỉnh rồi bấm Render.
                   </p>
                 </div>
-                {/* Chỉ mount khi mở tab: editor tải waveform + video, không nên
-                    chạy nền khi người dùng đang ở tab khác. */}
+                {/* Mount only when the tab is open: the editor loads the waveform + video, and should not
+                    run in the background while the user is on another tab. */}
                 <TimelineEditor subject={{ type: 'video', id: videoId }} />
               </TabsContent>
             </Tabs>
 
-            {/* Dialog nên nằm ngoài Tabs: nó phủ toàn màn hình, không thuộc tab nào. */}
+            {/* The dialog should sit outside Tabs: it covers the whole screen and belongs to no tab. */}
             <SubtitleEditor
               videoId={videoId}
               title={title}

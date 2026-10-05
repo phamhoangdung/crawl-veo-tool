@@ -13,8 +13,8 @@ import {
 import { AssetPicker } from './asset-picker'
 import { useEditorStore } from './store'
 
-/** Thời lượng mặc định cho intro/outro khi chưa đọc được độ dài thật của file.
- * Người dùng chỉnh lại ở bảng "Chi tiết clip" — đây chỉ là điểm khởi đầu. */
+/** Default duration for intro/outro when the real length of the file cannot be read.
+ * The user adjusts it in the "Clip details" panel — this is only a starting point. */
 const DEFAULT_CLIP_SECONDS = 5
 
 type Slot = 'intro' | 'outro' | 'logo' | 'music'
@@ -54,9 +54,9 @@ const SLOTS: Record<
 }
 
 /**
- * Đưa file từ kho vào timeline. Mỗi nút biết cần dựng clip hình dạng nào —
- * người dùng không phải tự nhớ logo là track "image" còn intro là clip đầu của
- * track "video".
+ * Put a file from the library onto the timeline. Each button knows which clip shape to build —
+ * the user does not have to remember that a logo is an "image" track while an intro is the first clip of the
+ * "video" track.
  */
 export function AssetPanel() {
   const [openSlot, setOpenSlot] = useState<Slot | null>(null)
@@ -66,7 +66,7 @@ export function AssetPanel() {
 
   function handleSelect(slot: Slot, asset: Asset) {
     if (slot === 'logo') {
-      // Không đặt start/end: logo hiện suốt video (backend coi đây là mặc định).
+      // Do not set start/end: the logo shows for the whole video (the backend treats this as the default).
       addClipToTrack('image', {
         source: asset.path,
         x: 0.85,
@@ -86,7 +86,7 @@ export function AssetPanel() {
           start: 0,
           end: DEFAULT_CLIP_SECONDS,
           track_start: 0,
-          // Nhỏ hơn hẳn giọng đọc — nhạc nền to bằng lời thoại thì không nghe rõ lời.
+          // Much quieter than the narration — background music as loud as the dialogue makes the speech hard to hear.
           volume: 0.2,
         },
         'music'
@@ -95,7 +95,7 @@ export function AssetPanel() {
       return
     }
 
-    // intro/outro: chèn vào track video có sẵn, đúng đầu hoặc cuối.
+    // intro/outro: insert into the existing video track, exactly at the start or the end.
     const videoIndex = operations.tracks.findIndex((t) => t.type === 'video')
     const clip = { source: asset.path, start: 0, end: DEFAULT_CLIP_SECONDS }
 

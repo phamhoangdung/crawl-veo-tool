@@ -1,15 +1,15 @@
-"""Lỗi riêng của provider sinh ảnh/video (Phase 14).
+"""Errors specific to the image/video generation provider (Phase 14).
 
-Lỗi quota/rate-limit dùng chung `ProviderQuotaExceededError` ở
-`app/adapters/provider_errors.py` (Phase 8) để rotation key hoạt động như cũ.
+Quota/rate-limit errors share `ProviderQuotaExceededError` in
+`app/adapters/provider_errors.py` (Phase 8) so key rotation works as before.
 """
 
 
 class PromptBlockedError(RuntimeError):
-    """Provider từ chối prompt vì vi phạm chính sách nội dung.
+    """The provider refuses the prompt for violating content policy.
 
-    Khác quota: thử key khác cũng bị chặn y hệt, phải sửa prompt mới qua được —
-    nên service không rotate key mà trả lỗi này lên để UI đề nghị sửa prompt.
+    Unlike quota: another key is blocked the same way, and only fixing the prompt gets past it —
+    so the service does not rotate keys but raises this error up so the UI can suggest editing the prompt.
     """
 
     def __init__(self, provider: str, reason: str) -> None:

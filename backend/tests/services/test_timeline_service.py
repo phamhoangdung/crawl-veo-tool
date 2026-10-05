@@ -121,7 +121,7 @@ class TestRenderTimelineForVideo:
         assert video.timeline_rendered_path == str(output_path)
 
     def test_does_not_render_automatically_on_save(self, db: Session) -> None:
-        """Nguyên tắc cốt lõi Phase 13: save KHÔNG kích hoạt render."""
+        """Phase 13 core principle: save does NOT trigger render."""
         with patch("app.services.timeline_service.ffmpeg.render_timeline") as mock_render:
             timeline_service.save_timeline(db, 1, _VALID_OPERATIONS)
 
@@ -129,11 +129,11 @@ class TestRenderTimelineForVideo:
 
 
 class TestImageTrackValidation:
-    """Track ảnh (logo/watermark, Phase 9) — renderer đã hỗ trợ từ trước nhưng
-    validator lại chặn, khiến không lưu nổi timeline có logo."""
+    """Image track (logo/watermark, Phase 9) — the renderer supported it already but the
+    validator blocked it, making it impossible to save a timeline with a logo."""
 
     def test_accepts_image_track_without_time_range(self, db: Session) -> None:
-        """Không có start/end nghĩa là logo hiện suốt video — mặc định hợp lý."""
+        """No start/end means the logo shows for the whole video — a sensible default."""
         operations = {
             "tracks": [
                 {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 2}]},
@@ -165,7 +165,7 @@ class TestImageTrackValidation:
             timeline_service.save_timeline(db, 1, operations)
 
     def test_rejects_half_specified_time_range(self, db: Session) -> None:
-        """Chỉ có start mà thiếu end thường là lỗi gõ nhầm, không phải chủ ý."""
+        """Having start but lacking end is usually a typo, not intentional."""
         operations = {
             "tracks": [
                 {"type": "video", "clips": [{"source": "a.mp4", "start": 0, "end": 2}]},
@@ -187,8 +187,8 @@ class TestImageTrackValidation:
 
 
 class TestBlurTrackValidation:
-    """Vùng che logo/phụ đề gốc — validator phải chặn hình dạng sai trước khi
-    tới ffmpeg, vì lỗi filter của ffmpeg rất khó đọc."""
+    """Region hiding the logo/original subtitles — the validator must block a wrong shape before
+    it reaches ffmpeg, because ffmpeg filter errors are very hard to read."""
 
     def test_accepts_blur_region(self, db: Session) -> None:
         operations = {
@@ -264,7 +264,7 @@ class TestBlurTrackValidation:
 
 
 class TestProjectTimeline:
-    """Timeline neo vào dự án AI (Phase 14 gap): dùng chung service với video."""
+    """A timeline anchored to an AI project (Phase 14 gap): shares the service with video."""
 
     @pytest.fixture
     def project_db(self, tmp_path: Path, monkeypatch) -> Session:
@@ -296,7 +296,7 @@ class TestProjectTimeline:
             timeline_service.get_timeline_for(project_db, "project", 999)
 
     def test_video_not_found_still_catchable_as_subject_error(self, db: Session) -> None:
-        """Caller cũ bắt `VideoNotFoundError` không được gãy sau khi tổng quát hoá."""
+        """An old caller catching `VideoNotFoundError` must not break after generalization."""
         with pytest.raises(timeline_service.VideoNotFoundError):
             timeline_service.get_timeline(db, 999)
         with pytest.raises(timeline_service.SubjectNotFoundError):

@@ -24,7 +24,7 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        {/* Khối tài khoản (NavUser) tạm ẩn — bản local 1 người dùng. */}
+        {/* The account block (NavUser) is temporarily hidden — a local single-user build. */}
         <SidebarCredit />
       </SidebarFooter>
       <SidebarRail />

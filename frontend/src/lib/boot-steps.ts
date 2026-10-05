@@ -1,8 +1,8 @@
 export type BootStepId = 'backend' | 'categories' | 'followed'
 
 /**
- * `weight` là phần trăm mà bước đó đóng góp khi xong. Backend chiếm phần lớn vì
- * bản đóng gói phải bật cả PyInstaller sidecar (vài giây → hàng chục giây).
+ * `weight` is the percentage that step contributes when it completes. The backend takes most of it because
+ * the packaged build must also start the PyInstaller sidecar (a few seconds → tens of seconds).
  */
 export const BOOT_STEPS: { id: BootStepId; label: string; weight: number }[] = [
   { id: 'backend', label: 'Đang khởi động dịch vụ nền...', weight: 60 },

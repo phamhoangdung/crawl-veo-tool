@@ -13,8 +13,8 @@ import {
 import { TASKS_QUERY_KEY } from '@/hooks/use-task-progress'
 import { VideoPreviewDialog } from './video-preview-dialog'
 
-// Mock router: dialog dùng <Link to='/videos/$videoId' params={...}> khi video
-// đã có sẵn — nội suy `$param` giống hành vi thật để href assert được chính xác.
+// Mock the router: the dialog uses <Link to='/videos/$videoId' params={...}> when the video
+// already exists — interpolate `$param` like the real behavior so the href can be asserted exactly.
 vi.mock('@tanstack/react-router', async (orig) => ({
   ...(await orig<typeof import('@tanstack/react-router')>()),
   Link: ({
@@ -34,7 +34,7 @@ vi.mock('@tanstack/react-router', async (orig) => ({
   },
 }))
 
-// ESM không cho spy vào export trong browser mode — phải mock ở tầng module.
+// ESM does not allow spying on exports in browser mode — must mock at the module level.
 vi.mock('@/lib/api', async (orig) => ({
   ...(await orig<typeof import('@/lib/api')>()),
   getRelatedVideos: vi.fn(),
@@ -133,7 +133,7 @@ describe('VideoPreviewDialog', () => {
       has_more: false,
       source: 'popular',
     })
-    // Màn lớn như máy thật (2556x1393) — lỗi tràn chỉ lộ ra khi 50vh*16/9 vượt bề rộng popup.
+    // A big screen like a real machine (2556x1393) — the overflow bug only shows when 50vh*16/9 exceeds the popup width.
     await page.viewport(2556, 1393)
     await wrap(
       <VideoPreviewDialog
@@ -156,7 +156,7 @@ describe('VideoPreviewDialog', () => {
     const d = dialog.getBoundingClientRect()
     const f = iframe.getBoundingClientRect()
 
-    // Lỗi từng gặp: khung video rộng hơn cả popup (tràn ra ngoài, che hết màn).
+    // A bug seen before: the video frame wider than the popup (overflowing outside, covering the whole screen).
     expect(f.left).toBeGreaterThanOrEqual(d.left - 1)
     expect(f.right).toBeLessThanOrEqual(d.right + 1)
     expect(d.top).toBeGreaterThanOrEqual(0)
@@ -175,7 +175,7 @@ describe('VideoPreviewDialog', () => {
       />
     )
 
-    // Radix Dialog: nút đóng mặc định có aria-label "Close".
+    // Radix Dialog: the close button has the default aria-label "Close".
     await screen.getByRole('button', { name: /close/i }).click()
     expect(onClose).toHaveBeenCalledOnce()
   })
@@ -382,7 +382,7 @@ describe('VideoPreviewDialog', () => {
       await screen.getByText('video liên quan').click()
 
       expect(onSelectVideo).toHaveBeenCalledWith(related[0])
-      // Vẫn chỉ đúng 1 dialog — không có dialog thứ 2 nào được mở thêm.
+      // Still exactly 1 dialog — no second dialog was opened additionally.
       expect(document.querySelectorAll('[role=dialog]').length).toBe(1)
     })
   })
@@ -460,7 +460,7 @@ describe('VideoPreviewDialog', () => {
         .element(screen.getByText(/Đang tải · 33%/))
         .toBeInTheDocument()
       expect(document.querySelectorAll('button').length).toBeGreaterThan(0)
-      // Không còn nút "Tải video" nữa khi đã đang tải.
+      // No more "Tải video" button once it is already downloading.
       expect(
         [...document.querySelectorAll('button')].some(
           (b) => b.textContent === 'Tải video'

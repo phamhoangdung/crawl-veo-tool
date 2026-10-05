@@ -52,10 +52,10 @@ import { SceneSettingsDialog, type ScenePatch } from './scene-settings-dialog'
 const OUTPUT_NODE_ID = 'output'
 const nodeTypes = { scene: SceneNode, output: OutputNode, character: CharacterNode }
 
-/** Vị trí node nhân vật trên canvas chỉ là tiện ích hiển thị — nguồn sự thật
- *  của việc "nhân vật nào ở cảnh nào" là @mention trong text prompt (đã lưu ở
- *  backend qua Scene.prompt). Vì vậy lưu cục bộ theo trình duyệt là đủ, không
- *  cần thêm bảng/field backend cho riêng việc này. */
+/** The position of character nodes on the canvas is only a display aid — the source of truth
+ *  for "which character is in which scene" is the @mention in the prompt text (stored in the
+ *  backend via Scene.prompt). So storing it locally per browser is enough, with no
+ *  need to add a backend table/field just for this. */
 function characterCanvasKey(projectId: number): string {
   return `flow-character-canvas:${projectId}`
 }
@@ -73,7 +73,7 @@ function saveCharacterCanvas(projectId: number, positions: NodePositions): void 
   try {
     localStorage.setItem(characterCanvasKey(projectId), JSON.stringify(positions))
   } catch {
-    // Chỉ là vị trí hiển thị — mất cũng không ảnh hưởng dữ liệu thật.
+    // Only a display position — losing it does not affect the real data.
   }
 }
 
@@ -81,8 +81,8 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
   const queryClient = useQueryClient()
   const [settingsSceneId, setSettingsSceneId] = useState<number | null>(null)
   const [generatingId, setGeneratingId] = useState<number | null>(null)
-  // Chỉ giữ prompt ĐANG SỬA, không copy toàn bộ từ server — dữ liệu gốc luôn
-  // đọc thẳng từ query, tránh hai nguồn sự thật lệch nhau.
+  // Keep only the prompt BEING EDITED, do not copy everything from the server — the source data is always
+  // read straight from the query, avoiding two sources of truth drifting apart.
   const [prompts, setPrompts] = useState<Record<number, string>>({})
 
   const positions = useFlowStore((s) => s.positions)
@@ -93,7 +93,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
   const project = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
-    // Trong lúc dựng, poll để thấy cảnh nào xong — SSE chỉ đẩy tiến độ tổng.
+    // While building, poll to see which scene is done — SSE only pushes the overall progress.
     refetchInterval: (query) => (query.state.data?.is_rendering ? 2000 : false),
   })
 
@@ -107,8 +107,8 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     queryFn: getCharacterReferences,
   })
 
-  // Node nhân vật đặt trên canvas — chỉ lưu cục bộ (xem ghi chú ở helper phía
-  // trên), khởi tạo 1 lần từ localStorage vì component remount mỗi khi đổi dự án.
+  // Character nodes placed on the canvas — stored locally only (see the note on the helper
+  // above), initialized once from localStorage because the component remounts whenever the project changes.
   const [characterPositions, setCharacterPositions] = useState<NodePositions>(() =>
     loadCharacterCanvas(projectId)
   )
@@ -145,14 +145,14 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
   const scenes = useMemo(() => project.data?.scenes ?? [], [project.data])
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['project', projectId] })
-    // Đổi cảnh (thời lượng, ảnh tĩnh vs video AI) là đổi chi phí — không làm mới
-    // thì con số trên node output đứng yên và gây hiểu nhầm.
+    // Changing a scene (duration, still image vs AI video) changes the cost — without refreshing,
+    // the number on the output node stays still and misleads.
     queryClient.invalidateQueries({ queryKey: ['project-cost', projectId] })
   }
 
-  // Nạp vị trí từ server một lần cho mỗi bộ cảnh; cảnh mới chưa có vị trí thì
-  // xếp ngang tự động. Chỉ ghi vào store (ngoài React) nên không gây cascading
-  // render như setState trong effect.
+  // Load positions from the server once per set of scenes; a new scene without a position gets
+  // laid out horizontally automatically. Only writes into the store (outside React) so it does not cause cascading
+  // renders like setState in an effect.
   useEffect(() => {
     if (scenes.length === 0) return
     const fallback = autoLayoutLinear(scenes.length)
@@ -265,8 +265,8 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
         onGenerate: (id: number) => {
           const draft = prompts[id]
           const original = scenes.find((s) => s.id === id)?.prompt
-          // Prompt sửa trên node chưa lưu — lưu trước rồi mới sinh, nếu không
-          // backend vẫn dùng prompt cũ.
+          // The prompt edited on the node is not saved yet — save first and then generate, otherwise the
+          // backend would still use the old prompt.
           if (draft !== undefined && draft !== original) {
             savePromptMutate(
               { sceneId: id, prompt: draft },
@@ -328,13 +328,13 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
       {
         id: OUTPUT_NODE_ID,
         type: 'output',
-        // Sát hơn node cảnh (260px + 40 khoảng hở): để 320 thì node output rơi
-        // ra ngoài vùng `fitView` tính được và bị cắt mất nút bấm.
+        // Closer than the scene node (260px + 40 gap): at 320 the output node falls
+        // outside the area `fitView` can compute and its buttons get cut off.
         position: { x: lastPosition.x + 300, y: lastPosition.y + 60 },
         data: outputData,
         draggable: false,
-        // Đặt width lên chính node wrapper: style bên trong component không
-        // làm wrapper giãn ra, nên `fitView` đo thiếu và node lọt ra mép.
+        // Put width on the node wrapper itself: styles inside the component
+        // do not stretch the wrapper, so `fitView` measures too small and the node spills past the edge.
         style: { width: SCENE_NODE_WIDTH },
       },
     ]
@@ -345,11 +345,11 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     generatingId,
     project.data,
     costEstimate.data,
-    // Cờ pending phải nằm trong deps, nếu không nút "Đang thêm..." không bao giờ hiện.
+    // The pending flag must be in deps, otherwise the "Adding..." button never shows.
     exportToLibrary.isPending,
     handlePromptChange,
-    // Chỉ phụ thuộc hàm `mutate` (ổn định về tham chiếu), không phải cả object
-    // useMutation — object đổi mỗi lần render nên useMemo sẽ mất tác dụng.
+    // Depend only on the `mutate` function (referentially stable), not the whole
+    // useMutation object — the object changes every render so useMemo would be useless.
     generateMutate,
     savePromptMutate,
     removeSceneMutate,
@@ -362,7 +362,7 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     removeCharacterFromCanvas,
   ])
 
-  // Thứ tự cảnh là `order_index` ở backend — canvas chỉ vẽ lại cho dễ nhìn.
+  // The scene order is `order_index` in the backend — the canvas only redraws it for readability.
   const edges: Edge[] = useMemo(() => {
     const chain = edgesFromOrder(scenes.map((s) => s.id))
     const sceneEdges: Edge[] = chain.map((e) => {
@@ -385,8 +385,8 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     return sceneEdges
   }, [scenes])
 
-  // Cạnh nhân vật → cảnh không phải trạng thái riêng — suy ra từ @mention có
-  // trong prompt, chỉ vẽ cho nhân vật đang có mặt trên canvas.
+  // A character → scene edge is not separate state — derived from the @mention present
+  // in the prompt, only drawn for characters currently present on the canvas.
   const characterEdges: Edge[] = useMemo(() => {
     const placedCharacters = (characters.data ?? []).filter((c) =>
       placedCharacterIds.includes(c.id)
@@ -401,8 +401,8 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
 
   const allEdges = useMemo(() => [...edges, ...characterEdges], [edges, characterEdges])
 
-  // Kéo cạnh từ node nhân vật vào handle "character" của 1 cảnh = chèn @tên
-  // vào prompt cảnh đó — không lưu cạnh riêng, prompt là nguồn sự thật.
+  // Dragging an edge from a character node into the "character" handle of a scene = inserting @name
+  // into that scene's prompt — no separate edge is stored, the prompt is the source of truth.
   const onConnect = useCallback(
     (connection: Connection) => {
       const isCharacterMention =
@@ -427,9 +427,9 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
     [characters.data, scenes, prompts, savePromptMutate]
   )
 
-  // Xoá cạnh nhân vật trên canvas = gỡ @tên khỏi prompt. Cạnh giữa các cảnh
-  // (thứ tự/chuyển cảnh) không xoá được qua đây — chỉ cạnh bắt đầu bằng
-  // CHARACTER_NODE_PREFIX mới xử lý, còn lại bị bỏ qua nên sẽ tự vẽ lại.
+  // Deleting a character edge on the canvas = removing @name from the prompt. Edges between scenes
+  // (order/transition) cannot be deleted through here — only edges starting with
+  // CHARACTER_NODE_PREFIX are handled, the rest are ignored so they redraw themselves.
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       for (const change of changes) {
@@ -565,8 +565,8 @@ export function ProjectCanvas({ projectId }: { projectId: number }) {
         onConnect={onConnect}
         onNodeDragStart={() => useFlowStore.getState().beginGesture()}
         onNodeDragStop={() => useFlowStore.getState().endGesture()}
-        // `fitView` lúc mount đo khi node chưa có kích thước thật nên luôn hụt
-        // vài chục pixel; `onInit` cho instance để fit lại sau khi node render xong.
+        // `fitView` at mount measures when the nodes have no real size yet so it always falls short
+        // by a few tens of pixels; `onInit` gives the instance to fit again after the nodes finish rendering.
         onInit={(instance) => {
           requestAnimationFrame(() =>
             instance.fitView({ padding: 0.2, maxZoom: 0.8 })

@@ -16,7 +16,7 @@ class TimelineRenderRead(BaseModel):
 
 
 class AudioStemsRead(BaseModel):
-    """Track audio đã tách rời — None nghĩa là chưa chạy bước lồng tiếng."""
+    """Separated audio tracks — None means the dubbing step has not run."""
 
     voice: str | None = None
     background: str | None = None

@@ -1,7 +1,7 @@
-"""Sinh tiêu đề/mô tả/tag cho video — dùng từ UI hoặc n8n.
+"""Generate title/description/tags for a video — used from the UI or n8n.
 
-n8n truyền `prompt_template` riêng cho từng loại video (ẩm thực, vlog, tin tức
-cần văn phong khác nhau) thay vì dùng chung một khuôn.
+n8n passes its own `prompt_template` for each kind of video (cooking, vlog, news
+need different writing styles) instead of sharing one mold.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,7 +18,7 @@ _DEFAULT_USER_ID = 1
 
 
 class MetadataRequest(BaseModel):
-    # Bỏ trống thì dùng prompt mặc định theo quy tắc SEO YouTube.
+    # When empty, use the default prompt following YouTube SEO rules.
     prompt_template: str | None = None
 
 
@@ -43,7 +43,7 @@ async def generate_metadata(
         )
     except metadata_service.MetadataGenerationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 — báo nguyên nhân thật cho người gọi
+    except Exception as exc:  # noqa: BLE001 — report the real cause to the caller
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return MetadataRead(**result)
@@ -51,5 +51,5 @@ async def generate_metadata(
 
 @router.get("/metadata/default-prompt", response_model=str)
 def default_prompt() -> str:
-    """Prompt mặc định — n8n lấy về làm điểm bắt đầu rồi sửa theo chủ đề."""
+    """Default prompt — n8n fetches it as a starting point and then edits it per topic."""
     return metadata_service.DEFAULT_PROMPT

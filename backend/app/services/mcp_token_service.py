@@ -1,8 +1,8 @@
-"""Token cho agent ngoài (Claude Code/Codex) gọi vào qua MCP — Phase 14.
+"""Token for external agents (Claude Code/Codex) calling in through MCP — Phase 14.
 
-Khác key của provider AI (`api_key_service`, mã hoá 2 chiều bằng Fernet vì phải
-giải mã ra để gửi cho provider): token này chỉ cần so sánh, không bao giờ cần đọc
-lại, nên lưu hash một chiều — rò DB cũng không dùng lại được token.
+Unlike AI provider keys (`api_key_service`, two-way encrypted with Fernet because they must be
+decrypted to send to the provider): this token only needs comparing, never needs to be read
+back, so it is stored as a one-way hash — a DB leak cannot reuse the token.
 """
 
 import hashlib
@@ -49,7 +49,7 @@ def validate_scopes(scopes: list[str]) -> list[str]:
 def create_token(
     db: Session, user_id: int, name: str, scopes: list[str]
 ) -> IssuedToken:
-    """Trả về plaintext DUY NHẤT lần này — về sau chỉ còn hash trong DB."""
+    """Returns the plaintext ONLY this once — afterwards only the hash remains in the DB."""
     cleaned_name = name.strip()
     if not cleaned_name:
         raise McpTokenError("Cần đặt tên cho token (vd claude-code).")
@@ -67,7 +67,7 @@ def create_token(
     db.commit()
     db.refresh(record)
 
-    # Không log giá trị token, chỉ log việc đã tạo (cùng nguyên tắc với API key).
+    # Do not log the token value, only that it was created (same principle as API keys).
     logger.info("Đã tạo MCP token '%s' với %d scope", cleaned_name, len(checked_scopes))
     return IssuedToken(record=record, plain_token=plain_token)
 
@@ -97,7 +97,7 @@ def revoke_token(db: Session, user_id: int, token_id: int) -> bool:
 
 
 def authenticate(db: Session, plain_token: str) -> McpAccessToken | None:
-    """Trả token record nếu hợp lệ và chưa thu hồi, ngược lại None."""
+    """Return the token record if valid and not revoked, otherwise None."""
     if not plain_token:
         return None
 

@@ -1,7 +1,7 @@
-"""Kênh/tác giả Bilibili — Phase 22. Mirror `category_service.py` với 1 khác
-biệt cố ý: chuyên mục là tập nhỏ thay thế toàn bộ mỗi lần set
-(`set_followed`), kênh là tập có thể lớn, theo/bỏ theo TỪNG kênh một
-(`follow`/`unfollow`) — xem docstring `models/channel.py`.
+"""Bilibili channel/author — Phase 22. Mirrors `category_service.py` with 1 deliberate
+difference: categories are a small set replaced entirely on each set
+(`set_followed`), channels are a potentially large set, followed/unfollowed ONE AT A TIME
+(`follow`/`unfollow`) — see the `models/channel.py` docstring.
 """
 
 import logging
@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 def upsert_seen_batch(
     db: Session, platform: Platform, channels: list[tuple[str, str]]
 ) -> None:
-    """Ghi nhận kênh đã thấy qua dữ liệu quét được (không cần job quét riêng
-    như chuyên mục — mỗi video kéo theo 1 kênh sẵn).
+    """Record channels seen through scanned data (no separate scan job needed
+    like categories — every video already carries a channel).
 
-    1 query cho cả danh sách + 1 commit — cùng pattern chống N+1 đã dùng ở
-    Phase 20 (`trending_service._attach_library_status`). `channels` là
-    `[(channel_id, name), ...]`, có thể trùng channel_id (nhiều video cùng 1
-    kênh trong 1 trang) — dedup trước khi query.
+    1 query for the whole list + 1 commit — the same N+1-avoidance pattern used in
+    Phase 20 (`trending_service._attach_library_status`). `channels` is
+    `[(channel_id, name), ...]`, and may repeat channel_id (many videos of the same
+    channel on 1 page) — dedupe before querying.
     """
     if not channels:
         return
@@ -66,8 +66,8 @@ def upsert_seen_batch(
 
 
 def follow(db: Session, platform: Platform, channel_id: str, name: str) -> Channel:
-    """Theo dõi 1 kênh — tạo mới nếu chưa từng thấy (vd người dùng theo dõi
-    thẳng từ popup mà chưa có lượt `upsert_seen_batch` nào chạm tới kênh đó)."""
+    """Follow 1 channel — create it if never seen (e.g. the user follows
+    straight from the popup before any `upsert_seen_batch` call touched that channel)."""
     channel = (
         db.query(Channel)
         .filter(Channel.platform == platform, Channel.channel_id == channel_id)
@@ -93,10 +93,10 @@ def follow(db: Session, platform: Platform, channel_id: str, name: str) -> Chann
 
 
 def unfollow(db: Session, platform: Platform, channel_id: str, name: str) -> Channel:
-    """Đối xứng với `follow()` — nhận `name` để tạo kênh mới nếu chưa từng
-    thấy (hiếm nhưng có thể xảy ra: bỏ theo dõi 1 kênh mà backend chưa từng
-    ghi nhận, vd do dữ liệu FE cũ). Trả về `Channel` (thay vì `None`) để API
-    trả lại đúng trạng thái mới nhất, cùng kiểu trả với `follow()`."""
+    """Symmetric to `follow()` — takes `name` to create a new channel if never
+    seen (rare but possible: unfollowing a channel the backend never
+    recorded, e.g. from old FE data). Returns a `Channel` (instead of `None`) so the API
+    returns the latest state, the same return type as `follow()`."""
     channel = (
         db.query(Channel)
         .filter(Channel.platform == platform, Channel.channel_id == channel_id)
@@ -131,16 +131,16 @@ def get_followed(db: Session, platform: Platform) -> list[Channel]:
 
 
 class ChannelVideosResult:
-    """Kết quả gọi API kênh — `degraded=True` khi bị risk-control (khác hẳn
-    "kênh này thật sự không có video"), để caller hiện đúng thông báo thay vì
-    coi là danh sách rỗng im lặng.
+    """Result of the channel API call — `degraded=True` when hit by risk control (very different from
+    "this channel truly has no videos"), so the caller shows the right message instead of
+    silently treating it as an empty list.
 
-    Đo thật 2026-09-22 (10 kênh phổ biến, 1 request/kênh, không cookie): **cả
-    10/10 đều bị chặn** — tệ hơn hẳn dự đoán "risk-control nặng" ban đầu, gần
-    như CHẮC CHẮN degraded=True với mọi người dùng ở v1 (chưa có
-    `bilibili_cookie`, xem docs/phases/phase-22-channel-follow.md mục "Quyết
-    định đã chốt" #5 — quyết định KHÔNG thêm cookie v1 đã chốt trước khi có số
-    đo này, nay có số đo thật để phiên sau cân nhắc có nên đảo quyết định)."""
+    Measured 2026-09-22 (10 popular channels, 1 request/channel, no cookie): **all
+    10/10 were blocked** — far worse than the initial "heavy risk control" prediction, almost
+    CERTAINLY degraded=True for every user in v1 (no
+    `bilibili_cookie` yet, see docs/phases/phase-22-channel-follow.md, section "Quyết
+    định đã chốt" #5 — the decision NOT to add a cookie in v1 was made before this
+    measurement, now there is a real measurement for a later session to weigh reversing it)."""
 
     def __init__(self, videos: list[dict], degraded: bool) -> None:
         self.videos = videos
@@ -150,9 +150,9 @@ class ChannelVideosResult:
 async def list_channel_videos(
     mid: str, page: int = 1, page_size: int = 25
 ) -> ChannelVideosResult:
-    """Gọi `get_space_videos` — bọc `BilibiliRiskControlError` thành kết quả
-    rỗng + cờ `degraded`, KHÔNG raise lên router (1 API phụ lỗi không được làm
-    vỡ cả popup xem trước, xem docs/phases/phase-22-channel-follow.md).
+    """Call `get_space_videos` — wraps `BilibiliRiskControlError` into an empty
+    result + a `degraded` flag, does NOT raise up to the router (1 failing auxiliary API must not
+    break the whole preview popup, see docs/phases/phase-22-channel-follow.md).
     """
     try:
         async with BilibiliClient() as client:

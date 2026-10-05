@@ -1,4 +1,4 @@
-"""Phase 22 — theo dõi kênh. Mirror test style của `test_category_service.py`."""
+"""Phase 22 — channel following. Mirrors the test style of `test_category_service.py`."""
 
 import pytest
 from sqlalchemy import create_engine
@@ -32,7 +32,7 @@ class TestUpsertSeenBatch:
         assert rows[0].is_followed is False
 
     def test_seeing_same_mid_again_is_idempotent(self, db) -> None:
-        """Thấy lại cùng mid không tạo trùng dòng — chỉ cập nhật `last_seen_at`/tên."""
+        """Seeing the same mid again does not create a duplicate row — only updates `last_seen_at`/name."""
         channel_service.upsert_seen_batch(db, Platform.BILIBILI, [("123", "Tên cũ")])
         channel_service.upsert_seen_batch(db, Platform.BILIBILI, [("123", "Tên mới")])
 
@@ -41,19 +41,19 @@ class TestUpsertSeenBatch:
         assert rows[0].name == "Tên mới"
 
     def test_dedups_within_same_batch(self, db) -> None:
-        """1 trang video có nhiều video cùng 1 kênh — không tạo 2 dòng."""
+        """1 page of videos with many videos from the same channel — does not create 2 rows."""
         channel_service.upsert_seen_batch(
             db, Platform.BILIBILI, [("123", "Kênh A"), ("123", "Kênh A")]
         )
         assert db.query(Channel).count() == 1
 
     def test_does_not_touch_is_followed_flag(self, db) -> None:
-        """Chỉ thấy lại (không phải người dùng bấm theo dõi) không được tự ý bật cờ theo dõi."""
+        """Merely seeing it again (not the user clicking follow) must not switch the follow flag on by itself."""
         channel_service.follow(db, Platform.BILIBILI, "123", "Kênh A")
         channel_service.upsert_seen_batch(db, Platform.BILIBILI, [("123", "Kênh A")])
 
         channel = db.query(Channel).filter(Channel.channel_id == "123").one()
-        assert channel.is_followed is True  # vẫn giữ nguyên, không bị reset
+        assert channel.is_followed is True  # stays as is, not reset
 
     def test_empty_list_does_nothing(self, db) -> None:
         channel_service.upsert_seen_batch(db, Platform.BILIBILI, [])
@@ -75,16 +75,16 @@ class TestFollowUnfollow:
 
     def test_get_followed_only_returns_followed(self, db) -> None:
         channel_service.follow(db, Platform.BILIBILI, "1", "A")
-        channel_service.upsert_seen_batch(db, Platform.BILIBILI, [("2", "B")])  # chưa theo dõi
+        channel_service.upsert_seen_batch(db, Platform.BILIBILI, [("2", "B")])  # not followed yet
 
         followed = channel_service.get_followed(db, Platform.BILIBILI)
         assert [c.channel_id for c in followed] == ["1"]
 
     def test_follow_persists_across_reload(self, db) -> None:
-        """Theo dõi 1 kênh → tải lại app → trạng thái vẫn còn (persist DB thật)."""
+        """Follow 1 channel → reload the app → the state is still there (persisted in a real DB)."""
         channel_service.follow(db, Platform.BILIBILI, "123", "Kênh A")
 
-        # Mô phỏng "tải lại app": session mới, đọc lại từ DB.
+        # Simulate "reloading the app": a new session, read again from the DB.
         reloaded = db.query(Channel).filter(Channel.channel_id == "123").one()
         assert reloaded.is_followed is True
 
@@ -120,8 +120,8 @@ class TestListChannelVideos:
 
     @pytest.mark.anyio
     async def test_other_errors_are_not_swallowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Chỉ risk-control mới suy giảm nhẹ nhàng — lỗi khác (vd mất mạng)
-        vẫn phải nổi lên để caller biết, không im lặng trả rỗng."""
+        """Only risk control degrades gracefully — other errors (e.g. losing the network)
+        must still surface so the caller knows, not silently return empty."""
         from app.adapters.bilibili.client import BilibiliClient
 
         async def fake_get_space_videos(self, mid, page=1, page_size=25):

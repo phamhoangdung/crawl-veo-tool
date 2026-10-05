@@ -5,7 +5,7 @@ import { render } from 'vitest-browser-react'
 import { getAppSettings, updateAppSettings } from '@/lib/api'
 import { SettingsDownloads } from './index'
 
-// ESM không cho spy vào export trong browser mode — phải mock ở tầng module.
+// ESM does not allow spying on exports in browser mode — must mock at the module level.
 vi.mock('@/lib/api', () => ({
   getAppSettings: vi.fn(),
   updateAppSettings: vi.fn(),
@@ -62,12 +62,12 @@ describe('SettingsDownloads — Phase 21', () => {
 
     await screen.getByLabelText('Số luồng mỗi video').selectOptions('8')
 
-    // React Query gọi `mutationFn(variables, context)` — chỉ cần đúng đối số
-    // đầu tiên (`variables`) là dữ liệu thật của app, đối số 2 là nội bộ TanStack.
+    // React Query calls `mutationFn(variables, context)` — only the first argument
+    // (`variables`) is the real app data, the 2nd argument is TanStack internal.
     await vi.waitFor(() =>
       expect(mockUpdate.mock.calls[0]?.[0]).toEqual({ download_connections: 8 })
     )
-    // Không tự ý gửi kèm download_max_videos — mỗi ô chỉ sửa đúng cài đặt của nó.
+    // Do not send download_max_videos along on its own — each box only edits its own setting.
     expect(mockUpdate).toHaveBeenCalledTimes(1)
   })
 
@@ -84,7 +84,7 @@ describe('SettingsDownloads — Phase 21', () => {
     await screen.getByLabelText('Số luồng mỗi video').selectOptions('4')
 
     await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalled())
-    // Trang vẫn còn hiện nội dung, không crash trắng trang.
+    // The page still shows content, no white-screen crash.
     await expect
       .element(screen.getByText('Số luồng mỗi video'))
       .toBeInTheDocument()

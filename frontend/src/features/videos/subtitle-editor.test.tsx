@@ -30,8 +30,8 @@ async function renderEditor(count: number) {
       />
     </QueryClientProvider>
   )
-  // Virtualizer đo container qua ResizeObserver (bất đồng bộ) — chờ tới khi
-  // nó thật sự dựng xong ít nhất 1 hàng thay vì đoán 1 khoảng chờ cố định.
+  // The virtualizer measures the container via ResizeObserver (asynchronous) — wait until
+  // it has really built at least 1 row instead of guessing a fixed wait time.
   await vi.waitFor(() => {
     expect(document.querySelectorAll('textarea').length).toBeGreaterThan(0)
   })
@@ -43,7 +43,7 @@ describe('SubtitleEditor — ảo hoá danh sách', () => {
     await renderEditor(300)
 
     const textareas = document.querySelectorAll('textarea')
-    // 300 câu x 2 textarea/câu = 600 nếu KHÔNG ảo hoá — kiểm tra ít hơn hẳn.
+    // 300 sentences x 2 textareas/sentence = 600 if NOT virtualized — check for far fewer.
     expect(textareas.length).toBeGreaterThan(0)
     expect(textareas.length).toBeLessThan(200)
   })
@@ -59,7 +59,7 @@ describe('SubtitleEditor — ảo hoá danh sách', () => {
 
     expect(firstText.value).toBe('Đã sửa câu đầu')
 
-    // Câu thứ 2 (textarea gốc thứ 3, vì mỗi câu có 2 textarea) phải còn nguyên.
+    // The 2nd sentence (the 3rd source textarea, since each sentence has 2 textareas) must remain intact.
     const secondText = document.querySelectorAll('textarea')[2] as HTMLTextAreaElement
     expect(secondText.value).toBe('第1句')
   })

@@ -19,27 +19,27 @@ _DOWNLOAD_HEADERS = {
     "Referer": "https://www.bilibili.com",
 }
 
-_RANGE_RETRY_ATTEMPTS = 3
+_RANGE_RETRY_ATTEMPTS = 6
 _RANGE_RETRY_BASE_DELAY_SECONDS = 0.5
 
-# Phase 20: giới hạn SỐ VIDEO tải song song (khác Phase 21 — giới hạn số kết
-# nối MỖI video). Semaphore module-level (không phải theo request) vì các
-# lượt tải chạy trong background task riêng biệt, không chia sẻ context của
-# request đã tạo ra chúng.
+# Phase 20: limits the NUMBER OF VIDEOS downloading in parallel (unlike Phase 21 — which limits
+# connections PER video). A module-level semaphore (not per request) because
+# downloads run in separate background tasks, which do not share the context of the
+# request that created them.
 #
-# Tạo lười (không tạo ở import-time): `asyncio.Semaphore()` tự bind vào event
-# loop đang chạy lúc khởi tạo ở Python < 3.10 — tạo ở top-level module (trước
-# khi uvicorn có event loop) từng là nguồn lỗi "attached to a different loop"
-# kinh điển. Tạo trong hàm async đầu tiên dùng tới thì luôn đúng loop.
+# Created lazily (not at import time): before Python 3.10 `asyncio.Semaphore()` binds itself to the event
+# loop running at construction — creating it at module top level (before
+# uvicorn has an event loop) was the classic source of "attached to a different loop"
+# errors. Creating it in the first async function that uses it is always the right loop.
 _download_slots: asyncio.Semaphore | None = None
 
-# Phase 21: giới hạn TỔNG SỐ KẾT NỐI HTTP Range đang mở CHO CẢ APP, không
-# phải cho từng video. Cố định ở mức trần tuyệt đối (không đổi theo cài đặt
-# người dùng) — người dùng tự chọn "số luồng" (1-8) chỉ quyết định 1 video
-# CHIA THÀNH BAO NHIÊU PHẦN, còn semaphore này là hàng rào vật lý cuối cùng:
-# 1 video xin 8 phần thì dùng cả 8 slot; 3 video cùng xin 8 phần thì tự chia
-# nhau 8 slot đó (không phải 24) — không cần công thức chia, semaphore tự lo.
-# Xem "Ràng buộc với phase-20" trong docs/phases/phase-21-parallel-download.md.
+# Phase 21: limits the TOTAL NUMBER OF OPEN HTTP Range CONNECTIONS FOR THE WHOLE APP, not
+# per video. Fixed at an absolute ceiling (does not change with user
+# settings) — the "thread count" (1-8) the user picks only decides HOW MANY PARTS
+# 1 video is SPLIT INTO, while this semaphore is the final physical barrier:
+# 1 video asking for 8 parts uses all 8 slots; 3 videos each asking for 8 parts share
+# those 8 slots (not 24) — no sharing formula needed, the semaphore takes care of it.
+# See "Ràng buộc với phase-20" in docs/phases/phase-21-parallel-download.md.
 _connection_slots: asyncio.Semaphore | None = None
 
 
@@ -58,19 +58,19 @@ def _get_connection_slots() -> asyncio.Semaphore:
 
 
 def get_storage_root() -> Path:
-    """Thư mục gốc chứa toàn bộ file tải về — hiển thị cho người dùng biết file ở đâu."""
+    """Root directory holding every downloaded file — shown to the user so they know where files are."""
     return _STORAGE_ROOT
 
 
 class _RangeNotHonoredError(Exception):
-    """CDN trả 200 (cả file) thay vì 206 dù có header Range — không phải lỗi
-    mạng, không nên retry, người gọi phải rơi về tải 1 luồng ngay."""
+    """The CDN returned 200 (the whole file) instead of 206 despite the Range header — not a
+    network error, should not be retried, the caller must fall back to a single-stream download right away."""
 
 
 async def _probe(client: httpx.AsyncClient, url: str) -> tuple[int | None, bool]:
-    """HEAD 1 lần: trả `(content_length, hỗ_trợ_range)`. `content_length=None`
-    khi server không trả header hoặc request lỗi — người gọi phải coi như
-    "không biết", không phải "0 byte"."""
+    """One HEAD: returns `(content_length, range_supported)`. `content_length=None`
+    when the server returns no header or the request fails — the caller must treat it as
+    "unknown", not "0 bytes"."""
     try:
         response = await client.head(url)
     except httpx.HTTPError:
@@ -88,8 +88,8 @@ async def _probe(client: httpx.AsyncClient, url: str) -> tuple[int | None, bool]
 
 
 def _split_ranges(size: int, parts: int) -> list[tuple[int, int]]:
-    """Chia `[0, size)` thành `parts` khoảng gần đều — khoảng cuối nhận phần dư
-    (size không chắc chia hết cho parts)."""
+    """Split `[0, size)` into `parts` nearly equal ranges — the last range takes the remainder
+    (size is not necessarily divisible by parts)."""
     chunk = size // parts
     ranges: list[tuple[int, int]] = []
     for i in range(parts):
@@ -107,17 +107,30 @@ async def _download_whole(
     video_id: int | None,
     slots: asyncio.Semaphore,
 ) -> None:
-    """Tải cả file bằng 1 kết nối — đường cũ trước Phase 21, vẫn giữ nguyên
-    làm fallback khi CDN không hỗ trợ Range hoặc file quá nhỏ để chia phần.
-    Vẫn xin 1 slot từ `slots` (hàng rào kết nối chung toàn app) để nhất quán."""
-    async with slots:
-        async with client.stream("GET", url) as response:
-            response.raise_for_status()
-            with open(dest, "wb") as f:
-                async for chunk in response.aiter_bytes():
-                    f.write(chunk)
-                    if video_id is not None:
-                        progress_service.advance(video_id, len(chunk), kind="download")
+    """Download the whole file with 1 connection — the old path from before Phase 21, kept as
+    the fallback when the CDN does not support Range or the file is too small to split.
+    Still takes 1 slot from `slots` (the app-wide connection barrier) for consistency."""
+    for attempt in range(_RANGE_RETRY_ATTEMPTS):
+        written = 0
+        try:
+            async with slots:
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    with open(dest, "wb") as f:
+                        async for chunk in response.aiter_bytes():
+                            f.write(chunk)
+                            written += len(chunk)
+                            if video_id is not None:
+                                progress_service.advance(video_id, len(chunk), kind="download")
+            return
+        except (httpx.TransportError, httpx.HTTPStatusError):
+            # Connection dropped midway: download again from the start, giving back the bytes already counted.
+            if video_id is not None and written:
+                progress_service.advance(video_id, -written, kind="download")
+            if attempt < _RANGE_RETRY_ATTEMPTS - 1:
+                await asyncio.sleep(_RANGE_RETRY_BASE_DELAY_SECONDS * (attempt + 1))
+                continue
+            raise
 
 
 async def _download_range_part(
@@ -130,42 +143,40 @@ async def _download_range_part(
     video_id: int | None,
     slots: asyncio.Semaphore,
 ) -> None:
-    """Tải đúng 1 khoảng byte, ghi vào đúng offset của `dest` (đã pre-allocate
-    đủ kích thước từ trước — mỗi worker chỉ đụng vào phần của mình, không cần
-    khoá). Lỗi thì retry lại ĐÚNG khoảng này tối đa `_RANGE_RETRY_ATTEMPTS`
-    lần, không phải tải lại cả file."""
+    """Download exactly 1 byte range, writing at the right offset of `dest` (pre-allocated
+    to full size beforehand — each worker only touches its own part, no
+    lock needed). On error retry EXACTLY this range at most `_RANGE_RETRY_ATTEMPTS`
+    times, not the whole file again."""
+    # A cut-off midway ("peer closed connection without sending complete
+    # message body") is a common CDN network error: retry CONTINUING from the byte
+    # already received (not redownloading the whole range, no progress rollback).
+    part_bytes = 0
     for attempt in range(_RANGE_RETRY_ATTEMPTS):
-        part_bytes = 0
         try:
             async with slots:
                 async with client.stream(
-                    "GET", url, headers={"Range": f"bytes={start}-{end}"}
+                    "GET", url, headers={"Range": f"bytes={start + part_bytes}-{end}"}
                 ) as response:
                     if response.status_code != 206:
-                        # Một số CDN lờ header Range và trả cả file (200) —
-                        # không phải lỗi mạng, retry vô ích, phải báo ngay để
-                        # người gọi rơi về tải 1 luồng thay vì ghi đè lung tung.
+                        # Some CDNs ignore the Range header and return the whole file (200) —
+                        # not a network error, retrying is useless, it must be reported right away so
+                        # the caller falls back to a single-stream download instead of overwriting at random.
                         raise _RangeNotHonoredError(
                             f"Server trả status {response.status_code} thay vì 206 cho Range request"
                         )
                     with open(dest, "r+b") as f:
-                        f.seek(start)
+                        f.seek(start + part_bytes)
                         async for chunk in response.aiter_bytes():
                             f.write(chunk)
                             part_bytes += len(chunk)
                             if video_id is not None:
                                 progress_service.advance(video_id, len(chunk), kind="download")
+            if start + part_bytes <= end:
+                raise httpx.ReadError("Kết nối đóng sớm, thiếu dữ liệu")
             return
         except _RangeNotHonoredError:
-            if video_id is not None and part_bytes:
-                progress_service.advance(video_id, -part_bytes)
             raise
         except Exception:
-            # Thử lại đã đọc dở dang: trả lại đúng số byte đã cộng nhầm trước
-            # khi thử lại từ đầu khoảng này — nếu không, % sẽ vượt quá 100%
-            # (cộng 2 lần cho cùng 1 khoảng byte).
-            if video_id is not None and part_bytes:
-                progress_service.advance(video_id, -part_bytes)
             if attempt < _RANGE_RETRY_ATTEMPTS - 1:
                 await asyncio.sleep(_RANGE_RETRY_BASE_DELAY_SECONDS * (attempt + 1))
                 continue
@@ -183,13 +194,13 @@ async def _download_stream(
     known_size: int | None,
     supports_range: bool,
 ) -> None:
-    """Tải 1 stream (video-only hoặc audio-only) — chia `connections` phần
-    qua HTTP Range nếu đủ điều kiện, không thì rơi về 1 kết nối.
+    """Download 1 stream (video-only or audio-only) — split into `connections` parts
+    via HTTP Range if eligible, otherwise fall back to 1 connection.
 
-    Điều kiện chia phần (Phase 21, đo thật 2026-09-22): `connections > 1`,
-    server xác nhận hỗ trợ Range, và biết trước kích thước đủ lớn hơn
-    `download_part_min_bytes` (chia file bé chỉ tốn thêm bắt tay TLS, không
-    bù lại được gì — xem docs/phases/phase-21-parallel-download.md).
+    Conditions for splitting (Phase 21, measured 2026-09-22): `connections > 1`,
+    the server confirms Range support, and the size is known to be larger than
+    `download_part_min_bytes` (splitting a small file only costs an extra TLS handshake and
+    gains nothing — see docs/phases/phase-21-parallel-download.md).
     """
     part_min_bytes = get_settings().download_part_min_bytes
     if (
@@ -201,9 +212,9 @@ async def _download_stream(
         await _download_whole(client, url, dest, video_id=video_id, slots=slots)
         return
 
-    # Pre-allocate đúng kích thước cuối cùng ngay từ đầu — mỗi worker `seek()`
-    # tới offset của mình rồi ghi, không cần N file part rồi nối lại (tốn gấp
-    # đôi dung lượng đĩa + thêm 1 lượt đọc/ghi toàn bộ file).
+    # Pre-allocate the exact final size right from the start — each worker `seek()`s
+    # to its own offset then writes, no need for N part files and then joining them (which would cost twice
+    # the disk space + an extra read/write pass over the whole file).
     with open(dest, "wb") as f:
         f.truncate(known_size)
 
@@ -216,19 +227,19 @@ async def _download_stream(
             )
         )
     except _RangeNotHonoredError:
-        # CDN nói có hỗ trợ Range (accept-ranges: bytes ở HEAD) nhưng GET thật
-        # lại không tôn trọng — hiếm nhưng đã thấy trên các CDN "lười". Xoá
-        # phần đã tải dở (có thể lẫn dữ liệu từ nhiều offset khác nhau, không
-        # dùng lại được) rồi tải lại bằng 1 kết nối cho chắc.
+        # The CDN says it supports Range (accept-ranges: bytes on HEAD) but the real GET
+        # does not honor it — rare but seen on "lazy" CDNs. Delete the
+        # partially downloaded data (it may mix data from several different offsets and is not
+        # reusable) then download again with 1 connection to be safe.
         #
-        # Giới hạn đã biết: các phần đã tải xong TRƯỚC khi phần lỗi xảy ra vẫn
-        # giữ nguyên số byte đã cộng vào progress (không rollback được chính
-        # xác vì `asyncio.gather` huỷ các phần còn dở dang, không phải phần đã
-        # xong) — `_download_whole` cộng thêm từ đầu có thể khiến % vượt 100%
-        # tạm thời. `TaskProgress.percent` đã tự kẹp về tối đa 100%
-        # (`min(100.0, ...)`) nên không hiện số vô lý, chỉ có thể chạy tới
-        # 100% sớm hơn thực tế trong đúng trường hợp hiếm này — chấp nhận được,
-        # không đáng để thêm cơ chế theo dõi byte phức tạp cho 1 edge case hiếm.
+        # Known limitation: parts that finished BEFORE the failing part occurred keep
+        # the bytes already added to progress (it cannot be rolled back
+        # exactly because `asyncio.gather` cancels the in-flight parts, not the finished
+        # ones) — `_download_whole` adding from the start may make the % exceed 100%
+        # temporarily. `TaskProgress.percent` already clamps to at most 100%
+        # (`min(100.0, ...)`) so no absurd number is shown, it may only reach
+        # 100% earlier than reality in exactly this rare case — acceptable,
+        # not worth adding a complex byte-tracking mechanism for one rare edge case.
         logger.warning(
             "CDN không tôn trọng Range request dù báo có hỗ trợ, rơi về 1 kết nối: %s", url
         )
@@ -238,18 +249,18 @@ async def _download_stream(
 async def download_bilibili_video(
     job_id: int, video_id: int, bvid: str, cid: int, *, connections: int = 1
 ) -> Path:
-    """Tải video-only + audio-only stream (DASH) rồi ghép bằng ffmpeg.
+    """Download the video-only + audio-only streams (DASH) then merge with ffmpeg.
 
-    Raises FfmpegNotFoundError sớm (trước khi tải) nếu chưa cài ffmpeg, tránh tải
-    xong hàng chục MB rồi mới báo lỗi ở bước merge.
+    Raises FfmpegNotFoundError early (before downloading) if ffmpeg is not installed, to avoid downloading
+    tens of MB and only reporting the error at the merge step.
 
-    Xếp hàng qua semaphore khi đã đủ `download_max_videos` lượt tải chạy song
-    song (Phase 20 — tick chọn hàng loạt ở màn Khám phá) — báo stage "queued"
-    trong lúc chờ để UI không hiện % đứng yên khó hiểu.
+    Queues through the semaphore once `download_max_videos` downloads are already running in
+    parallel (Phase 20 — bulk selection on the Discovery screen) — reports stage "queued"
+    while waiting so the UI does not show a confusing frozen %.
 
-    `connections` (Phase 21, mặc định 1 = hành vi cũ): số phần chia HTTP Range
-    cho MỖI stream (video/audio) — trần thật cho cả app là
-    `settings_service.DOWNLOAD_CONNECTIONS_MAX`, xem `_get_connection_slots()`.
+    `connections` (Phase 21, default 1 = old behavior): number of HTTP Range parts
+    for EACH stream (video/audio) — the real ceiling for the whole app is
+    `settings_service.DOWNLOAD_CONNECTIONS_MAX`, see `_get_connection_slots()`.
     """
     ffmpeg.ensure_ffmpeg_available()
 
@@ -263,7 +274,7 @@ async def download_bilibili_video(
 async def _download_bilibili_video_slot(
     job_id: int, video_id: int, bvid: str, cid: int, *, connections: int
 ) -> Path:
-    """Thân việc tải thật — chạy sau khi đã giữ được 1 slot semaphore số video."""
+    """The actual download body — runs after holding 1 video-count semaphore slot."""
     video_dir = _STORAGE_ROOT / str(job_id) / str(video_id)
     video_dir.mkdir(parents=True, exist_ok=True)
     video_tmp = video_dir / "video.m4s"
@@ -278,11 +289,11 @@ async def _download_bilibili_video_slot(
     slots = _get_connection_slots()
 
     async with httpx.AsyncClient(headers=_DOWNLOAD_HEADERS, timeout=60) as http:
-        # Dò kích thước CẢ 2 trước để báo 1 chặng "đang tải" duy nhất với tổng
-        # dung lượng thật — video+audio giờ tải SONG SONG (Phase 21) nên 2
-        # chặng nối tiếp "video" rồi "audio" như trước sẽ làm % nhảy loạn.
-        # Không biết được kích thước (proxy lạ, timeout) thì total=None —
-        # progress vẫn chạy đúng, chỉ không hiện % (xem TaskProgress.percent).
+        # Probe the size of BOTH first to report a single "downloading" stage with the real total
+        # size — video+audio now download IN PARALLEL (Phase 21), so 2
+        # sequential stages "video" then "audio" as before would make the % jump around.
+        # If the size cannot be known (odd proxy, timeout) total=None —
+        # progress still works, only the % is not shown (see TaskProgress.percent).
         (video_size, video_range_ok), (audio_size, audio_range_ok) = await asyncio.gather(
             _probe(http, video_url), _probe(http, audio_url)
         )
@@ -307,9 +318,9 @@ async def _download_bilibili_video_slot(
         )
 
     progress_service.set_stage(video_id, "merging", kind="download")
-    # to_thread: subprocess.run là lệnh chặn — gọi thẳng ở đây sẽ đứng cả event
-    # loop (hàm này chạy trực tiếp trên loop chính khi được queue làm background
-    # task, xem docs/performance-optimization/plan.md mục P0).
+    # to_thread: subprocess.run is blocking — calling it directly here would freeze the whole event
+    # loop (this function runs directly on the main loop when queued as a background
+    # task, see docs/performance-optimization/plan.md, section P0).
     await asyncio.to_thread(ffmpeg.merge_video_audio, video_tmp, audio_tmp, output_path)
     video_tmp.unlink(missing_ok=True)
     audio_tmp.unlink(missing_ok=True)
@@ -317,14 +328,14 @@ async def _download_bilibili_video_slot(
 
 
 async def run_download_task(video_id: int) -> None:
-    """Chạy nền: tải 1 video theo id, tự mở session riêng (session của request
-    tạo ra task này đã đóng khi hàm này chạy).
+    """Background run: download 1 video by id, opening its own session (the session of the request
+    that created this task was already closed when this function runs).
 
-    Dùng chung cho cả 2 lối vào: nút "Tải video" đơn lẻ (`POST
-    /api/videos/{id}/download`, trang Video của tôi) và tải hàng loạt từ màn
-    Khám phá (`POST /api/jobs/from-selection`, Phase 20) — trước đây logic này
-    nằm riêng trong `api/pipeline.py`, chuyển sang đây để không phải chép lại
-    y hệt cho lối vào thứ 2.
+    Shared by both entry points: the single "Download video" button (`POST
+    /api/videos/{id}/download`, My videos page) and the bulk download from the Discovery
+    screen (`POST /api/jobs/from-selection`, Phase 20) — previously this logic
+    lived separately in `api/pipeline.py`, moved here so it need not be copied
+    verbatim for the second entry point.
     """
     with SessionLocal() as db:
         video = db.get(Video, video_id)
@@ -332,9 +343,9 @@ async def run_download_task(video_id: int) -> None:
             progress_service.finish(video_id, error="Video không còn tồn tại")
             return
         try:
-            # Đọc LÚC BẮT ĐẦU lượt tải này (không cache ở import-time) — đổi
-            # cài đặt phải có tác dụng ngay với video tải tiếp theo, không bắt
-            # khởi động lại backend (Phase 21, xem Definition of Done).
+            # Read AT THE START of this download (not cached at import time) — changing
+            # settings must take effect right away for the next video downloaded, without
+            # restarting the backend (Phase 21, see Definition of Done).
             connections = settings_service.get_download_connections(db, video.user_id)
             async with BilibiliClient() as client:
                 cid = await client.get_video_cid(video.platform_video_id)

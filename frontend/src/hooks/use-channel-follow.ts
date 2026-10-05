@@ -2,10 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { setChannelFollowed } from '@/lib/api'
 
 /**
- * Toggle theo dõi 1 kênh — Phase 22. Bọc `setChannelFollowed` với cập nhật
- * optimistic nhẹ (làm mới cache `['channels', 'followed']` sau khi xong) để
- * nút "Theo dõi"/"Đang theo dõi" trong popup xem trước phản hồi ngay, không
- * phải đợi round-trip mới thấy đổi trạng thái.
+ * Toggle following 1 channel — Phase 22. Wraps `setChannelFollowed` with a light
+ * optimistic update (refreshing the `['channels', 'followed']` cache when done) so the
+ * "Follow"/"Following" button in the preview popup responds right away, without
+ * waiting for a round trip to see the state change.
  */
 export function useChannelFollow(platform: string) {
   const queryClient = useQueryClient()

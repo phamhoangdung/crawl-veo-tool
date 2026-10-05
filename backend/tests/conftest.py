@@ -3,12 +3,12 @@ import pytest
 
 @pytest.fixture
 def dummy_session():
-    """Session giả cho test không thực sự chạm DB (chỉ cần truyền qua các hàm bị mock)."""
+    """Fake session for tests that do not really touch the DB (only needs to be passed through mocked functions)."""
     return object()
 
 
 class _ImmediateFuture:
-    """`Future` giả chạy hàm ngay trong process test, đồng bộ."""
+    """A fake `Future` running the function right in the test process, synchronously."""
 
     def __init__(self, value):
         self._value = value
@@ -19,12 +19,12 @@ class _ImmediateFuture:
 
 @pytest.fixture(autouse=True)
 def _fake_worker_pool(monkeypatch: pytest.MonkeyPatch):
-    """Không test nào được thật sự spawn process pool (`app.core.worker_pool`,
-    Phase: tối ưu hiệu năng P2) — chậm/flaky, và `monkeypatch` không xuyên được
-    sang process con (worker sẽ import module gốc, không thấy bản đã mock).
-    Chạy hàm trực tiếp trong process test thay vì gửi sang pool thật, giữ
-    nguyên hành vi mock ở từng test (`monkeypatch.setattr(module, "func", ...)`
-    vẫn có tác dụng vì hàm được resolve tại thời điểm gọi, cùng process)."""
+    """No test may really spawn a process pool (`app.core.worker_pool`,
+    Phase: performance optimization P2) — slow/flaky, and `monkeypatch` does not reach
+    into the child process (the worker would import the original module, not seeing the mocked version).
+    Run the function directly in the test process instead of sending it to a real pool, keeping
+    the mock behavior of each test (`monkeypatch.setattr(module, "func", ...)`
+    still takes effect because the function is resolved at call time, in the same process)."""
     from app.core import worker_pool
 
     monkeypatch.setattr(

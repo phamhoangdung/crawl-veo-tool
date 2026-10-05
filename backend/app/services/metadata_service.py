@@ -1,11 +1,11 @@
-"""Sinh tiêu đề / mô tả / tag cho video trước khi đăng.
+"""Generate the title / description / tags for a video before publishing.
 
-Quy tắc SEO lấy từ skill `youtube-seo` (.claude/skills/youtube-seo): tiêu đề dưới
-60 ký tự với từ khoá chính ở 5–55 ký tự đầu, 2–3 câu mở mô tả chứa từ khoá tự
-nhiên, tag chỉ là phụ trợ (tiêu đề + mô tả quan trọng hơn).
+SEO rules come from the `youtube-seo` skill (.claude/skills/youtube-seo): title under
+60 characters with the main keyword in the first 5–55 characters, the 2–3 opening description sentences containing the keyword
+naturally, tags are only auxiliary (title + description matter more).
 
-Prompt truyền được từ ngoài để n8n dùng kịch bản riêng cho từng loại video —
-mỗi chủ đề (ẩm thực, vlog, tin tức) cần văn phong khác nhau.
+The prompt can be passed in from outside so n8n can use its own script for each kind of video —
+each topic (cooking, vlog, news) needs a different writing style.
 """
 
 import json
@@ -23,8 +23,8 @@ MAX_TITLE_LENGTH = 60
 MAX_DESCRIPTION_LENGTH = 5000
 MAX_TAGS = 15
 
-# Nhắc mô hình bám quy tắc SEO thật thay vì viết tuỳ hứng. `{transcript}` và
-# `{title}` được thay bằng nội dung video.
+# Make the model follow real SEO rules instead of writing whimsically. `{transcript}` and
+# `{title}` are replaced with the video content.
 DEFAULT_PROMPT = """Bạn là chuyên gia SEO YouTube cho kênh tiếng Việt.
 
 Video gốc (tiếng Trung): {title}
@@ -47,8 +47,8 @@ class MetadataGenerationError(RuntimeError):
 
 
 def _transcript_excerpt(video: Video, max_chars: int = 2000) -> str:
-    """Lấy phần lời thoại đã dịch làm ngữ cảnh. Cắt bớt vì video dài có thể vượt
-    giới hạn token của model."""
+    """Take the translated dialogue as context. Truncated because a long video may exceed
+    the model's token limit."""
     segments = video.transcript_json or []
     lines = [
         (s.get("translated_text") or s.get("text") or "").strip()
@@ -60,7 +60,7 @@ def _transcript_excerpt(video: Video, max_chars: int = 2000) -> str:
 
 
 def _extract_json(raw: str) -> dict:
-    """Model hay bọc JSON trong ```json ... ``` hoặc thêm lời dẫn — bóc ra."""
+    """The model often wraps JSON in ```json ... ``` or adds an intro — strip it out."""
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
     if fenced:
         raw = fenced.group(1)
@@ -76,7 +76,7 @@ def _extract_json(raw: str) -> dict:
 
 
 def _clean(data: dict) -> dict:
-    """Cắt về đúng giới hạn thay vì từ chối — metadata hơi dài vẫn dùng được."""
+    """Cut to the exact limit instead of rejecting — slightly long metadata is still usable."""
     title = str(data.get("title") or "").strip()
     description = str(data.get("description") or "").strip()
     raw_tags = data.get("tags") or []
@@ -87,7 +87,7 @@ def _clean(data: dict) -> dict:
         "title": title[:MAX_TITLE_LENGTH],
         "description": description[:MAX_DESCRIPTION_LENGTH],
         "tags": tags,
-        # Báo lại để người dùng biết đã bị cắt, không âm thầm mất chữ.
+        # Report it so the user knows it was cut, rather than silently losing text.
         "title_truncated": len(title) > MAX_TITLE_LENGTH,
     }
 
@@ -98,7 +98,7 @@ async def generate_metadata(
     video: Video,
     prompt_template: str | None = None,
 ) -> dict:
-    """Sinh metadata bằng LLM đã cấu hình. Prompt truyền ngoài để n8n tuỳ biến."""
+    """Generate metadata with the configured LLM. The prompt is passed in so n8n can customize it."""
     template = prompt_template or DEFAULT_PROMPT
     transcript = _transcript_excerpt(video)
     if not transcript:
@@ -108,7 +108,7 @@ async def generate_metadata(
 
     prompt = template.format(title=video.title, transcript=transcript)
 
-    # Dùng lại đường đi của translate_service: nó đã lo chọn provider theo API key
-    # đã cấu hình và fallback khi provider chính lỗi.
+    # Reuse translate_service's path: it already handles choosing the provider by the configured API key
+    # and falling back when the main provider fails.
     raw = await translate_service.complete_text(db, user_id, prompt)
     return _clean(_extract_json(raw))

@@ -6,9 +6,9 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { Header } from './header'
 
 /**
- * Thanh header chuẩn dùng ở MỌI trang — trước đây mỗi trang tự chép lại y hệt
- * khối này (10 file), dẫn tới lệch thật: trang Settings thiếu hẳn
- * `<TaskMonitor />` vì lúc thêm icon này không ai nhớ sửa cả 10 nơi.
+ * The standard header bar used on EVERY page — previously each page copied this block
+ * verbatim (10 files), leading to real drift: the Settings page lacked
+ * `<TaskMonitor />` entirely because when this icon was added nobody remembered to edit all 10 places.
  */
 export function AppHeader() {
   return (

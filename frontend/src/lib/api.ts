@@ -2,7 +2,7 @@ import axios from 'axios'
 
 declare global {
   interface Window {
-    /** Bản đóng gói (Tauri) tiêm địa chỉ backend thật — cổng được chọn lúc chạy. */
+    /** The packaged build (Tauri) injects the real backend address — the port is chosen at runtime. */
     __VIEDUB_API_BASE__?: string
   }
 }
@@ -17,12 +17,12 @@ export const api = axios.create({
 })
 
 /**
- * Bóc `detail` từ lỗi HTTP backend trả về (FastAPI `HTTPException` luôn có
- * dạng `{"detail": "..."}`), rơi về `fallback` khi không phải lỗi axios hoặc
- * response không có `detail`. Dùng chung thay vì mỗi nơi tự viết lại — trước
- * đây có nơi dùng `axios.isAxiosError` (đúng), có nơi tự kiểm tra tay kiểu
- * `'response' in error` (yếu hơn, không loại được lỗi non-HTTP có field
- * `response` trùng tên tình cờ).
+ * Extract `detail` from the HTTP error the backend returns (FastAPI `HTTPException` always has
+ * the shape `{"detail": "..."}`), falling back to `fallback` when it is not an axios error or
+ * the response has no `detail`. Shared instead of every place writing its own — previously
+ * some places used `axios.isAxiosError` (correct) and others hand-checked
+ * like `'response' in error` (weaker, cannot rule out a non-HTTP error that happens to have a
+ * field named `response`).
  */
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (!axios.isAxiosError(error)) return fallback
@@ -64,7 +64,7 @@ export interface VideoRead {
   source_url: string
   status: VideoStatus
   created_at: string
-  /** Video đã có trong thư viện từ trước (chỉ có ở kết quả search). */
+  /** Video already in the library from before (only present in search results). */
   already_in_library?: boolean
 }
 
@@ -76,8 +76,8 @@ export interface JobWithVideosRead {
   created_at: string
   videos: VideoRead[]
   translation_failed: boolean
-  /** Số video trong kết quả đã có sẵn trong thư viện — vẫn hiện đầy đủ, chỉ để
-   *  đánh dấu "đã tải" thay vì ẩn đi. */
+  /** Number of videos in the results already in the library — still shown in full, only to
+   *  mark them "downloaded" instead of hiding them. */
   already_in_library: number
   total_found: number
 }
@@ -95,8 +95,8 @@ export interface SnapshotPoint {
   captured_at: string
   total_plays: number
   avg_plays: number
-  /** Tổng điểm `pts` (Bilibili tự tính) — đáng tin hơn total_plays để so
-   * sánh "độ hot" giữa các chuyên mục, xem backend `schemas/trending.py`. */
+  /** Total `pts` score (computed by Bilibili) — more reliable than total_plays for
+   * comparing "hotness" between categories, see backend `schemas/trending.py`. */
   total_pts: number
   heat_score: number
 }
@@ -116,12 +116,12 @@ export type TaskKind =
   | 'burn'
   | 'render_project'
 
-/** Tác vụ thuộc về 1 video (pipeline crawl) hay 1 dự án nhiều cảnh (Phase 16). */
+/** Whether a task belongs to 1 video (crawl pipeline) or 1 multi-scene project (Phase 16). */
 export type TaskSubjectType = 'video' | 'project'
 
 export interface TaskProgress {
-  /** Với subject_type='project' thì đây là project_id — backend giữ nguyên tên
-   *  field để không phải sửa toàn bộ chỗ đang dùng. */
+  /** With subject_type='project' this is the project_id — the backend keeps the name of the
+   *  field so every place already using it needs no change. */
   video_id: number
   subject_type: TaskSubjectType
   title: string
@@ -148,8 +148,8 @@ export interface VideoFiles {
   video_id: number
   title: string
   status: VideoStatus
-  /** Ảnh bìa từ nền tảng gốc. Backend (`VideoFilesRead`) vẫn luôn trả trường này,
-   * chỉ là type ở đây thiếu — nên 3 chỗ dùng nó bị tsc báo lỗi. */
+  /** Cover image from the original platform. The backend (`VideoFilesRead`) always returned this field,
+   * only the type here was missing it — so 3 places using it got tsc errors. */
   cover_url: string | null
   video_dir: string | null
   files: FileEntry[]
@@ -185,17 +185,17 @@ export interface TrendingPage {
   videos: TrendingVideo[]
   page: number
   has_more: boolean
-  /** "ranking" = bảng xếp hạng thật theo chuyên mục; "popular" = danh sách phổ
-   * biến toàn trang (tab "Tất cả", có phân trang thật); "search" = tìm theo từ
-   * khoá (tên chuyên mục khi lướt quá trang 1, hoặc ô tìm kiếm tự do) — rộng
-   * hơn nhưng có thể lẫn video không liên quan. UI hiển thị khác nhau. */
+  /** "ranking" = the real per-category ranking; "popular" = the site-wide popular list
+   * ("All" tab, with real pagination); "search" = search by keyword (the category name
+   * when scrolling past page 1, or the free search box) — broader
+   * but may mix in unrelated videos. The UI displays them differently. */
   source: 'ranking' | 'popular' | 'search'
-  /** Chỉ có ý nghĩa khi `source==='search'` và đã bật dịch từ khoá — dịch thất
-   * bại thì đã tự rơi về tìm nguyên văn, báo để cảnh báo người dùng. */
+  /** Only meaningful when `source==='search'` and keyword translation is on — if translation
+   * failed it already fell back to verbatim search; reported so the user can be warned. */
   translation_failed?: boolean
-  /** Phase 22: true khi nguồn bị Bilibili risk-control chặn (chỉ trang "video
-   * khác trong kênh") — khác hẳn danh sách rỗng thật, UI phải hiện thông báo
-   * suy giảm thay vì "kênh này không có video". */
+  /** Phase 22: true when the source was blocked by Bilibili risk control (only the "other videos
+   * in the channel" page) — very different from a truly empty list, the UI must show a degraded-state
+   * message instead of "this channel has no videos". */
   degraded?: boolean
 }
 
@@ -208,7 +208,7 @@ export interface CategoryStats {
   avg_plays: number
   max_plays: number
   total_likes: number
-  /** Tổng điểm `pts` — dùng làm chỉ số chính so sánh "độ hot" giữa chuyên mục. */
+  /** Total `pts` score — the main metric for comparing "hotness" between categories. */
   total_pts: number
   top_video_title: string | null
 }
@@ -224,23 +224,23 @@ export interface TrendingVideo {
   comment_count: number | null
   danmaku_count: number | null
   coin_count: number | null
-  /** Điểm xếp hạng thật của Bilibili — chỉ có khi video đến từ bảng xếp hạng
-   * (source: "ranking"). null nghĩa là video này từ search, không phải đang
-   * xu hướng thật. */
+  /** Bilibili's real ranking score — only present when the video comes from the ranking
+   * (source: "ranking"). null means this video is from search, not truly
+   * trending. */
   heat_score: number | null
   published_at: string | null
-  /** Id thật trong DB — có nghĩa là video này đã từng tải (Phase 20, màn Khám
-   * phá). `null` = chưa từng tải. */
+  /** Real id in the DB — meaning this video has been downloaded before (Phase 20, Discovery
+   * screen). `null` = never downloaded. */
   video_id: number | null
   already_in_library: boolean
-  /** Id kênh thật (Bilibili: mid dạng chuỗi) — Phase 22. `null` nếu API
-   * không trả (hiếm). */
+  /** Real channel id (Bilibili: mid as a string) — Phase 22. `null` if the API
+   * does not return it (rare). */
   channel_id: string | null
   channel_is_followed: boolean
 }
 
-/** YouTube CHỈ dùng để xem xu hướng/tính điểm chủ đề — không tải video (khác
- * Bilibili/Douyin). Xem docs/phases/phase-17-content-opportunity.md. */
+/** YouTube is ONLY used to watch trends/score topics — it does not download videos (unlike
+ * Bilibili/Douyin). See docs/phases/phase-17-content-opportunity.md. */
 export interface YoutubeCategory {
   id: string
   name: string
@@ -282,11 +282,11 @@ export interface TranscriptSegment {
   end: number
   text: string
   translated_text: string
-  /** Phase 19: nhãn người nói (vd "SPEAKER_00") — rỗng nghĩa là chưa phân vai. */
+  /** Phase 19: speaker label (e.g. "SPEAKER_00") — empty means speaker separation has not run. */
   speaker: string
 }
 
-/** Phase 19: đủ thông tin để backend biết gọi provider nào với voice id nào. */
+/** Phase 19: enough info for the backend to know which provider to call with which voice id. */
 export interface VoiceRef {
   provider: string // "edge" | "elevenlabs"
   voice_id: string
@@ -357,7 +357,7 @@ export interface JobPage {
   has_more: boolean
 }
 
-/** Tải thêm 1 trang kết quả search vào job đã có (infinite scroll trang Crawl). */
+/** Load one more page of search results into an existing job (infinite scroll on the Crawl page). */
 export async function loadMoreJobVideos(jobId: number, page: number) {
   const { data } = await api.post<JobPage>(
     `/api/jobs/${jobId}/load-more`,
@@ -369,7 +369,7 @@ export async function loadMoreJobVideos(jobId: number, page: number) {
   return data
 }
 
-/** Tạo job tải từ các video người dùng tick chọn ở trang Trending. */
+/** Create a download job from the videos the user ticked on the Trending page. */
 export async function createJobFromSelection(videos: TrendingVideo[]) {
   const { data } = await api.post<JobWithVideosRead>(
     '/api/jobs/from-selection',
@@ -428,7 +428,7 @@ export async function getCategoryHistory(rids: number[], days = 30) {
   return data
 }
 
-/** Tiến độ mọi tác vụ đang chạy: tải, tách lời thoại, dịch, lồng tiếng. */
+/** Progress of every running task: download, transcribe, translate, dub. */
 export async function getTaskProgress() {
   const { data } = await api.get<TaskProgress[]>('/api/downloads/progress')
   return data
@@ -454,7 +454,7 @@ export async function getStorageLocation(videoId?: number) {
   return data
 }
 
-/** Mở thư mục chứa file trong Finder/Explorer — chỉ chạy được vì tool ở local. */
+/** Open the folder containing the file in Finder/Explorer — only works because the tool is local. */
 export async function revealInFileManager(videoId?: number) {
   const { data } = await api.post<{ opened: string }>(
     '/api/downloads/reveal',
@@ -466,8 +466,8 @@ export async function revealInFileManager(videoId?: number) {
   return data
 }
 
-/** 1 trang video của category — trang 1 từ bảng xếp hạng, trang sau từ search. */
-/** Bilibili chỉ có bảng xếp hạng 3 ngày và 7 ngày (đã đo thật, mốc khác bị từ chối). */
+/** 1 page of videos of a category — page 1 from the ranking, later pages from search. */
+/** Bilibili only has 3-day and 7-day rankings (measured for real, other values are rejected). */
 export type RankingDays = 3 | 7
 
 export async function getCategoryPage(
@@ -484,7 +484,7 @@ export async function getCategoryPage(
   return data
 }
 
-/** Danh sách phổ biến toàn trang Bilibili (tab "Tất cả") — có phân trang thật. */
+/** Site-wide popular list of Bilibili ("All" tab) — with real pagination. */
 export async function getPopularPage(page: number) {
   const { data } = await api.get<TrendingPage>(
     '/api/trending/bilibili/popular',
@@ -495,7 +495,7 @@ export async function getPopularPage(page: number) {
   return data
 }
 
-/** Tìm kiếm tự do theo từ khoá bất kỳ, không giới hạn 1 chuyên mục. */
+/** Free search by any keyword, not limited to 1 category. */
 export async function searchBilibili(
   keyword: string,
   page: number,
@@ -514,7 +514,7 @@ export async function searchBilibili(
   return data
 }
 
-/** Video liên quan (Phase 22) — dùng cho dải "Video tương tự" trong popup xem trước. */
+/** Related videos (Phase 22) — used for the "Similar videos" strip in the preview popup. */
 export async function getRelatedVideos(bvid: string) {
   const { data } = await api.get<TrendingPage>(
     '/api/trending/bilibili/related',
@@ -525,9 +525,9 @@ export async function getRelatedVideos(bvid: string) {
   return data
 }
 
-/** Video khác trong 1 kênh (Phase 22) — có thể trả `degraded: true` khi bị
- * Bilibili risk-control chặn (đo thật: rủi ro này rất cao khi chưa có
- * cookie đăng nhập) — UI phải hiện đúng thông báo suy giảm. */
+/** Other videos of 1 channel (Phase 22) — may return `degraded: true` when
+ * blocked by Bilibili risk control (measured: this risk is very high without a
+ * login cookie) — the UI must show the proper degraded-state message. */
 export async function getChannelVideos(channelId: string, page = 1) {
   const { data } = await api.get<TrendingPage>(
     `/api/trending/bilibili/channel/${channelId}/videos`,
@@ -630,14 +630,14 @@ export async function updateTranscript(
   return data
 }
 
-/** Nhận diện có bao nhiêu người nói khác nhau, gắn nhãn cho từng đoạn thoại —
- * không bắt buộc, bỏ qua thì `dubVideo` vẫn chạy bằng 1 giọng chung. */
+/** Detect how many different speakers there are and label each dialogue segment —
+ * optional, if skipped `dubVideo` still runs with 1 shared voice. */
 export async function diarizeVideo(videoId: number) {
   const { data } = await api.post<VideoDetail>(`/api/videos/${videoId}/diarize`)
   return data
 }
 
-/** Giọng Edge-TTS (luôn có) + giọng ElevenLabs thật của user nếu đã cấu hình key. */
+/** Edge-TTS voices (always present) + the user's real ElevenLabs voices if a key is configured. */
 export async function getAvailableVoices(videoId: number) {
   const { data } = await api.get<VoiceOption[]>(`/api/videos/${videoId}/voices`)
   return data
@@ -666,12 +666,12 @@ export async function dubVideo(videoId: number, keepBackground = true) {
 }
 
 export interface BurnSubtitlesOptions {
-  /** `'top'` khi video gốc đã có phụ đề cháy sẵn ở dưới — để mặc định thì hai
-   * lớp chữ chồng lên nhau. */
+  /** `'top'` when the source video already has burned-in subtitles at the bottom — left at the default, the two
+   * text layers overlap. */
   position?: 'bottom' | 'top'
-  /** Id font trong `font_service.py` (backend) — bỏ trống dùng font mặc định. */
+  /** Font id in `font_service.py` (backend) — leave empty to use the default font. */
   font_family?: string
-  /** Hex không có '#', vd 'FFFFFF'. */
+  /** Hex without '#', e.g. 'FFFFFF'. */
   font_color?: string
   bold?: boolean
 }
@@ -748,8 +748,8 @@ export async function cleanupOrphanFiles() {
   return data
 }
 
-/** Xoá thư mục job cũ hơn `maxAgeDays`. Cùng hàm mà vòng lặp dọn dẹp nền gọi —
- * nút này chỉ để chạy ngay, không đợi hết chu kỳ 24h. */
+/** Delete job directories older than `maxAgeDays`. The same function the background cleanup loop calls —
+ * this button is only to run it right now, without waiting for the 24h cycle. */
 export async function cleanupOldJobs(maxAgeDays = 30) {
   const { data } = await api.post<{
     removed_job_ids: string[]
@@ -761,9 +761,9 @@ export async function cleanupOldJobs(maxAgeDays = 30) {
 }
 
 // --- Douyin (Phase 3) ---
-// Mới có phần cấu hình + thăm dò. Tải video chưa làm: hình dạng JSON của Douyin
-// chỉ biết được khi gọi thật bằng cookie hợp lệ, viết bóc tách theo phỏng đoán
-// sẽ tạo ra thứ trông như chạy được mà sai ở chỗ không ai kiểm ra.
+// Only configuration + probing exist so far. Video download is not done: the JSON shape of Douyin
+// can only be known by a real call with a valid cookie, and writing the extraction by guesswork
+// would create something that looks like it works but is wrong in a place nobody can verify.
 
 export interface DouyinStatus {
   configured: boolean
@@ -788,7 +788,7 @@ export async function probeDouyinUrl(shareUrl: string) {
   return data
 }
 
-// --- Chạy pipeline hàng loạt (Phase 1/2) ---
+// --- Run the pipeline in bulk (Phase 1/2) ---
 
 export type BatchStep = 'download' | 'transcribe' | 'translate' | 'dub' | 'burn'
 
@@ -827,7 +827,7 @@ export async function startBatch(
   return data
 }
 
-/** `null` khi chưa từng chạy batch nào trong phiên chạy này của backend. */
+/** `null` when no batch has ever run in this backend run. */
 export async function getBatchStatus() {
   const { data } = await api.get<BatchStatus | null>('/api/batch/status')
   return data
@@ -838,7 +838,7 @@ export async function cancelBatch() {
   return data
 }
 
-/** Video chưa chạy hết pipeline — nguồn đầu vào gợi ý cho batch tiếp theo. */
+/** Videos that have not finished the whole pipeline — the suggested input source for the next batch. */
 export async function getPendingVideoIds(limit = 50) {
   const { data } = await api.get<number[]>('/api/batch/pending-videos', {
     params: { limit },
@@ -876,14 +876,14 @@ export async function deleteApiKey(keyId: number) {
   await api.delete(`/api/api-keys/${keyId}`)
 }
 
-// --- Phase 13: trình chỉnh sửa timeline ---
-// Hình dạng "clip" gộp chung field của cả 3 loại track (video/audio/overlay) thay
-// vì union type riêng — đơn giản hoá thao tác kéo-thả/patch ở store, khớp với
-// schema backend (dict[str, Any] theo track, xem app/schemas/timeline.py).
+// --- Phase 13: timeline editor ---
+// The "clip" shape merges the fields of all 3 track types (video/audio/overlay) instead of
+// a separate union type — simplifying drag-and-drop/patch operations in the store, matching the
+// backend schema (dict[str, Any] per track, see app/schemas/timeline.py).
 export interface TimelineClip {
   source?: string
   text?: string
-  /** Clip ảnh hiện suốt video thì bỏ trống start/end; các loại khác luôn có. */
+  /** An image clip shown for the whole video leaves start/end empty; other kinds always have them. */
   start?: number
   end?: number
   track_start?: number
@@ -893,23 +893,23 @@ export interface TimelineClip {
   x?: number
   y?: number
   font_size?: number
-  /** Track ảnh (logo/watermark) và vùng làm mờ: bề rộng theo tỉ lệ khung hình [0,1]. */
+  /** Image track (logo/watermark) and blur region: width as a frame ratio [0,1]. */
   width?: number
-  /** Vùng làm mờ: chiều cao theo tỉ lệ khung hình [0,1]. */
+  /** Blur region: height as a frame ratio [0,1]. */
   height?: number
-  /** Vùng làm mờ: độ mạnh (sigma của gblur, hoặc kích thước ô khi pixelate). */
+  /** Blur region: strength (gblur sigma, or cell size when pixelate). */
   strength?: number
-  /** Vùng làm mờ: 'blur' làm nhoè, 'pixelate' che kiểu ô vuông (che chữ tốt hơn). */
+  /** Blur region: 'blur' smudges, 'pixelate' hides in squares (hides text better). */
   mode?: 'blur' | 'pixelate'
-  /** Overlay text: giới hạn bề rộng khung phụ đề theo tỉ lệ [0,1]; câu dài tự chia dòng. */
+  /** Overlay text: limit of the subtitle box width as a ratio [0,1]; long sentences wrap automatically. */
   box_width?: number
-  /** Track ảnh: độ mờ [0,1] — watermark thường để 0.3-0.6. */
+  /** Image track: opacity [0,1] — a watermark usually uses 0.3-0.6. */
   opacity?: number
-  /** Overlay text: id font trong `font_service.py` (backend) — bỏ trống dùng font mặc định. */
+  /** Overlay text: font id in `font_service.py` (backend) — leave empty to use the default font. */
   font_family?: string
-  /** Overlay text: màu chữ hex không có '#', vd 'FFCC00'. */
+  /** Overlay text: text color as hex without '#', e.g. 'FFCC00'. */
   font_color?: string
-  /** Overlay text: chữ đậm. */
+  /** Overlay text: bold. */
   bold?: boolean
 }
 
@@ -923,7 +923,7 @@ export interface TimelineOperations {
   tracks: TimelineTrack[]
 }
 
-// --- Dịch text lẻ cho tooltip (có cache ở backend) ---
+// --- Translate one-off text for the tooltip (cached in the backend) ---
 
 export interface TranslateResult {
   translated_text: string
@@ -943,7 +943,7 @@ export async function translateText(
   return data
 }
 
-/** Dịch cả trang trong 1 request — 40 request rời rạc sẽ đụng rate limit. */
+/** Translate a whole page in 1 request — 40 separate requests would hit the rate limit. */
 export async function translateBatch(
   texts: string[],
   sourceLang = 'zh',
@@ -956,8 +956,8 @@ export async function translateBatch(
   return data.translations
 }
 
-// --- Kho file dùng chung: logo, intro/outro, nhạc nền (Phase 9) ---
-// Asset dùng lại cho NHIỀU video nên lưu riêng, không nằm trong thư mục 1 video.
+// --- Shared file library: logo, intro/outro, background music (Phase 9) ---
+// Assets are reused by MANY videos so they are stored separately, not in a single video's directory.
 
 export type AssetKind = 'image' | 'video' | 'audio'
 
@@ -965,7 +965,7 @@ export interface Asset {
   id: string
   name: string
   kind: AssetKind
-  /** Đường dẫn tuyệt đối trên máy — đây là thứ đưa vào `source` của clip. */
+  /** Absolute path on the machine — this is what goes into the clip's `source`. */
   path: string
   size: number
 }
@@ -988,13 +988,13 @@ export async function deleteAsset(assetId: string) {
   await api.delete(`/api/assets/${assetId}`)
 }
 
-/** URL xem trước (ảnh logo, nghe thử nhạc nền) — dùng trực tiếp trong <img>/<audio>. */
+/** Preview URL (logo image, background music preview) — used directly in <img>/<audio>. */
 export function assetFileUrl(assetId: string) {
   return `${API_BASE_URL}/api/assets/${assetId}/file`
 }
 
-// --- Font đóng gói sẵn cho phụ đề/watermark text (Phase 13) ---
-// Dùng chung cho Timeline Editor (track overlay) và burn_subtitles.
+// --- Bundled fonts for subtitles/watermark text (Phase 13) ---
+// Shared by the Timeline Editor (overlay track) and burn_subtitles.
 
 export interface Font {
   id: string
@@ -1006,7 +1006,7 @@ export async function getFonts() {
   return data
 }
 
-/** URL file .ttf — dùng làm nguồn `@font-face` để xem trước font trước khi render. */
+/** URL of the .ttf file — used as the `@font-face` source to preview the font before rendering. */
 export function fontFileUrl(fontId: string) {
   return `${API_BASE_URL}/api/fonts/${fontId}/file`
 }
@@ -1017,7 +1017,7 @@ export interface AudioStems {
   mixed: string | null
 }
 
-/** Track audio đã tách rời, để chỉnh âm lượng giọng đọc và nhạc nền riêng. */
+/** Separated audio tracks, to adjust the narration and background music volume independently. */
 export async function getAudioStems(videoId: number) {
   const { data } = await api.get<AudioStems>(
     `/api/videos/${videoId}/audio-stems`
@@ -1050,9 +1050,9 @@ export async function renderTimeline(videoId: number) {
   return data
 }
 
-/** Timeline neo được vào video crawl về HOẶC dự án nhiều cảnh dựng bằng AI
- * (Phase 14/16). Hai bên dùng chung editor nên gói lại thành một kiểu thay vì
- * truyền cờ boolean `isProject` xuống khắp nơi. */
+/** A timeline can anchor to a crawled video OR a multi-scene project built with AI
+ * (Phase 14/16). Both share the editor so it is wrapped as a single type instead of
+ * passing a boolean flag `isProject` down everywhere. */
 export type TimelineSubject =
   | { type: 'video'; id: number }
   | { type: 'project'; id: number }
@@ -1088,8 +1088,8 @@ export async function renderSubjectTimeline(subject: TimelineSubject) {
   return data
 }
 
-/** Gợi ý timeline cho dự án: dựng thẳng từ các cảnh đã sinh clip trên canvas —
- * tương đương vai trò `buildSuggestionFromPipeline` của video crawl. */
+/** Timeline suggestion for a project: built straight from the scenes that have clips on the canvas —
+ * the equivalent of `buildSuggestionFromPipeline` for crawled videos. */
 export async function getProjectTimelineSuggestion(projectId: number) {
   const { data } = await api.get<{ tracks: TimelineTrack[] }>(
     `/api/projects/${projectId}/timeline/suggestion`
@@ -1107,7 +1107,7 @@ export async function getWaveform(videoId: number, variant: string = 'dubbed') {
   return data.peaks
 }
 
-// --- Phase 11: clip ngắn TikTok/Shorts ---
+// --- Phase 11: short TikTok/Shorts clips ---
 export interface ClipCandidate {
   start: number
   end: number
@@ -1140,7 +1140,7 @@ export async function createClip(
   return data
 }
 
-// --- Phase 14: AI Studio (sinh ảnh/video bằng AI) ---
+// --- Phase 14: AI Studio (generate images/video with AI) ---
 
 export type GeneratedAssetType = 'image' | 'video'
 
@@ -1169,7 +1169,7 @@ export interface GeneratedAssetRead {
 
 export interface GenerationResponse {
   asset: GeneratedAssetRead
-  /** true = trả lại kết quả đã sinh trước đó, không gọi API và không tốn phí. */
+  /** true = return the previously generated result, no API call and no cost. */
   from_cache: boolean
 }
 
@@ -1237,7 +1237,7 @@ export async function getGeneratedAssets(assetType?: GeneratedAssetType) {
   return data
 }
 
-/** URL xem trước ảnh keyframe / phát video clip — dùng trong <img>/<video>. */
+/** Preview URL of the keyframe image / video clip playback — used in <img>/<video>. */
 export function generatedAssetFileUrl(assetId: number) {
   return `${API_BASE_URL}/api/ai-studio/assets/${assetId}/file`
 }
@@ -1284,10 +1284,10 @@ export async function generateVideoClip(payload: {
   return data
 }
 
-// --- Sinh nội dung chạy nền (Phase 14) ---
-// Provider thật mất 1-5 phút/clip. Bản đồng bộ ở trên vẫn giữ cho MCP/script
-// (agent gọi tuần tự thì chờ luôn là đơn giản hơn), còn UI dùng bản async này để
-// rời trang rồi quay lại vẫn thấy kết quả.
+// --- Background content generation (Phase 14) ---
+// A real provider takes 1-5 minutes per clip. The synchronous version above is kept for MCP/scripts
+// (an agent calling sequentially is simpler just waiting), while the UI uses this async version so
+// it can leave the page and come back and still see the result.
 
 export interface GenerationJob {
   id: string
@@ -1347,8 +1347,8 @@ export async function listGenerationJobs() {
   return data
 }
 
-/** Chờ một job chạy xong. Ném lỗi khi job thất bại để `useMutation` vào nhánh
- * `onError` như lời gọi đồng bộ trước đây — phía gọi không phải đổi cách xử lý. */
+/** Wait for a job to finish. Throws when the job fails so `useMutation` goes into the
+ * `onError` branch like the earlier synchronous call — the caller need not change how it handles it. */
 export async function waitForGenerationJob(
   jobId: string,
   { intervalMs = 1500 }: { intervalMs?: number } = {}
@@ -1363,7 +1363,7 @@ export async function waitForGenerationJob(
   }
 }
 
-/** Đưa clip/ảnh đã sinh vào kho file dùng chung để ghép trong Timeline Editor. */
+/** Put a generated clip/image into the shared file library for assembly in the Timeline Editor. */
 export async function exportGeneratedAssetToLibrary(assetId: number) {
   const { data } = await api.post<{
     asset_id: string
@@ -1386,7 +1386,7 @@ export async function generateKenBurnsClip(payload: {
   return data
 }
 
-// --- Phase 14: MCP access token (cho agent ngoài như Claude Code) ---
+// --- Phase 14: MCP access token (for external agents like Claude Code) ---
 
 export interface McpTokenRead {
   id: number
@@ -1399,7 +1399,7 @@ export interface McpTokenRead {
 
 export interface McpTokenCreated {
   token: McpTokenRead
-  /** Chỉ có ở response lúc tạo — sau đó không lấy lại được. */
+  /** Only present in the creation response — cannot be retrieved afterwards. */
   plain_token: string
   mcp_config: Record<string, unknown>
   warning: string
@@ -1427,7 +1427,7 @@ export async function revokeMcpToken(tokenId: number) {
   await api.delete(`/api/mcp-tokens/${tokenId}`)
 }
 
-// --- Phase 16: dự án nhiều cảnh (node-canvas) ---
+// --- Phase 16: multi-scene projects (node-canvas) ---
 
 export type SceneStatus = 'draft' | 'keyframe_ready' | 'clip_ready' | 'failed'
 
@@ -1439,10 +1439,10 @@ export interface SceneRead {
   keyframe_asset_id: number | null
   clip_asset_id: number | null
   duration_seconds: number
-  /** Hiệu ứng của cạnh đi VÀO cảnh này — cảnh đầu tiên luôn bỏ qua. */
+  /** Effect of the edge ENTERING this scene — the first scene always ignores it. */
   transition_in: string
   transition_duration: number
-  /** Nối frame: lấy khung cuối clip cảnh trước làm keyframe mở đầu cảnh này. */
+  /** Frame chaining: use the last frame of the previous scene's clip as the opening keyframe of this scene. */
   chain_from_previous: boolean
   use_ken_burns: boolean
   ken_burns_motion: string
@@ -1561,9 +1561,9 @@ export async function generateProjectScene(
 
 export interface ProjectCostEstimate {
   total_scenes: number
-  /** Chỉ cảnh chưa có clip mới tốn tiền — cảnh đã sinh thì tái dùng. */
+  /** Only scenes without a clip cost money — already-generated scenes are reused. */
   pending_scenes: number
-  /** Cảnh dùng ảnh tĩnh + chuyển động camera (ffmpeg) — miễn phí. */
+  /** The scene uses a still image + camera motion (ffmpeg) — free. */
   free_scenes: number
   image_cost_usd: number
   video_cost_usd: number
@@ -1585,7 +1585,7 @@ export async function startProjectRender(projectId: number) {
   return data
 }
 
-/** Đưa video đã dựng vào kho dùng chung để mở trong Timeline Editor. */
+/** Put the built video into the shared library to open in the Timeline Editor. */
 export async function exportProjectToLibrary(projectId: number) {
   const { data } = await api.post<{
     asset_id: string
@@ -1595,7 +1595,7 @@ export async function exportProjectToLibrary(projectId: number) {
   return data
 }
 
-/** URL video đã dựng — dùng trực tiếp trong <video>. */
+/** URL of the built video — used directly in <video>. */
 export function projectOutputUrl(projectId: number) {
   return `${API_BASE_URL}/api/projects/${projectId}/output`
 }
@@ -1656,14 +1656,14 @@ export async function computeTopicScore(topicId: number) {
   return data
 }
 
-/** Cài đặt người dùng lưu bền qua restart — Phase 21 (số luồng tải mỗi
- * video) + Phase 20 (số video tải cùng lúc). Trang đầu tiên của tool có cài
- * đặt thật lưu được từ UI (các trang khác trong /settings vẫn là demo của
- * template shadcn-admin). */
+/** User settings persisted across restarts — Phase 21 (download thread count per
+ * video) + Phase 20 (number of videos downloading at once). The first page of the tool with
+ * settings that are really saved from the UI (the other pages in /settings are still demos of the
+ * shadcn-admin template). */
 export interface AppSettings {
   download_connections: number
   download_max_videos: number
-  /** Phân vai người nói (Phase 19) — mặc định tắt. */
+  /** Speaker separation (Phase 19) — off by default. */
   speaker_diarization_enabled: boolean
 }
 
@@ -1685,7 +1685,7 @@ export type ImportedVideo = {
   cover_url: string | null
 }
 
-/** Nhập 1 file video có sẵn trên máy. `onProgress` nhận 0-100 theo số byte đã gửi. */
+/** Import 1 video file already on the machine. `onProgress` receives 0-100 by the bytes sent. */
 export async function importLocalVideo(
   file: File,
   onProgress?: (percent: number) => void
@@ -1693,7 +1693,7 @@ export async function importLocalVideo(
   const form = new FormData()
   form.append('file', file)
   const { data } = await api.post<ImportedVideo>('/api/videos/import', form, {
-    // File lớn có thể mất nhiều phút — không để axios tự cắt bằng timeout mặc định.
+    // A large file can take many minutes — do not let axios cut it off with the default timeout.
     timeout: 0,
     onUploadProgress: (e) => {
       if (e.total) onProgress?.((e.loaded / e.total) * 100)
@@ -1708,5 +1708,26 @@ export async function getSystemLogs(lines = 500) {
   const { data } = await api.get<SystemLogs>('/api/system/logs', {
     params: { lines },
   })
+  return data
+}
+
+export type PackInfo = {
+  id: 'ffmpeg' | 'ai'
+  label: string
+  approx_size_mb: number
+  installed: boolean
+  state: 'idle' | 'downloading' | 'extracting' | 'done' | 'error'
+  downloaded: number
+  total: number | null
+  error: string | null
+}
+
+export async function getPacks() {
+  const { data } = await api.get<PackInfo[]>('/api/system/packs')
+  return data
+}
+
+export async function installPack(id: PackInfo['id']) {
+  const { data } = await api.post<PackInfo[]>(`/api/system/packs/${id}/install`)
   return data
 }

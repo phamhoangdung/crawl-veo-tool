@@ -1,9 +1,9 @@
-"""Test adapter fal.ai thật bằng HTTP giả.
+"""Test the real fal.ai adapter with fake HTTP.
 
-Phạm vi có ý nghĩa của bộ test này: **cơ chế** (header xác thực, luồng hàng đợi,
-phân loại lỗi, an toàn khi tải file). Nó KHÔNG chứng minh được đường dẫn model hay
-tên trường đầu vào là đúng — những thứ đó chỉ có key thật mới kiểm được, và đã
-đánh dấu rõ trong docstring của `client.py`.
+The meaningful scope of this test suite: the **mechanism** (auth header, queue flow,
+error classification, safe file download). It does NOT prove that the model paths or
+input field names are correct — only a real key can check those, and they are
+clearly marked in the docstring of `client.py`.
 """
 
 from pathlib import Path
@@ -60,8 +60,8 @@ async def _run_image(transport: httpx.MockTransport, output: Path) -> None:
 
 class TestEndpointMapping:
     def test_unknown_model_names_the_known_ones(self) -> None:
-        """Model lạ phải báo rõ đang có gì — bảng này chắc chắn sẽ phải sửa khi
-        fal.ai đổi tên model."""
+        """An unknown model must say clearly what is available — this table will certainly need fixing when
+        fal.ai renames models."""
         with pytest.raises(falai.GenerationError, match="nano-banana"):
             falai.resolve_endpoint("model-khong-ton-tai")
 
@@ -78,7 +78,7 @@ class TestHappyPath:
 
     @pytest.mark.asyncio
     async def test_uses_key_prefix_not_bearer(self, tmp_path: Path) -> None:
-        """fal.ai dùng `Authorization: Key ...`; gửi `Bearer` sẽ bị 401."""
+        """fal.ai uses `Authorization: Key ...`; sending `Bearer` would get a 401."""
         seen: list[httpx.Request] = []
         await _run_image(_transport(seen=seen), tmp_path / "out.png")
         assert seen[0].headers["Authorization"] == "Key k-123"
@@ -94,8 +94,8 @@ class TestHappyPath:
             ],
             seen=seen,
         )
-        # Không để test ngồi chờ 2s/lần hỏi như lúc chạy thật. Dùng monkeypatch
-        # chứ không gán thẳng: gán thẳng sẽ để nguyên giá trị 0 cho mọi test sau.
+        # Do not let the test wait 2s per poll like in a real run. Use monkeypatch
+        # rather than assigning directly: direct assignment would leave the value 0 for every later test.
         monkeypatch.setattr(falai, "_POLL_INTERVAL_SECONDS", 0)
         await _run_image(transport, tmp_path / "out.png")
 
@@ -112,8 +112,8 @@ class TestErrorClassification:
 
     @pytest.mark.asyncio
     async def test_policy_rejection_becomes_prompt_blocked(self, tmp_path: Path) -> None:
-        """Đổi key cũng bị chặn y hệt — phải phân biệt với lỗi quota, nếu không
-        service sẽ đốt sạch key trong pool cho một prompt không bao giờ qua được."""
+        """Changing the key is blocked just the same — must be distinguished from a quota error, otherwise the
+        service would burn through every key in the pool for a prompt that can never pass."""
         transport = _transport(
             submit=httpx.Response(422, json={"detail": "Blocked by content policy"})
         )
@@ -136,7 +136,7 @@ class TestErrorClassification:
 
     @pytest.mark.asyncio
     async def test_submit_without_status_url_raises(self, tmp_path: Path) -> None:
-        """Giao thức đổi thì phải biết ngay, không được chạy tiếp với dict rỗng."""
+        """If the protocol changes we must know immediately, not keep running with an empty dict."""
         transport = _transport(submit=httpx.Response(200, json={"request_id": "x"}))
         with pytest.raises(falai.GenerationError, match="status_url"):
             await _run_image(transport, tmp_path / "out.png")
@@ -152,7 +152,7 @@ class TestResultParsing:
         assert url == "v"
 
     def test_missing_url_lists_available_keys(self) -> None:
-        """Thông báo lỗi phải chỉ ra chỗ cần nhìn, vì đây đúng là chỗ dễ sai nhất."""
+        """The error message must point at where to look, because that is exactly the easiest place to go wrong."""
         with pytest.raises(falai.GenerationError, match="output"):
             falai._extract_media_url({"output": "?", "seed": 1}, kind="image")
 
@@ -160,8 +160,8 @@ class TestResultParsing:
 class TestDownloadSafety:
     @pytest.mark.asyncio
     async def test_empty_file_is_rejected_and_not_left_behind(self, tmp_path: Path) -> None:
-        """File rỗng nằm đúng chỗ cache mong đợi sẽ bị coi là "đã sinh rồi" —
-        lần sau bấm lại sẽ trả về file hỏng đó thay vì sinh lại."""
+        """An empty file sitting exactly where the cache expects would be treated as "already generated" —
+        pressing again later would return that broken file instead of generating again."""
         output = tmp_path / "out.png"
         transport = _transport(media=httpx.Response(200, content=b""))
         with pytest.raises(falai.GenerationError, match="rỗng"):

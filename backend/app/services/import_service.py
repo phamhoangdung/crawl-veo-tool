@@ -1,7 +1,7 @@
-"""Nhập video có sẵn trên máy vào thư viện (không qua bước tải từ nền tảng).
+"""Import videos already on the machine into the library (skipping the download-from-platform step).
 
-Video nhập vào có `platform=LOCAL` và ở trạng thái DOWNLOADED ngay, nên đi tiếp
-đúng pipeline như video tải về: tách lời → dịch → lồng tiếng → ghép.
+An imported video has `platform=LOCAL` and is in the DOWNLOADED state right away, so it continues through
+the same pipeline as a downloaded video: transcribe → translate → dub → merge.
 """
 
 import logging
@@ -33,8 +33,8 @@ class UnsupportedVideoFormatError(ValueError):
 def import_local_video(
     db: Session, user_id: int, filename: str, stream: BinaryIO
 ) -> Video:
-    """Lưu file người dùng gửi lên vào kho, tạo Job + Video, đọc thời lượng và
-    trích ảnh bìa (2 việc sau làm được thì làm, không bắt buộc)."""
+    """Save the file uploaded by the user into storage, create the Job + Video, read the duration and
+    extract a cover image (the last 2 are best-effort, not mandatory)."""
     name = Path(filename).name
     ext = Path(name).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -56,8 +56,8 @@ def import_local_video(
         user_id=user_id,
         job_id=job.id,
         platform=Platform.LOCAL,
-        # Cột này có UniqueConstraint theo platform — video local không có id
-        # nền tảng nên dùng id ngẫu nhiên, cho phép nhập trùng file nhiều lần.
+        # This column has a UniqueConstraint by platform — a local video has no platform
+        # id so a random id is used, allowing the same file to be imported many times.
         platform_video_id=uuid.uuid4().hex,
         title=title,
         source_url=f"local://{name}",
@@ -67,7 +67,7 @@ def import_local_video(
     db.flush()
 
     video_dir = storage_dir() / str(job.id) / str(video.id)
-    # Tên file đích cố định, KHÔNG lấy từ tên người dùng gửi — tránh path traversal.
+    # The destination file name is fixed, NOT taken from the user-supplied name — avoids path traversal.
     dest = video_dir / f"original{ext}"
     try:
         video_dir.mkdir(parents=True, exist_ok=True)
@@ -77,7 +77,7 @@ def import_local_video(
         db.rollback()
         shutil.rmtree(video_dir, ignore_errors=True)
         try:
-            video_dir.parent.rmdir()  # thư mục job, chỉ xoá được nếu đã rỗng
+            video_dir.parent.rmdir()  # the job directory, can only be removed if already empty
         except OSError:
             pass
         raise
@@ -87,7 +87,7 @@ def import_local_video(
     try:
         ffmpeg.extract_thumbnail(dest, video_dir / COVER_FILE_NAME)
         cover_ok = True
-    except Exception as exc:  # noqa: BLE001 — thiếu ảnh bìa không được chặn việc nhập
+    except Exception as exc:  # noqa: BLE001 — a missing cover image must not block the import
         logger.warning("Không trích được ảnh bìa cho %s: %s", dest, exc)
 
     video.local_path = str(dest)

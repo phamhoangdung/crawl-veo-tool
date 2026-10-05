@@ -1,12 +1,12 @@
-"""Cắt audio dài thành từng khúc tại chỗ im lặng trước khi chạy Demucs.
+"""Cut long audio into chunks at silent points before running Demucs.
 
-Vì sao cần: Demucs nạp nguyên track vào RAM rồi chạy model PyTorch trên đó —
-video 30-60 phút sẽ ngốn nhiều GB và dễ bị giết giữa chừng trên máy cá nhân.
-Cắt thành khúc ~5 phút thì lượng RAM đỉnh gần như không đổi dù video dài bao nhiêu.
+Why it is needed: Demucs loads the whole track into RAM then runs the PyTorch model on it —
+a 30-60 minute video would eat many GB and is easily killed midway on a personal machine.
+Cutting into ~5 minute chunks keeps the peak RAM almost unchanged however long the video is.
 
-Vì sao cắt tại chỗ IM LẶNG chứ không cắt đều 5 phút một: Demucs xử lý từng khúc
-độc lập, cắt ngang một câu hát/câu thoại sẽ nghe rõ tiếng "khục" ở chỗ nối khi
-ghép lại. Cắt vào khoảng lặng thì chỗ nối rơi vào đúng chỗ vốn đã không có tiếng.
+Why cut at SILENT points rather than evenly every 5 minutes: Demucs processes each chunk
+independently, cutting through a sung/spoken sentence would make a clear "click" audible at the seam when
+joined again. Cutting in a silence puts the seam exactly where there was no sound anyway.
 """
 
 import logging
@@ -18,11 +18,11 @@ from app.adapters import demucs, ffmpeg
 
 logger = logging.getLogger(__name__)
 
-# Khúc dài quá thì mất tác dụng tiết kiệm RAM, ngắn quá thì số lần khởi động
-# Demucs (mỗi lần đều phải nạp model) lấn át thời gian xử lý thật.
+# Chunks that are too long defeat the RAM savings, too short and the number of Demucs
+# launches (each must load the model) overwhelms the real processing time.
 DEFAULT_TARGET_SECONDS = 300.0
 DEFAULT_MAX_SECONDS = 420.0
-# Dưới ngưỡng này thì chạy thẳng, không cắt — thêm bước cắt/ghép chỉ tổ chậm.
+# Below this threshold run straight through without cutting — adding cut/join steps only slows things down.
 CHUNKING_THRESHOLD_SECONDS = 600.0
 
 
@@ -33,15 +33,15 @@ def plan_chunks(
     target_seconds: float = DEFAULT_TARGET_SECONDS,
     max_seconds: float = DEFAULT_MAX_SECONDS,
 ) -> list[tuple[float, float]]:
-    """Chia [0, duration] thành các khúc, ưu tiên cắt giữa khoảng lặng.
+    """Split [0, duration] into chunks, preferring to cut in the middle of a silence.
 
-    Hàm thuần (không chạm đĩa) để test được mọi trường hợp biên mà không cần
-    dựng file audio thật.
+    A pure function (touching no disk) so every edge case can be tested without needing to
+    build a real audio file.
 
-    Quy tắc chọn điểm cắt cho mỗi khúc: nhắm tới `target_seconds`, chấp nhận mọi
-    khoảng lặng nằm trong `[nửa target, max]` tính từ đầu khúc, chọn cái GẦN
-    target nhất. Không có khoảng lặng nào hợp lệ thì cắt cứng tại `max_seconds` —
-    thà có một mối nối nghe được còn hơn để một khúc dài vô hạn làm tràn RAM.
+    Rule for choosing the cut point of each chunk: aim for `target_seconds`, accept any
+    silence within `[half target, max]` counted from the chunk start, picking the one CLOSEST to
+    target. If no silence is valid, hard-cut at `max_seconds` —
+    better one audible seam than letting an endless chunk overflow RAM.
     """
     if duration <= 0:
         return []
@@ -72,12 +72,12 @@ def separate_vocals(
     duration: float | None = None,
     on_chunk_done: Callable[[int, int], None] | None = None,
 ) -> tuple[Path, Path]:
-    """Tách giọng khỏi nhạc nền, tự cắt khúc khi audio quá dài.
+    """Separate the voice from the background music, automatically chunking when the audio is too long.
 
-    Trả về đúng cặp `(vocals, no_vocals)` như `demucs.separate_vocals` và ghi ra
-    ĐÚNG đường dẫn quy ước `<output_dir>/htdemucs/<tên file>/` — phía sau
-    (`timeline_service.get_audio_stems`) đọc theo đường dẫn đó, đổi chỗ ghi sẽ
-    làm mất track nhạc nền trong editor mà không báo lỗi gì.
+    Returns exactly the pair `(vocals, no_vocals)` like `demucs.separate_vocals` and writes to
+    EXACTLY the conventional path `<output_dir>/htdemucs/<file name>/` — downstream
+    (`timeline_service.get_audio_stems`) reads from that path, changing where it writes would
+    lose the background music track in the editor without any error.
     """
     if duration is None:
         duration = ffmpeg.probe_duration_seconds(audio_path) or 0.0
@@ -117,10 +117,10 @@ def separate_vocals(
     ffmpeg.concat_audio(vocal_parts, vocals_out)
     ffmpeg.concat_audio(background_parts, background_out)
 
-    # File khúc trung gian (part*.wav, out*/htdemucs/...) không còn cần sau khi
-    # đã nối xong — dọn ngay thay vì để tích luỹ tới lần cleanup 30 ngày
-    # (storage_cleanup_service), quan trọng hơn khi host nhiều user dùng chung
-    # ổ đĩa (xem docs/performance-optimization/plan.md mục P1).
+    # Intermediate chunk files (part*.wav, out*/htdemucs/...) are no longer needed once
+    # joining is done — clean up right away instead of letting them accumulate until the 30-day cleanup
+    # (storage_cleanup_service), more important when hosting many users sharing one
+    # disk (see docs/performance-optimization/plan.md, section P1).
     shutil.rmtree(work_dir, ignore_errors=True)
 
     return vocals_out, background_out

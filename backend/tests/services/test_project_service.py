@@ -83,7 +83,7 @@ class TestCreateProject:
         assert [s.prompt for s in scenes] == ["cảnh một", "cảnh hai", "cảnh ba"]
 
     def test_first_scene_never_chains(self, db: Session) -> None:
-        """Cảnh đầu không có gì phía trước để nối frame từ đó."""
+        """The first scene has nothing before it to chain frames from."""
         project = _project(db, ["a", "b", "c"])
 
         scenes = service.list_scenes(db, project.id)
@@ -110,7 +110,7 @@ class TestSceneOrdering:
         ]
 
     def test_delete_reindexes_without_gaps(self, db: Session) -> None:
-        """Có lỗ trong order_index thì build_operations xuất clip sai thứ tự."""
+        """A gap in order_index makes build_operations output clips in the wrong order."""
         project = _project(db, ["a", "b", "c"])
         scenes = service.list_scenes(db, project.id)
 
@@ -159,8 +159,8 @@ class TestFrameChaining:
     async def test_second_scene_chains_from_first_clip(
         self, db: Session, fake_adapter
     ) -> None:
-        """Đây là cơ chế thật đằng sau "đường nối" trên canvas: khung cuối cảnh
-        trước thành keyframe cảnh sau, để nhân vật không bị trôi."""
+        """This is the real mechanism behind the "connection line" on the canvas: the last frame of the
+        previous scene becomes the next scene's keyframe, so the character does not drift."""
         project = _project(db, ["@nguoique cảnh một", "@nguoique cảnh hai"])
         scenes = service.list_scenes(db, project.id)
 
@@ -171,7 +171,7 @@ class TestFrameChaining:
         assert chained.type is GeneratedAssetType.IMAGE
         assert chained.source_keyframe_asset_id == first.clip_asset_id
         assert fake_adapter["lastframe"] == 1
-        # Cảnh 2 KHÔNG sinh keyframe mới từ prompt — đó là điểm của nối frame.
+        # Scene 2 does NOT generate a new keyframe from the prompt — that is the point of frame chaining.
         assert fake_adapter["image"] == 1
 
     @pytest.mark.asyncio
@@ -235,7 +235,7 @@ class TestGenerateScene:
     async def test_records_error_on_scene_when_generation_fails(
         self, db: Session, monkeypatch
     ) -> None:
-        """UI cần biết cảnh NÀO hỏng, nên lỗi phải ghi vào chính cảnh đó."""
+        """The UI needs to know WHICH scene broke, so the error must be recorded on that very scene."""
         project = _project(db, ["@nguoique cảnh một"])
         scene = service.list_scenes(db, project.id)[0]
 
@@ -278,8 +278,8 @@ class TestBuildOperations:
 
     @pytest.mark.asyncio
     async def test_first_clip_has_no_transition(self, db: Session, fake_adapter) -> None:
-        """Cảnh đầu không có gì phía trước để chuyển cảnh từ đó — nếu gán
-        transition_in cho nó, xfade sẽ tính offset âm."""
+        """The first scene has nothing before it to transition from — if transition_in
+        were assigned to it, xfade would compute a negative offset."""
         project = _project(db, ["@nguoique a", "@nguoique b"])
         for scene in service.list_scenes(db, project.id):
             service.update_scene(db, 1, scene.id, transition_in="fade")

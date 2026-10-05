@@ -1,5 +1,5 @@
-// Nguồn duy nhất quyết định dùng interpreter Python nào — dùng chung cho
-// run-backend.mjs và run-python.mjs.
+// Single source deciding which Python interpreter to use, shared by
+// run-backend.mjs and run-python.mjs.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -9,24 +9,24 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const isWindows = process.platform === "win32";
 
 /**
- * Các bản Python được dự án hỗ trợ, ưu tiên từ trái sang. Chỉ 3.11/3.12 vì
- * PyTorch (demucs, faster-whisper phụ thuộc) chưa có bản build cho 3.13+.
- * Ưu tiên tên có số phiên bản để không dính phải `python3` mặc định của hệ
- * thống — vốn có thể quá cũ hoặc đang hỏng.
+  * Python versions supported by the project, preferred first. Only 3.11/3.12 because
+  * PyTorch (a dependency of demucs, faster-whisper) has no build for 3.13+ yet.
+  * Prefer names with a version number so we do not pick the system default `python3`,
+  * which may be too old or broken.
  */
 export const SUPPORTED_PYTHONS = isWindows
   ? ["python3.12", "python3.11", "python", "python3"]
   : ["python3.12", "python3.11", "python3", "python"];
 
-/** Interpreter chạy được không? Có timeout vì bản cài hỏng có thể treo vô hạn. */
+/** Does the interpreter run? Has a timeout because a broken install can hang forever. */
 function runs(cmd) {
   const res = spawnSync(cmd, ["--version"], { stdio: "ignore", timeout: 5000 });
   return !res.error && res.status === 0;
 }
 
 /**
- * Thứ tự ưu tiên: biến PYTHON → backend/.venv → bản đầu tiên trong
- * SUPPORTED_PYTHONS thực sự chạy được.
+  * Priority order: the PYTHON variable → backend/.venv → the first entry of
+  * SUPPORTED_PYTHONS that actually runs.
  */
 export function resolvePython() {
   if (process.env.PYTHON) return process.env.PYTHON;
@@ -36,14 +36,14 @@ export function resolvePython() {
     : resolve(ROOT, "backend/.venv/bin/python");
   if (existsSync(venvPython)) return venvPython;
 
-  // Bỏ qua bản treo/hỏng thay vì để nó làm đứng cả lệnh.
+  // Skip a hanging/broken interpreter instead of letting it block the whole command.
   return SUPPORTED_PYTHONS.find(runs) ?? (isWindows ? "python" : "python3");
 }
 
 /**
- * Kiểm tra interpreter thực sự chạy được trước khi giao việc dài cho nó.
- * Có timeout vì một bản Python cài hỏng có thể treo vô hạn thay vì báo lỗi —
- * để mặc thì `npm run dev` sẽ đứng im không rõ lý do.
+  * Check that the interpreter really runs before handing it a long job.
+  * Has a timeout because a broken Python install can hang forever instead of reporting
+  * an error; left alone, `npm run dev` would sit silent for no visible reason.
  */
 export function assertPythonRuns(python) {
   const res = spawnSync(python, ["--version"], {

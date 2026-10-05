@@ -51,14 +51,14 @@ function formatClipTime(seconds: number): string {
 }
 
 interface TimelineEditorProps {
-  /** Video crawl về, hoặc dự án nhiều cảnh dựng bằng AI — cùng một editor. */
+  /** A crawled video, or a multi-scene project built with AI — the same editor. */
   subject: TimelineSubject
 }
 
-/** Dựng timeline gợi ý ban đầu từ pipeline đã có (video gốc + audio đã lồng
- * tiếng + phụ đề đã dịch) — đóng vai trò "gợi ý AI" cho tới khi Phase 9/10/11 có
- * bộ sinh gợi ý riêng theo từng use-case. Chỉ điền vào state, KHÔNG lưu/render tự
- * động — người dùng bấm "Lưu" rồi "Render" riêng. */
+/** Build the initial suggested timeline from the existing pipeline (source video + dubbed
+ * audio + translated subtitles) — acts as the "AI suggestion" until Phase 9/10/11 have
+ * their own suggestion generator per use case. Only fills the state, does NOT save/render
+ * automatically — the user clicks "Save" then "Render" separately. */
 async function buildSuggestionFromPipeline(
   videoId: number
 ): Promise<TimelineOperations> {
@@ -77,8 +77,8 @@ async function buildSuggestionFromPipeline(
     })
   }
 
-  // Tách giọng đọc và nhạc nền thành 2 track để chỉnh âm lượng riêng. Chỉ khi
-  // chưa chạy lồng tiếng (chưa có stem) mới dùng bản trộn sẵn làm 1 track.
+  // Split the narration and background music into 2 tracks to adjust volume independently. Only when
+  // dubbing has not run (no stems yet) use the pre-mixed version as 1 track.
   if (stems.voice || stems.background) {
     if (stems.voice) {
       tracks.push({
@@ -100,7 +100,7 @@ async function buildSuggestionFromPipeline(
         type: 'audio',
         role: 'music',
         clips: [
-          // Nhạc nền để nhỏ hơn giọng đọc, nếu không sẽ át lời.
+          // Keep the background music quieter than the narration, otherwise it drowns out the speech.
           {
             source: stems.background,
             start: 0,
@@ -145,9 +145,9 @@ async function buildSuggestionFromPipeline(
   return { tracks }
 }
 
-/** Gợi ý ban đầu tuỳ theo chủ thể: video crawl dựng từ pipeline (bản gốc +
- * giọng đọc + phụ đề), còn dự án AI lấy thẳng chuỗi cảnh từ canvas — backend
- * dựng hộ vì nó mới biết cảnh nào đã có clip. */
+/** Initial suggestion by subject: a crawled video is built from the pipeline (source +
+ * narration + subtitles), while an AI project takes the scene chain straight from the canvas — the backend
+ * builds it because only it knows which scenes already have clips. */
 async function buildSuggestion(
   subject: TimelineSubject
 ): Promise<TimelineOperations> {
@@ -157,9 +157,9 @@ async function buildSuggestion(
 
 export function TimelineEditor({ subject }: TimelineEditorProps) {
   const queryClient = useQueryClient()
-  // Các tính năng dưới đây chỉ có nghĩa với video crawl: gợi ý cắt clip ngắn,
-  // waveform và stem audio đều sinh ra từ pipeline dịch/lồng tiếng, dự án AI
-  // chưa đi qua pipeline đó nên không có gì để đọc.
+  // The features below only make sense for crawled videos: short-clip suggestions,
+  // waveform and audio stems are all produced from the translate/dub pipeline, and AI projects
+  // have not been through that pipeline so there is nothing to read.
   const isVideo = subject.type === 'video'
   const videoId = subject.id
   const operations = useEditorStore((s) => s.operations)
@@ -201,16 +201,16 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
     onError: () => toast.error('Tạo clip thất bại.'),
   })
 
-  // Chưa lưu timeline nào thì dựng luôn từ pipeline: người dùng đã ở trang
-  // video này rồi, bắt bấm thêm một nút mới thấy nội dung là bước thừa.
-  // Khoá cache phải gồm cả loại chủ thể: video id=1 và dự án id=1 là hai thứ
-  // khác nhau, dùng chung khoá ['timeline', 1] thì mở dự án sẽ thấy timeline
-  // của video.
+  // If no timeline is saved yet, build it straight from the pipeline: the user is already on this
+  // video page, making them click one more button to see the content is a needless step.
+  // The cache key must include the subject kind: video id=1 and project id=1 are two different
+  // things, sharing the key ['timeline', 1] would make opening a project show the
+  // video's timeline.
   const { data: savedTracks, isLoading } = useQuery({
     queryKey: ['timeline', subject.type, subject.id],
     queryFn: async () => {
       const saved = await getSubjectTimeline(subject)
-      // Backend trả null khi chưa lưu timeline nào (không phải mảng rỗng).
+      // The backend returns null when no timeline is saved yet (not an empty array).
       if (saved && saved.length > 0) return saved
       const suggested = await buildSuggestion(subject)
       return suggested.tracks
@@ -265,8 +265,8 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
     },
   })
 
-  // Chọn clip ở timeline → tua preview tới đầu clip đó. Đọc yêu cầu từ store vì
-  // timeline và thẻ <video> nằm ở 2 component khác nhau.
+  // Selecting a clip on the timeline → seek the preview to the start of that clip. Read the request from the store because
+  // the timeline and the <video> tag live in 2 different components.
   useEffect(() => {
     if (!seekRequest) return
     const video = videoRef.current
@@ -318,11 +318,11 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
     (t) => t.type === 'video' && t.clips.length > 0
   )
 
-  // Ưu tiên bản đã lồng tiếng để nghe được giọng đọc khi kéo-chỉnh; video chưa
-  // dub thì phát bản gốc thay vì hỏng hẳn khung preview.
+  // Prefer the dubbed version so the narration is audible while drag-editing; a video that is not
+  // dubbed plays the original instead of breaking the preview frame entirely.
   const previewVariant = videoDetail?.dubbed_path ? 'dubbed' : 'original'
-  // Dự án AI xem trước bằng bản dựng thô từ canvas: từng cảnh là file rời, trình
-  // duyệt không ghép hộ được. Chưa dựng thô thì không có gì để phát.
+  // An AI project previews with the rough cut from the canvas: each scene is a separate file, and the
+  // browser cannot join them. If there is no rough cut yet there is nothing to play.
   const previewUrl = isVideo
     ? hasVideoTrack
       ? `${API_BASE_URL}/api/library/${videoId}/stream?variant=${previewVariant}`
@@ -359,24 +359,24 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
         </Button>
       </div>
 
-      {/* 2 cột từ màn hình rộng: khung xem trước bên trái theo đúng tỉ lệ khung
-          hình video thật (dọc 9:16 hay ngang 16:9 đều tận dụng hết chiều cao/
-          rộng có được, không còn bó cứng vào 1 bề rộng nhỏ), panel công cụ bên
-          phải luôn thấy được song song — trước đây xếp dọc 1 cột buộc phải cuộn
-          qua hết khung preview mới chạm tới AssetPanel/SubtitleBoxPanel. */}
+      {/* 2 columns on wide screens: the preview frame on the left at exactly the real aspect
+          ratio of the video (vertical 9:16 or landscape 16:9 both use all the available height/
+          width, no longer pinned to one small width), the tools panel on the
+          right always visible side by side — previously a single stacked column forced scrolling
+          past the whole preview frame to reach AssetPanel/SubtitleBoxPanel. */}
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start'>
         <Card>
           <CardHeader>
             <CardTitle className='text-base'>Xem trước</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* `width` tự tính bằng min(): cạnh nhỏ hơn giữa "vừa hết bề rộng cột"
-                và "vừa hết chiều cao 70vh quy theo tỉ lệ" — cho `aspect-ratio` tự
-                suy ra chiều còn lại từ width đã CHẮC CHẮN (block box suy height từ
-                width ổn định, chiều ngược lại thì không — đã tự đo bằng video dọc
-                thật mới phát hiện: dùng flex-item hay w-full cố định đều chỉ đúng
-                1 trong 2 loại tỉ lệ, không đúng cả 2). Nhờ vậy video ngang lấp đầy
-                cột, video dọc thu gọn theo chiều cao, không cần đo bằng JS. */}
+            {/* `width` is computed with min(): the smaller of "fits the column width"
+                and "fits 70vh of height converted by the ratio" — so `aspect-ratio` derives
+                the other dimension from a width that is CERTAIN (a block box derives height from a
+                stable width, the reverse does not — found by measuring with a real vertical video:
+                using a flex item or fixed w-full is right for only
+                1 of the 2 ratio kinds, not both). This way a landscape video fills the
+                column, a vertical video shrinks by height, with no JS measuring. */}
             {(() => {
               const ratio =
                 videoDims.width && videoDims.height
@@ -436,8 +436,8 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
           </CardContent>
         </Card>
 
-        {/* Sticky trên màn hình rộng: cuộn trang xuống xem Timeline vẫn thấy
-            panel công cụ, không mất dấu clip đang chỉnh ở ClipInspector. */}
+        {/* Sticky on wide screens: scrolling down the page to see the Timeline still shows the
+            tools panel, without losing the clip being adjusted in the ClipInspector. */}
         <div className='space-y-4 xl:sticky xl:top-4'>
           <AssetPanel />
           <SubtitleBoxPanel />
@@ -457,8 +457,8 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
         </CardContent>
       </Card>
 
-      {/* Gợi ý cắt clip lấy từ transcript đã dịch của video crawl — dự án AI
-          không có transcript nên ẩn hẳn thay vì hiện một thẻ luôn rỗng. */}
+      {/* Short-clip suggestions come from the translated transcript of a crawled video — AI projects
+          have no transcript so it is hidden entirely instead of showing a card that is always empty. */}
       {isVideo && (
         <Card>
           <CardHeader>
@@ -528,8 +528,8 @@ export function TimelineEditor({ subject }: TimelineEditorProps) {
   )
 }
 
-/** Bảng chỉnh chi tiết clip đang chọn — nhập số chính xác thay vì chỉ kéo bằng
- * chuột (chuột dễ sai số ở mốc thời gian nhỏ). */
+/** Detail panel for the selected clip — enter exact numbers instead of only dragging with
+ * the mouse (the mouse is error-prone at small time marks). */
 function ClipInspector() {
   const selected = useEditorStore((s) => s.selected)
   const operations = useEditorStore((s) => s.operations)

@@ -40,9 +40,9 @@ function formatSize(bytes: number) {
 }
 
 /**
- * Chọn file từ kho dùng chung (logo, intro/outro, nhạc nền). Lọc theo `kind` vì
- * mỗi chỗ gọi chỉ nhận đúng một loại — chọn nhầm .mp3 làm logo thì ffmpeg mới
- * báo lỗi, quá muộn.
+ * Pick a file from the shared library (logo, intro/outro, background music). Filters by `kind` because
+ * each caller accepts only one kind — picking an .mp3 as a logo would only make ffmpeg
+ * report an error, too late.
  */
 export function AssetPicker({
   open,
@@ -74,8 +74,8 @@ export function AssetPicker({
     onSuccess: (asset) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] })
       if (asset.kind !== kind) {
-        // Vẫn lưu vào kho (không vứt file người dùng đã tải lên), nhưng nói rõ
-        // vì sao nó không hiện trong danh sách đang mở.
+        // Still saved into the library (the file the user uploaded is not thrown away), but say clearly
+        // why it does not show in the list that is open.
         toast.warning(`Đã lưu "${asset.name}" vào kho ${asset.kind}, không phải ${kind}`)
         return
       }
@@ -142,7 +142,7 @@ export function AssetPicker({
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) upload.mutate(file)
-              // Reset để chọn lại đúng file vừa xoá vẫn kích hoạt onChange.
+              // Reset so re-selecting the very file just removed still triggers onChange.
               e.target.value = ''
             }}
           />

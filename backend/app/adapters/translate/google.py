@@ -1,8 +1,8 @@
-"""Dùng endpoint không chính thức translate.googleapis.com — miễn phí, không cần API key.
+"""Uses the unofficial translate.googleapis.com endpoint — free, no API key needed.
 
-Không phải API chính thức của Google Cloud Translation, chỉ phù hợp cho MVP/cá
-nhân; dùng khối lượng lớn/production thật nên chuyển hẳn sang OpenAI hoặc
-Google Cloud Translation chính thức (xem docs/overview/plan.md phần pháp lý).
+Not the official Google Cloud Translation API, only suitable for an MVP/personal
+use; for heavy/real production use, switch fully to OpenAI or the official
+Google Cloud Translation (see docs/overview/plan.md, legal section).
 """
 
 import httpx

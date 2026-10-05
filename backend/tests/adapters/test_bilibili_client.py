@@ -21,7 +21,7 @@ _NAV_RESPONSE = {
 
 @pytest.fixture(autouse=True)
 def _reset_wbi_cache():
-    """Mixin key được cache module-level (xem wbi.py) — reset để mỗi test độc lập."""
+    """The mixin key is cached at module level (see wbi.py) — reset so each test is independent."""
     wbi._cached_mixin_key = None
     wbi._cached_at = 0.0
     yield
@@ -110,7 +110,7 @@ async def test_get_play_streams_returns_dash_payload():
 
 @pytest.mark.asyncio
 async def test_get_related_returns_list():
-    """Phase 22 — endpoint công khai, không cần WBI (không mock /nav route riêng)."""
+    """Phase 22 — a public endpoint, no WBI needed (no separate mocked /nav route)."""
     routes = {
         "/x/web-interface/archive/related": {
             "code": 0,
@@ -151,8 +151,8 @@ async def test_get_space_videos_raises_risk_control_on_http_412():
 
 @pytest.mark.asyncio
 async def test_get_space_videos_raises_risk_control_on_code_352():
-    """`风控校验失败` (đo thật 2026-09-22: mã lỗi phổ biến nhất khi bị chặn) —
-    HTTP 200 nhưng payload `code=-352`, khác hẳn nhánh HTTP 412 ở test trên."""
+    """`风控校验失败` (measured 2026-09-22: the most common error code when blocked) —
+    HTTP 200 but payload `code=-352`, very different from the HTTP 412 branch in the test above."""
     routes = {"/x/space/wbi/arc/search": {"code": -352, "message": "风控校验失败"}}
     async with httpx.AsyncClient(transport=_mock_transport(routes)) as http:
         with pytest.raises(BilibiliRiskControlError):
@@ -161,8 +161,8 @@ async def test_get_space_videos_raises_risk_control_on_code_352():
 
 @pytest.mark.asyncio
 async def test_get_space_videos_other_api_errors_not_wrapped_as_risk_control():
-    """Lỗi khác (vd -404 kênh không tồn tại) không nên bị gộp chung thành
-    risk-control — caller cần phân biệt được để không hiện nhầm thông báo."""
+    """Other errors (e.g. -404 channel does not exist) should not be lumped together as
+    risk control — the caller must be able to tell them apart to avoid showing the wrong message."""
     routes = {"/x/space/wbi/arc/search": {"code": -404, "message": "not found"}}
     async with httpx.AsyncClient(transport=_mock_transport(routes)) as http:
         with pytest.raises(BilibiliApiError) as exc_info:

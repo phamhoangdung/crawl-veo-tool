@@ -1,7 +1,7 @@
-"""Dịch text lẻ theo yêu cầu (tooltip dịch tiêu đề tiếng Trung).
+"""Translate one-off text on demand (tooltip translating Chinese titles).
 
-Khác pipeline dịch phụ đề: đây là dịch tương tác, gọi khi người dùng hover nên
-phải có cache — không cache thì rê chuột qua bảng 40 dòng vài lượt là hết quota.
+Unlike the subtitle translation pipeline: this is interactive translation, called on hover, so
+it must be cached — without a cache a few passes of the mouse over a 40-row table would exhaust the quota.
 """
 
 import logging
@@ -19,10 +19,10 @@ router = APIRouter(prefix="/api/translate", tags=["translate"])
 
 _DEFAULT_USER_ID = 1
 
-# Chặn dịch cả bài: tooltip chỉ cần tiêu đề. Text dài hơn thì cắt, không từ chối.
+# Block translating whole articles: the tooltip only needs the title. Longer text is truncated, not rejected.
 MAX_TEXT_LENGTH = 500
 
-# Giới hạn mỗi lần gọi hàng loạt — một trang crawl là 40 video, để dư một chút.
+# Limit per bulk call — one crawl page is 40 videos, leaving a little headroom.
 MAX_BATCH_SIZE = 60
 
 
@@ -44,7 +44,7 @@ class BatchTranslateRequest(BaseModel):
 
 
 class BatchTranslateResponse(BaseModel):
-    # Khoá là text gốc để frontend tra cứu trực tiếp, không phải khớp theo thứ tự.
+    # The key is the original text so the frontend can look it up directly, not by matching order.
     translations: dict[str, str]
 
 
@@ -69,11 +69,11 @@ async def translate_one(
 async def translate_batch(
     payload: BatchTranslateRequest, db: Session = Depends(get_db)
 ) -> BatchTranslateResponse:
-    """Dịch nhiều text trong 1 request — frontend gọi cái này cho cả trang thay vì
-    40 request rời rạc. Text nào lỗi thì bỏ qua, không làm hỏng cả lô."""
+    """Translate many texts in 1 request — the frontend calls this for the whole page instead of
+    40 separate requests. Any text that fails is skipped, without spoiling the whole batch."""
     translations: dict[str, str] = {}
 
-    # Bỏ trùng trước khi dịch: danh sách video hay có tiêu đề lặp lại.
+    # Remove duplicates before translating: video lists often have repeated titles.
     for text in dict.fromkeys(t for t in payload.texts if t.strip()):
         try:
             translated, _ = await translate_service.translate_cached(
@@ -85,11 +85,11 @@ async def translate_batch(
             )
             translations[text] = translated
         except translate_service.AllProvidersExhaustedError:
-            # Hết quota giữa lô: trả về những gì đã dịch được, dừng phần còn lại
-            # để không đốt thêm request vô ích.
+            # Out of quota mid-batch: return what was translated, stop the rest
+            # so no more requests are burned for nothing.
             logger.warning("Hết quota giữa lô dịch, trả về %d kết quả", len(translations))
             break
-        except Exception:  # noqa: BLE001 — 1 text lỗi không được làm hỏng cả lô
+        except Exception:  # noqa: BLE001 — 1 failing text must not spoil the whole batch
             logger.exception("Dịch thất bại cho text: %s", text[:50])
 
     return BatchTranslateResponse(translations=translations)

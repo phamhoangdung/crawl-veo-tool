@@ -16,14 +16,14 @@ from app.schemas.job import (
 )
 from app.services import cost_service, crawl_service, douyin_service, download_service, progress_service
 
-# Trạng thái coi là "chưa tải" — khớp `DOWNLOADABLE` ở frontend
-# (features/crawl/index.tsx trước đây, giờ features/discover/).
+# States counted as "not downloaded" — matches `DOWNLOADABLE` in the frontend
+# (formerly features/crawl/index.tsx, now features/discover/).
 _DOWNLOADABLE_STATUSES = {VideoStatus.QUEUED, VideoStatus.FAILED_DOWNLOAD}
 
 router = APIRouter(prefix="/api/jobs", tags=["crawl"])
 
-# MVP: 1 user cố định (xem docs/overview/plan.md phần multi-tenant); thay bằng
-# user thật từ auth khi Phase 7 (đóng gói bán) triển khai.
+# MVP: 1 fixed user (see docs/overview/plan.md, multi-tenant section); replace with the
+# real user from auth when Phase 7 (packaging to sell) is implemented.
 _DEFAULT_USER_ID = 1
 
 
@@ -41,14 +41,14 @@ async def create_job_from_selection(
     background: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> JobWithVideosRead:
-    """Tạo job từ các video người dùng tick chọn ở màn Khám phá (Phase 20).
+    """Create a job from the videos the user ticked on the Discovery screen (Phase 20).
 
-    `payload.download=True` (mặc định): bắn tải nền ngay cho mọi video chưa có
-    file — trước đây chỉ tạo job rồi báo "mở trang Crawl để tải", nhưng không
-    màn hình nào hiển thị lại được job đó (xem phase-20 mục Khảo sát điểm 1).
-    Tải hàng loạt qua `download_service.run_download_task`, tự xếp hàng theo
-    `download_max_videos` — bắn 20 background task không có nghĩa 20 luồng tải
-    chạy thật cùng lúc.
+    `payload.download=True` (default): fire background downloads right away for every video without a
+    file — previously it only created the job and said "open the Crawl page to download", but no
+    screen could show that job again (see phase-20, Survey point 1).
+    Bulk downloads go through `download_service.run_download_task`, queueing themselves by
+    `download_max_videos` — firing 20 background tasks does not mean 20 download streams
+    really run at once.
     """
     if not payload.videos:
         raise HTTPException(status_code=400, detail="Chưa chọn video nào.")
@@ -60,10 +60,10 @@ async def create_job_from_selection(
             for v in job.result_videos
             if v.status in _DOWNLOADABLE_STATUSES and not v.local_path
         ]
-        # Chốt id/title ra biến thường TRƯỚC khi commit: sau `db.commit()`,
-        # `expire_on_commit` (mặc định của Session) làm mọi attribute ánh xạ
-        # DB của các object này hết hạn — đọc lại `video.id`/`video.title` sau
-        # đó vẫn đúng (tự load lại) nhưng tốn thêm N query không cần thiết.
+        # Capture id/title into plain variables BEFORE the commit: after `db.commit()`,
+        # `expire_on_commit` (the Session default) expires every DB-mapped attribute
+        # of these objects — reading `video.id`/`video.title` afterwards
+        # is still correct (auto reload) but costs N unnecessary extra queries.
         pending = [(v.id, v.title) for v in to_download]
         for video in to_download:
             video.status = VideoStatus.DOWNLOADING
@@ -79,7 +79,7 @@ async def create_job_from_selection(
 
 @router.post("/{job_id}/load-more", response_model=JobPageRead)
 async def load_more_videos(job_id: int, page: int = 2, db: Session = Depends(get_db)) -> JobPageRead:
-    """Tải thêm 1 trang kết quả search vào job — dùng cho infinite scroll trang Crawl."""
+    """Load one more page of search results into the job — used for infinite scroll on the Crawl page."""
     try:
         videos, has_more = await crawl_service.append_videos_to_job(db, job_id, page)
     except ValueError as exc:
@@ -93,7 +93,7 @@ async def load_more_videos(job_id: int, page: int = 2, db: Session = Depends(get
 
 @router.post("/{job_id}/cost-estimate")
 def estimate_job_cost(job_id: int, db: Session = Depends(get_db)) -> dict:
-    """Ước tính chi phí trước khi chạy dịch/lồng tiếng cho cả batch — xem app/services/cost_service.py."""
+    """Estimate the cost before running translate/dub for the whole batch — see app/services/cost_service.py."""
     job = db.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -118,7 +118,7 @@ class DouyinProbeRead(BaseModel):
 
 @router.get("/douyin/status", response_model=DouyinStatusRead, tags=["douyin"])
 def douyin_status() -> DouyinStatusRead:
-    """UI hỏi trước khi hiện form, để nói rõ vì sao Douyin chưa dùng được."""
+    """The UI asks before showing the form, to explain clearly why Douyin is not usable yet."""
     configured = douyin_service.is_configured()
     return DouyinStatusRead(
         configured=configured,
@@ -132,18 +132,18 @@ def douyin_status() -> DouyinStatusRead:
 
 @router.post("/douyin/probe", response_model=DouyinProbeRead, tags=["douyin"])
 async def douyin_probe(payload: DouyinProbeRequest) -> DouyinProbeRead:
-    """Thăm dò 1 link chia sẻ: resolve id + xem JSON detail có những trường gì.
+    """Probe 1 share link: resolve the id + see which fields the detail JSON has.
 
-    Chưa tải video — phần bóc tách link không watermark cần biết hình dạng JSON
-    thật trước, mà chỉ cookie thật mới cho biết (xem docstring `douyin_service`).
+    Does not download the video yet — extracting the no-watermark link requires knowing the real
+    JSON shape first, which only a real cookie can reveal (see the `douyin_service` docstring).
     """
     try:
         result = await douyin_service.probe_share_url(payload.share_url)
     except douyin_service.DouyinNotConfiguredError as exc:
-        # 400 chứ không 500: thiếu cấu hình là việc người dùng sửa được.
+        # 400 not 500: a missing configuration is something the user can fix.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DouyinCookieExpiredError as exc:
-        # 409 để UI phân biệt với "chưa có cookie" — hành động cần làm khác nhau.
+        # 409 so the UI can tell it apart from "no cookie yet" — the action needed is different.
         raise HTTPException(
             status_code=409,
             detail=f"Cookie Douyin đã hết hạn, cần lấy lại cookie mới ({exc}).",
@@ -163,12 +163,12 @@ class DouyinSearchRequest(BaseModel):
 
 @router.post("/douyin/search-probe", tags=["douyin"])
 async def douyin_search_probe(payload: DouyinSearchRequest) -> dict:
-    """Thăm dò tìm kiếm từ khoá — CHƯA phải tính năng tìm kiếm hoàn chỉnh.
+    """Probe keyword search — NOT yet a complete search feature.
 
-    Douyin đòi cookie ĐĂNG NHẬP tài khoản thật cho tìm kiếm (khác cookie ẩn danh
-    đủ dùng cho tải video) — hầu hết sẽ nhận 409 ở đây cho tới khi bạn tự đăng
-    nhập Douyin và cập nhật `DOUYIN_COOKIE`. Trả JSON thô khi thành công vì hình
-    dạng lúc thành công chưa biết, xem docs/phases/phase-3-multiprovider-douyin.md.
+    Douyin demands a REAL logged-in account cookie for search (unlike the anonymous cookie
+    that suffices for video download) — most calls will get 409 here until you log
+    into Douyin yourself and update `DOUYIN_COOKIE`. Returns raw JSON on success because the shape
+    on success is unknown, see docs/phases/phase-3-multiprovider-douyin.md.
     """
     try:
         return await douyin_service.search_videos(

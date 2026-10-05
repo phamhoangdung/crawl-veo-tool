@@ -41,15 +41,15 @@ def test_get_storage_usage_bytes_sums_file_sizes(tmp_path):
 
 
 class TestPeriodicCleanup:
-    """Vòng lặp dọn dẹp nền (Phase 6) — chạy ngay lần đầu, không chết vì 1 lỗi."""
+    """The background cleanup loop (Phase 6) — runs right away the first time, and does not die from 1 error."""
 
     @staticmethod
     async def _run_until(task: asyncio.Task, reached: asyncio.Event) -> None:
-        """Chờ tới mốc cần rồi huỷ task.
+        """Wait until the needed point then cancel the task.
 
-        Không đếm bằng `await asyncio.sleep(0)`: vòng lặp gọi `asyncio.to_thread`
-        nên có bước nhảy sang thread khác, số lần nhường điều khiển cần thiết là
-        không xác định — test kiểu đó sẽ lúc xanh lúc đỏ.
+        Do not count with `await asyncio.sleep(0)`: the loop calls `asyncio.to_thread`
+        so there is a jump to another thread, and the number of control yields needed is
+        undetermined — a test like that would flip between green and red.
         """
         try:
             await asyncio.wait_for(reached.wait(), timeout=5)
@@ -94,7 +94,7 @@ class TestPeriodicCleanup:
             return []
 
         monkeypatch.setattr(storage_cleanup_service, "cleanup_old_job_folders", flaky)
-        # interval=0 để chu kỳ 2 chạy ngay, không phải chờ thật.
+        # interval=0 so cycle 2 runs right away, with no real waiting.
         task = asyncio.create_task(
             storage_cleanup_service.run_periodic_cleanup(interval_seconds=0)
         )

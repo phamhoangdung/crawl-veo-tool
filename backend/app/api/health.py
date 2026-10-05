@@ -12,6 +12,6 @@ def health() -> dict[str, str]:
 
 @router.get("/health/downloader")
 async def downloader_health() -> dict:
-    """Gọi thật 3 endpoint Bilibili hay dùng nhất — chạy định kỳ (vd cron ngoài) để biết
-    sớm khi Bilibili đổi API, thay vì chỉ phát hiện khi 1 job crawl thật bị fail."""
+    """Really call the 3 most-used Bilibili endpoints — run periodically (e.g. an external cron) to learn
+    early when Bilibili changes its API, instead of only finding out when a real crawl job fails."""
     return await health_check_service.check_bilibili_downloader()

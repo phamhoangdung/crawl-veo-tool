@@ -1,10 +1,10 @@
-"""Tìm ffmpeg/ffprobe ngoài PATH của tiến trình hiện tại.
+"""Find ffmpeg/ffprobe outside the current process's PATH.
 
-Bản cài desktop có thể được mở từ trình cài đặt (chạy dưới quyền hệ thống chỉ có
-PATH của máy) hoặc từ shell cũ, trong khi WinGet/Scoop đặt ffmpeg vào PATH của
-NGƯỜI DÙNG. Tiến trình khi đó không thấy ffmpeg dù máy đã cài. Ở đây đọc lại PATH
-mới từ registry + thử các thư mục cài phổ biến, rồi thêm thư mục tìm được vào
-`os.environ["PATH"]` để mọi lệnh gọi `ffmpeg`/`ffprobe` trong backend đều chạy được.
+The desktop build may be launched from the installer (running with a system context that has only the
+machine PATH) or from a stale shell, while WinGet/Scoop put ffmpeg on the USER's PATH.
+The process then cannot see ffmpeg even though it is installed. Here we re-read the fresh PATH
+from the registry + try common install directories, then add the directory found to
+`os.environ["PATH"]` so every `ffmpeg`/`ffprobe` call in the backend works.
 """
 
 import logging
@@ -21,10 +21,10 @@ _EXE = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
 
 
 def _registry_path_dirs() -> list[Path]:
-    """PATH mới nhất của người dùng + máy, đọc thẳng từ registry (Windows)."""
+    """The latest user + machine PATH, read straight from the registry (Windows)."""
     if sys.platform != "win32":
         return []
-    import winreg  # chỉ có trên Windows
+    import winreg  # Windows only
 
     sources = (
         (winreg.HKEY_CURRENT_USER, r"Environment"),
@@ -66,7 +66,7 @@ def _known_install_dirs() -> list[Path]:
 
 
 def find_ffmpeg_dir() -> Path | None:
-    """Thư mục đầu tiên chứa ffmpeg (ưu tiên PATH hiện có, rồi registry, rồi nơi cài phổ biến)."""
+    """First directory containing ffmpeg (current PATH first, then registry, then common install spots)."""
     current = [Path(p) for p in os.environ.get("PATH", "").split(os.pathsep) if p]
     for directory in (*current, *_registry_path_dirs(), *_known_install_dirs()):
         try:
@@ -78,7 +78,7 @@ def find_ffmpeg_dir() -> Path | None:
 
 
 def bundled_ffmpeg_dir() -> Path | None:
-    """Thư mục ffmpeg đóng gói kèm bản cài (PyInstaller đặt ở `_internal/ffmpeg`)."""
+    """ffmpeg directory shipped with the installer (PyInstaller puts it at `_internal/ffmpeg`)."""
     if not is_frozen():
         return None
     directory = Path(getattr(sys, "_MEIPASS", "")) / "ffmpeg"
@@ -86,10 +86,10 @@ def bundled_ffmpeg_dir() -> Path | None:
 
 
 def ensure_ffmpeg_on_path() -> bool:
-    """True nếu gọi được `ffmpeg` sau hàm này. Gọi lại nhiều lần vẫn an toàn."""
+    """True if `ffmpeg` can be called after this function. Safe to call repeatedly."""
     bundled = bundled_ffmpeg_dir()
     if bundled is not None:
-        # Ưu tiên bản đóng gói (đúng phiên bản đã test) thay vì ffmpeg lạ trong PATH máy.
+        # Prefer the bundled build (the tested version) over a random ffmpeg on the machine PATH.
         if str(bundled) not in os.environ.get("PATH", "").split(os.pathsep):
             os.environ["PATH"] = f"{bundled}{os.pathsep}{os.environ.get('PATH', '')}"
             logger.info("Dùng ffmpeg đóng gói kèm app: %s", bundled)

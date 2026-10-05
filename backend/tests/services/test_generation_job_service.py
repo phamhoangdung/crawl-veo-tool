@@ -5,8 +5,8 @@ from app.services import generation_job_service as jobs
 
 @pytest.fixture(autouse=True)
 def clean_store():
-    """Store là dict ở tầng module nên sống xuyên test — không dọn thì test sau
-    thấy job của test trước."""
+    """The store is a module-level dict so it lives across tests — if not cleaned, later tests
+    would see jobs of earlier tests."""
     jobs.clear()
     yield
     jobs.clear()
@@ -39,8 +39,8 @@ class TestLifecycle:
         assert "chính sách" in stored.error
 
     def test_long_error_is_truncated(self) -> None:
-        """Traceback của provider có thể dài hàng chục nghìn ký tự — không để nó
-        chảy nguyên vào response JSON."""
+        """A provider traceback can be tens of thousands of characters — do not let it
+        flow whole into the JSON response."""
         job = jobs.create("clip", "x")
         jobs.finish_error(job.id, "e" * 5000)
         assert len(jobs.get(job.id).error) == 500
@@ -50,8 +50,8 @@ class TestLifecycle:
         assert len(job.label) == 120
 
     def test_finishing_unknown_job_is_ignored(self) -> None:
-        """Job đã bị đẩy khỏi lịch sử mà vẫn chạy xong — không được ném lỗi làm
-        chết background task."""
+        """A job pushed out of the history that still finishes must not raise an error that
+        kills the background task."""
         jobs.finish_ok(
             "khong-ton-tai", asset_id=1, file_path="/x", cost_usd=0, from_cache=False
         )

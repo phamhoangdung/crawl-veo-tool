@@ -13,24 +13,24 @@ if TYPE_CHECKING:
 
 
 class VideoStatus(str, enum.Enum):
-    """State machine theo docs/overview/plan.md — mỗi bước có failed_* riêng để biết chính xác lỗi ở đâu khi resume."""
+    """State machine per docs/overview/plan.md — each step has its own failed_* so we know exactly where it failed when resuming."""
 
     QUEUED = "queued"
     DOWNLOADING = "downloading"
     DOWNLOADED = "downloaded"
     SEPARATING_AUDIO = "separating_audio"
     TRANSCRIBING = "transcribing"
-    # Mỗi bước cần trạng thái "đã xong" riêng, nếu không video kẹt mãi ở trạng
-    # thái "đang làm" và UI không biết bước nào đã hoàn tất.
+    # Each step needs its own "done" state, otherwise a video gets stuck forever in the
+    # "in progress" state and the UI cannot tell which step has completed.
     TRANSCRIBED = "transcribed"
     TRANSLATING = "translating"
     TRANSLATED = "translated"
     DUBBING = "dubbing"
     MUXING = "muxing"
     DONE = "done"
-    # Phase 8: hết quota toàn bộ key trong pool CỘNG provider fallback free — khác
-    # FAILED_* (lỗi thật, cần sửa gì đó), đây là "tạm dừng chờ", tự thử lại được khi
-    # có key mới hoặc cooldown hết hạn (docs/phases/phase-8-ai-account-pool.md).
+    # Phase 8: every key in the pool is out of quota AND the free fallback provider too — unlike
+    # FAILED_* (a real error that needs fixing), this is "paused, waiting", retried automatically when
+    # a new key arrives or the cooldown expires (docs/phases/phase-8-ai-account-pool.md).
     PAUSED_QUOTA = "paused_quota"
     FAILED_DOWNLOAD = "failed_download"
     FAILED_SEPARATING_AUDIO = "failed_separating_audio"
@@ -51,10 +51,10 @@ class Video(Base):
     platform_video_id: Mapped[str] = mapped_column()
     title: Mapped[str] = mapped_column()
     author_name: Mapped[str | None] = mapped_column(default=None)
-    # Phase 22: id kênh thật (Bilibili: str(mid)) — điền song song với
-    # `author_name` (tên hiển thị, có thể trùng giữa các kênh khác nhau) ở mọi
-    # nơi đang set author_name. `author_name` giữ nguyên hành vi cũ, cột này
-    # chỉ bổ sung để tra cứu/theo dõi kênh (`models/channel.py`).
+    # Phase 22: real channel id (Bilibili: str(mid)) — filled alongside
+    # `author_name` (display name, may collide across different channels) everywhere
+    # author_name is set. `author_name` keeps its old behavior; this column
+    # only adds channel lookup/following (`models/channel.py`).
     channel_id: Mapped[str | None] = mapped_column(default=None)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, default=None)
     cover_url: Mapped[str | None] = mapped_column(default=None)
@@ -64,11 +64,11 @@ class Video(Base):
     burned_path: Mapped[str | None] = mapped_column(default=None)
     timeline_rendered_path: Mapped[str | None] = mapped_column(default=None)
     transcript_json: Mapped[list[dict] | None] = mapped_column(JSON, default=None)
-    # Phase 13: draft timeline (edit operations) — chưa render, cho sửa nhiều lần
-    # trước khi bấm nút render riêng (nguyên tắc "AI gợi ý, người quyết định").
+    # Phase 13: draft timeline (edit operations) — not rendered yet, allows many edits
+    # before the separate render button is pressed (the "AI suggests, human decides" principle).
     timeline_json: Mapped[dict | None] = mapped_column(JSON, default=None)
-    # Phase 19: map speaker_label -> {"provider", "voice_id"} — vai nào chưa gán
-    # thì dùng giọng mặc định chung như trước (không bắt buộc phải phân vai).
+    # Phase 19: map speaker_label -> {"provider", "voice_id"} — a speaker with none
+    # assigned uses the shared default voice as before (speaker separation is not mandatory).
     speaker_voices_json: Mapped[dict | None] = mapped_column(JSON, default=None)
     status: Mapped[VideoStatus] = mapped_column(
         Enum(VideoStatus), default=VideoStatus.QUEUED

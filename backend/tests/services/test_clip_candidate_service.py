@@ -18,20 +18,20 @@ def test_returns_empty_for_no_segments() -> None:
 
 
 def test_produces_at_least_one_candidate_for_long_enough_transcript() -> None:
-    segments = _segments(count=20, seg_duration=3.0)  # 60s tổng
+    segments = _segments(count=20, seg_duration=3.0)  # 60s total
     candidates = suggest_clip_candidates(segments, target_duration=45.0)
     assert len(candidates) >= 1
     assert candidates[0].start == 0
 
 
 def test_excludes_windows_shorter_than_half_target_duration() -> None:
-    """1 segment 5s, target 45s -> cửa sổ thực tế chỉ có 5s (<50% của 45s) -> loại."""
+    """1 segment of 5s, target 45s -> the real window is only 5s (<50% of 45s) -> dropped."""
     segments = _segments(count=1, seg_duration=5.0)
     assert suggest_clip_candidates(segments, target_duration=45.0) == []
 
 def test_prefers_segments_with_emphasis_punctuation() -> None:
-    """2 cửa sổ không chồng lấn, 1 cái có dấu chấm than -> phải được chọn (cả 2 đủ
-    ngắn để max_candidates=1 chỉ giữ lại 1)."""
+    """2 non-overlapping windows, 1 with an exclamation mark -> it must be chosen (both are short
+    enough that max_candidates=1 keeps only 1)."""
     plain = _segments(count=10, seg_duration=5.0, text="một câu nói rất bình thường không có gì đặc biệt")
     exciting = [
         {**s, "start": s["start"] + 100, "end": s["end"] + 100, "text": "Không thể tin được! Thật sao?!", "translated_text": "Không thể tin được! Thật sao?!"}
@@ -42,11 +42,11 @@ def test_prefers_segments_with_emphasis_punctuation() -> None:
     candidates = suggest_clip_candidates(segments, target_duration=45.0, max_candidates=1)
 
     assert len(candidates) == 1
-    assert candidates[0].start >= 100  # cửa sổ "exciting" được chọn, không phải "plain"
+    assert candidates[0].start >= 100  # the "exciting" window is chosen, not the "plain" one
 
 
 def test_filters_overlapping_lower_score_windows() -> None:
-    segments = _segments(count=30, seg_duration=3.0)  # 90s liên tục, nhiều cửa sổ chồng lấn
+    segments = _segments(count=30, seg_duration=3.0)  # 90s continuous, many overlapping windows
     candidates = suggest_clip_candidates(segments, target_duration=45.0, max_candidates=10)
 
     for a in candidates:

@@ -34,13 +34,13 @@ describe('SubtitleReview — kích thước hiển thị', () => {
     const video = document.querySelector('video')!
     await new Promise((r) => setTimeout(r, 50))
 
-    // Thẻ <video> trong test không có file thật nên không tự cao theo tỉ lệ;
-    // kiểm tra chính cái chặn: phải có max-height, nếu không video dọc sẽ cao
-    // gấp ~1.8 lần bề rộng cột và đẩy mọi thứ khác ra ngoài màn hình.
+    // The <video> tag in the test has no real file so it does not size itself by ratio;
+    // check the blocker itself: it must have a max-height, otherwise a vertical video would be
+    // ~1.8 times the column width and push everything else off the screen.
     const style = getComputedStyle(video)
     expect(style.maxHeight).not.toBe('none')
     expect(parseFloat(style.maxHeight)).toBeLessThanOrEqual(window.innerHeight * 0.62)
-    // object-contain giữ tỉ lệ gốc thay vì bóp méo hình khi bị khoá chiều cao.
+    // object-contain keeps the original ratio instead of distorting the picture when the height is locked.
     expect(style.objectFit).toBe('contain')
   })
 
@@ -50,10 +50,10 @@ describe('SubtitleReview — kích thước hiển thị', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     const rect = list.getBoundingClientRect()
-    // 28rem = 448px là giới hạn cứng cũ khiến danh sách chỉ hiện 1 khúc.
+    // 28rem = 448px was the old hard limit that made the list show only 1 slice.
     expect(rect.height).toBeGreaterThan(448)
-    // Khung phải cho phép cuộn khi nội dung dài hơn (cửa sổ test cao nên 32 câu
-    // có thể vừa khít — kiểm tra thuộc tính cuộn thay vì ép phải tràn).
+    // The frame must allow scrolling when the content is longer (the test window is tall so 32 sentences
+    // may fit exactly — check the scroll property instead of forcing an overflow).
     expect(getComputedStyle(list).overflowY).toBe('auto')
   })
 
@@ -70,17 +70,17 @@ describe('SubtitleReview — kích thước hiển thị', () => {
 describe('SubtitleReview — ảo hoá danh sách', () => {
   it('danh sách thật sự render được câu (virtualizer đo đúng container)', async () => {
     await renderReview()
-    // Bẫy đã gặp ở SubtitleEditor: virtualizer có thể đo ra 0 hàng nếu
-    // container chưa kịp có kích thước thật ở lần đo đầu — xác nhận không lặp
-    // lại ở đây bằng chờ có nội dung câu thật, không phải chỉ kiểm tra khung.
+    // A trap met in SubtitleEditor: the virtualizer can measure 0 rows if the
+    // container did not yet have its real size at the first measurement — confirm it does not
+    // repeat here by waiting for real sentence content, not only checking the frame.
     await vi.waitFor(() => {
       expect(document.body.textContent).toContain('Câu phụ đề tiếng Việt số 0')
     })
   })
 
   it('danh sách lớn không dựng hết mọi hàng thành DOM node', async () => {
-    // 32 câu (fixture chuẩn ở trên) có thể vừa khít cửa sổ test cao — dùng
-    // hẳn 400 câu để chắc chắn overscan không thể phủ hết toàn bộ danh sách.
+    // 32 sentences (the standard fixture above) may fit a tall test window exactly — use
+    // 400 sentences to be sure overscan cannot cover the whole list.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const manySegments: TranscriptSegment[] = Array.from({ length: 400 }, (_, i) => ({
       start: i * 5,

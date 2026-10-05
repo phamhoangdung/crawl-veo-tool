@@ -24,14 +24,14 @@ _client: httpx.AsyncClient | None = None
 
 
 def _get_client() -> httpx.AsyncClient:
-    """1 client dùng chung suốt vòng đời process thay vì mở mới mỗi lần dịch —
-    tránh bắt tay TLS/dựng connection pool lặp lại khi nhiều đoạn dịch song
-    song (xem docs/performance-optimization/plan.md mục P1). Không đóng lại
-    tường minh: đây là app 1 process chạy dài, OS tự dọn socket khi process
-    thoát, không đáng thêm lifecycle/shutdown handler chỉ vì việc này.
+    """1 client shared for the whole process lifetime instead of opening a new one per translation —
+    avoids repeated TLS handshakes/connection-pool setup when many segments are translated in
+    parallel (see docs/performance-optimization/plan.md, section P1). Not explicitly
+    closed: this is a long-running single-process app, the OS cleans up sockets when the process
+    exits, not worth adding a lifecycle/shutdown handler just for this.
 
-    Timeout 60s (thay vì 30s của `translate_text` gốc) để đủ dùng chung với
-    `complete_text` — chỉ là giới hạn trên, không làm chậm request bình thường.
+    Timeout 60s (instead of the 30s of the original `translate_text`) to be sufficient when shared with
+    `complete_text` — it is only an upper bound, not slowing down normal requests.
     """
     global _client
     if _client is None:
@@ -40,13 +40,13 @@ def _get_client() -> httpx.AsyncClient:
 
 
 async def _call_with_retry(label: str, call: Callable[[], Awaitable[str]]) -> str:
-    """Retry khi bị rate limit (429) — cả OpenAI lẫn Google free đều có thể trả lỗi
-    này khi dịch nhiều đoạn phụ đề liên tiếp (mỗi đoạn phụ đề là 1 request riêng).
-    Tôn trọng header Retry-After nếu server trả về, không thì backoff tăng dần + jitter.
+    """Retry on rate limit (429) — both OpenAI and free Google can return this error
+    when translating many subtitle segments in a row (each subtitle segment is its own request).
+    Respects the Retry-After header if the server returns one, otherwise increasing backoff + jitter.
 
-    Nếu vẫn 429 sau khi hết lượt retry, ném `ProviderQuotaExceededError` (thay vì
-    `httpx.HTTPStatusError` thô) để caller (translate_text) biết đây là tín hiệu
-    "key này cần nghỉ" và chuyển sang key khác trong pool — xem Phase 8.
+    If it is still 429 after the retries run out, raises `ProviderQuotaExceededError` (instead of the raw
+    `httpx.HTTPStatusError`) so the caller (translate_text) knows this is the signal
+    "this key needs a rest" and switches to another key in the pool — see Phase 8.
     """
     for attempt in range(_MAX_RETRIES):
         try:
@@ -74,17 +74,17 @@ async def _call_with_retry(label: str, call: Callable[[], Awaitable[str]]) -> st
             await asyncio.sleep(delay)
     raise AssertionError(
         "unreachable"
-    )  # vòng for luôn return hoặc raise trước khi hết vòng
+    )  # the for loop always returns or raises before it ends
 
 
 async def translate_text(
     db: Session, user_id: int, text: str, source_lang: str, target_lang: str
 ) -> str:
-    """Xoay vòng key OpenAI trong pool (Phase 8) khi bị hết quota/rate-limit; hết cả
-    pool thì fallback Google Translate (free) như trước. Nếu Google free cũng lỗi
-    (hết quota/rate-limit của chính endpoint free, hoặc lỗi mạng khác), ném
-    `AllProvidersExhaustedError` để dubbing_service chuyển video sang PAUSED_QUOTA
-    thay vì fail hẳn.
+    """Rotate OpenAI keys in the pool (Phase 8) when out of quota/rate-limited; when the whole
+    pool is exhausted fall back to Google Translate (free) as before. If free Google also fails
+    (out of quota/rate limit of the free endpoint itself, or another network error), raises
+    `AllProvidersExhaustedError` so dubbing_service moves the video to PAUSED_QUOTA
+    instead of failing outright.
     """
     client = _get_client()
     tried_key_ids: set[int] = set()
@@ -126,11 +126,11 @@ async def translate_text(
 
 
 async def complete_text(db: Session, user_id: int, prompt: str) -> str:
-    """Gọi LLM với prompt tự do (sinh metadata...), dùng chung pool key với dịch.
+    """Call the LLM with a free-form prompt (metadata generation...), sharing the key pool with translation.
 
-    Khác `translate_text`: KHÔNG fallback sang Google Translate — endpoint dịch
-    free không nhận prompt tự do. Hết key thì báo lỗi để người dùng biết cần cấu
-    hình API key, thay vì trả rác.
+    Unlike `translate_text`: NO fallback to Google Translate — the free translation endpoint
+    does not accept free-form prompts. When keys run out, report an error so the user knows an API key
+    must be configured, instead of returning garbage.
     """
     client = _get_client()
     tried_key_ids: set[int] = set()
@@ -168,11 +168,11 @@ async def translate_cached(
     source_lang: str = "zh",
     target_lang: str = "vi",
 ) -> tuple[str, bool]:
-    """Dịch có cache trong DB. Trả `(bản_dịch, lấy_từ_cache)`.
+    """Translate with a cache in the DB. Returns `(translation, from_cache)`.
 
-    Dành cho tooltip dịch tiêu đề: mỗi lần hover là một request, không cache thì
-    rê chuột qua bảng 40 dòng vài lượt đã đủ hết quota. Cache nằm trong DB nên
-    còn nguyên sau khi restart, khác với cache trong bộ nhớ.
+    For the title-translation tooltip: every hover is a request, without a cache a few passes of the
+    mouse over a 40-row table is enough to exhaust the quota. The cache lives in the DB so it
+    survives a restart, unlike an in-memory cache.
     """
     from app.models.translation_cache import TranslationCache, make_key
 
@@ -180,7 +180,7 @@ async def translate_cached(
 
     cached = db.get(TranslationCache, key)
     if cached is not None:
-        # Đếm lượt dùng lại để biết cache có thật sự hiệu quả hay không.
+        # Count reuses to know whether the cache is really effective.
         cached.hit_count += 1
         db.commit()
         return cached.translated_text, True
@@ -199,8 +199,8 @@ async def translate_cached(
     try:
         db.commit()
     except IntegrityError:
-        # Hai request hover cùng lúc cùng một tiêu đề — bản ghi kia đã vào trước,
-        # không phải lỗi. Bản dịch vẫn đúng nên cứ trả về.
+        # Two hover requests for the same title at the same time — the other record got in first,
+        # not an error. The translation is still correct so just return it.
         db.rollback()
 
     return translated, False
