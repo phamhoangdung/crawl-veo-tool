@@ -1,4 +1,4 @@
-// Builds the downloadable AI pack (ai-pack-win64.zip on Windows, ai-pack-macos-arm64.tar.gz
+// Builds the downloadable AI pack (ai-pack-win64.zip on Windows, ai-pack-macos-<arm64|x64>.tar.gz
 // on macOS): a `pip install --target`
 // directory with torch (CPU), demucs, speechbrain, faster-whisper, scikit-learn...
 // The backend downloads it on first use (backend/app/core/packs.py) and adds it to
@@ -15,7 +15,13 @@ assertPythonRuns(python);
 
 const stage = join(ROOT, "build", "ai-pack");
 const outDir = join(ROOT, "dist-packs");
-const zip = join(outDir, isWindows ? "ai-pack-win64.zip" : "ai-pack-macos-arm64.tar.gz");
+// Intel Macs need an older, separately pinned set (PyTorch has no x86_64 macOS wheels > 2.2).
+const intelMac = process.platform === "darwin" && process.arch === "x64";
+const requirements = intelMac ? "requirements-ai-macos-intel.txt" : "requirements-ai.txt";
+const assetName = isWindows
+  ? "ai-pack-win64.zip"
+  : intelMac ? "ai-pack-macos-x64.tar.gz" : "ai-pack-macos-arm64.tar.gz";
+const zip = join(outDir, assetName);
 
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
@@ -25,7 +31,7 @@ console.log("Installing AI pack dependencies ...");
 execFileSync(
   python,
   ["-m", "pip", "install", "--target", stage, "--no-compile", "--no-warn-script-location",
-   "-r", join(ROOT, "backend", "requirements-ai.txt")],
+   "-r", join(ROOT, "backend", requirements)],
   { stdio: "inherit" },
 );
 

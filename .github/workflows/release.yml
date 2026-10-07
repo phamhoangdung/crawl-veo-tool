@@ -1,4 +1,4 @@
-# Build the Windows installer and the macOS (Apple Silicon) disk image of VieDub Studio and publish them as a GitHub Release on EVERY push to main.
+# Build the Windows installer and the macOS (Apple Silicon + Intel) disk images of VieDub Studio and publish them as a GitHub Release on EVERY push to main.
 # The version is automatic: the next patch after the highest existing `v*` tag (or the version in
 # src-tauri/tauri.conf.json when that is higher, e.g. after `npm run version:bump minor`). The tag
 # is created by the release itself; the repo files are not modified. Docs-only pushes are skipped.
@@ -111,7 +111,15 @@ jobs:
   macos:
     needs: plan
     if: needs.plan.outputs.build == 'true'
-    runs-on: macos-latest # Apple Silicon (arm64)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest # Apple Silicon (arm64)
+            label: AppleSilicon
+          - runner: macos-15-intel # Intel (x86_64)
+            label: Intel
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -157,13 +165,13 @@ jobs:
         run: npm run desktop:build:keep
 
       - name: Give the disk image a stable file name (for the permanent download link)
-        run: cp src-tauri/target/release/bundle/dmg/*.dmg VieDub-Studio-macOS.dmg
+        run: cp src-tauri/target/release/bundle/dmg/*.dmg VieDub-Studio-macOS-${{ matrix.label }}.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: installer-macos
-          path: VieDub-Studio-macOS.dmg
+          name: installer-macos-${{ matrix.label }}
+          path: VieDub-Studio-macOS-${{ matrix.label }}.dmg
 
   publish:
     needs: [plan, windows, macos]
@@ -183,4 +191,5 @@ jobs:
           make_latest: true
           files: |
             dist/VieDub-Studio-Setup.exe
-            dist/VieDub-Studio-macOS.dmg
+            dist/VieDub-Studio-macOS-AppleSilicon.dmg
+            dist/VieDub-Studio-macOS-Intel.dmg

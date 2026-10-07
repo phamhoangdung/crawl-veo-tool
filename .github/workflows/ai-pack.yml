@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - backend/requirements-ai.txt
+      - backend/requirements-ai-macos-intel.txt
       - backend/app/core/packs.py
       - scripts/build-ai-pack.mjs
   workflow_dispatch:
@@ -24,6 +25,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       build_win: ${{ steps.v.outputs.build_win }}
       build_mac: ${{ steps.v.outputs.build_mac }}
+      build_mac_intel: ${{ steps.v.outputs.build_mac_intel }}
     steps:
       - uses: actions/checkout@v4
       - name: Read AI_PACK_VERSION and check the release
@@ -34,7 +36,7 @@ jobs:
           version=$(grep -m1 '^AI_PACK_VERSION' backend/app/core/packs.py | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
           assets=$(gh release view "ai-pack-v$version" --json assets --jq '.assets[].name' 2>/dev/null || true)
-          for pair in "win:ai-pack-win64.zip" "mac:ai-pack-macos-arm64.tar.gz"; do
+          for pair in "win:ai-pack-win64.zip" "mac:ai-pack-macos-arm64.tar.gz" "mac_intel:ai-pack-macos-x64.tar.gz"; do
             key=${pair%%:*}
             asset=${pair#*:}
             if echo "$assets" | grep -qx "$asset"; then
@@ -71,6 +73,31 @@ jobs:
           tag="ai-pack-v${{ needs.plan.outputs.version }}"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --latest=false --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
           gh release upload "$tag" dist-packs/ai-pack-win64.zip --clobber
+
+  build-mac-intel:
+    needs: plan
+    if: needs.plan.outputs.build_mac_intel == 'true'
+    runs-on: macos-15-intel # Intel (x86_64), older pinned set: requirements-ai-macos-intel.txt
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build pack
+        run: |
+          python -m venv backend/.venv
+          node scripts/build-ai-pack.mjs
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="ai-pack-v${{ needs.plan.outputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --latest=false --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
+          gh release upload "$tag" dist-packs/ai-pack-macos-x64.tar.gz --clobber
 
   build-mac:
     needs: plan

@@ -36,9 +36,9 @@ VieDub Studio turns foreign-language short videos into Vietnamese-dubbed videos 
 4. Open the **API Keys** page and enter the keys of the AI providers you want to use (translation / TTS). Keys are encrypted and stored locally.
 5. On the first transcription/dubbing run the app also downloads the speech models (Whisper ~460MB, Demucs ~80MB). This happens only once.
 
-### macOS (Apple Silicon)
+### macOS
 
-1. **[Download VieDub-Studio-macOS.dmg](https://github.com/phamhoangdung/crawl-veo-tool/releases/latest/download/VieDub-Studio-macOS.dmg)**, open it and drag **VieDub Studio** to Applications. Intel Macs are not supported.
+1. Download the disk image for your Mac: **[Apple Silicon (M1 and later)](https://github.com/phamhoangdung/crawl-veo-tool/releases/latest/download/VieDub-Studio-macOS-AppleSilicon.dmg)** or **[Intel](https://github.com/phamhoangdung/crawl-veo-tool/releases/latest/download/VieDub-Studio-macOS-Intel.dmg)** (Apple menu → About This Mac shows the chip). Open it and drag **VieDub Studio** to Applications.
 2. The app is not notarized, so macOS blocks the first launch ("damaged" / "unidentified developer"). Run once in Terminal: `xattr -cr "/Applications/VieDub Studio.app"`, then open it normally (or right-click → Open).
 3. Same as Windows: use the banner at the top of the app to download **ffmpeg** (~50MB) and the **AI pack** once. Data lives in `~/Library/Application Support/VieDubStudio`; to uninstall, delete the app and that folder.
 
@@ -245,7 +245,7 @@ npm run desktop:build-ai-pack # builds dist-packs/ai-pack-win64.zip (the downloa
 
 The installer is written to `src-tauri/target/release/bundle/nsis/` (on macOS, the disk image to `bundle/dmg/`; use `python3.11` for `backend/.venv`). Run the build from PowerShell/cmd, not Git Bash (Git Bash shadows MSVC's `link.exe`). User data lives in `%APPDATA%\VieDubStudio`, and the backend log is at `%APPDATA%\VieDubStudio\logs\backend.log`. Details: [docs/phases/phase-12-desktop-packaging.md](docs/phases/phase-12-desktop-packaging.md).
 
-**Publishing a release:** fully automatic. Every push to `main` (except docs-only changes) triggers [.github/workflows/release.yml](.github/workflows/release.yml): it picks the next version (the patch after the highest existing `v*` tag, or the version in `src-tauri/tauri.conf.json` when that is higher, e.g. after `npm run version:bump minor`), builds the Windows installer and the macOS (Apple Silicon) disk image on parallel runners and creates that tag/release with both attached (`VieDub-Studio-Setup.exe`, `VieDub-Studio-macOS.dmg`). The repo files are not modified by CI. The AI pack is published by the **ai-pack** workflow when `backend/requirements-ai.txt` or `backend/app/core/packs.py` changes: it reads `AI_PACK_VERSION` and uploads to the release `ai-pack-v<AI_PACK_VERSION>` when that release has no pack yet (bump `AI_PACK_VERSION` to publish a new one). Both can be re-run from the Actions tab. The builds are unsigned: Windows SmartScreen and macOS Gatekeeper will show a warning (see the install steps).
+**Publishing a release:** fully automatic. Every push to `main` (except docs-only changes) triggers [.github/workflows/release.yml](.github/workflows/release.yml): it picks the next version (the patch after the highest existing `v*` tag, or the version in `src-tauri/tauri.conf.json` when that is higher, e.g. after `npm run version:bump minor`), builds the Windows installer and the two macOS disk images (Apple Silicon and Intel) on parallel runners and creates that tag/release with both attached (`VieDub-Studio-Setup.exe`, `VieDub-Studio-macOS-AppleSilicon.dmg`, `VieDub-Studio-macOS-Intel.dmg`). The repo files are not modified by CI. The AI pack is published by the **ai-pack** workflow when `backend/requirements-ai.txt` or `backend/app/core/packs.py` changes: it reads `AI_PACK_VERSION` and uploads to the release `ai-pack-v<AI_PACK_VERSION>` when that release has no pack yet (bump `AI_PACK_VERSION` to publish a new one). Both can be re-run from the Actions tab. The builds are unsigned: Windows SmartScreen and macOS Gatekeeper will show a warning (see the install steps).
 
 ## 10. Status
 

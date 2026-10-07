@@ -19,6 +19,7 @@ before any heavy import (also in the ``--run-demucs`` subprocess).
 import importlib.util
 import logging
 import os
+import platform
 import shutil
 import stat
 import sys
@@ -43,12 +44,24 @@ _RELEASE_BASE = "https://github.com/phamhoangdung/crawl-veo-tool/releases/downlo
 _IS_WINDOWS = sys.platform == "win32"
 # One AI pack per platform, all attached to the same `ai-pack-v<n>` release. The macOS
 # pack is a tar.gz because zip loses symlinks and permission bits.
-_AI_ASSET = "ai-pack-win64.zip" if _IS_WINDOWS else "ai-pack-macos-arm64.tar.gz"
+_MAC_ARM = platform.machine().lower() in ("arm64", "aarch64")
+_AI_ASSET = (
+    "ai-pack-win64.zip"
+    if _IS_WINDOWS
+    else "ai-pack-macos-arm64.tar.gz" if _MAC_ARM else "ai-pack-macos-x64.tar.gz"
+)
 _AI_URL = os.environ.get("AI_PACK_URL", f"{_RELEASE_BASE}/ai-pack-v{AI_PACK_VERSION}/{_AI_ASSET}")
-# macOS: native arm64 static builds (one zip per binary).
+# macOS: static builds, one zip per binary (osxexperts for arm64, evermeet for Intel).
 _MAC_FFMPEG_URLS = (
-    "https://www.osxexperts.net/ffmpeg81arm.zip",
-    "https://www.osxexperts.net/ffprobe81arm.zip",
+    (
+        "https://www.osxexperts.net/ffmpeg81arm.zip",
+        "https://www.osxexperts.net/ffprobe81arm.zip",
+    )
+    if _MAC_ARM
+    else (
+        "https://evermeet.cx/ffmpeg/get/zip",
+        "https://evermeet.cx/ffmpeg/get/ffprobe/zip",
+    )
 )
 _FFMPEG_URLS = (
     (

@@ -1,0 +1,14 @@
+# AI pack for Intel Macs (x86_64). PyTorch stopped publishing macOS x86_64 wheels after
+# 2.2.x (and numpy 2, onnxruntime > 1.19 followed), so this set is older than
+# requirements-ai.txt. Bump AI_PACK_VERSION in packs.py whenever this file changes.
+torch==2.2.2
+torchaudio==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.5.2
+faster-whisper==1.2.1
+ctranslate2==4.5.0
+av==13.1.0
+onnxruntime==1.19.2
+demucs==4.1.0
+speechbrain==1.1.1

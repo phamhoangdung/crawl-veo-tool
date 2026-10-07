@@ -134,4 +134,4 @@ vẫn phải có sẵn ffmpeg trong PATH.
 ## Phiên 2026-10-07 — thêm bản macOS (Apple Silicon)
 - `release.yml` build song song Windows + macOS (`macos-latest`, arm64), job `publish` gộp cả hai file vào 1 release: `VieDub-Studio-Setup.exe`, `VieDub-Studio-macOS.dmg`. `src-tauri/tauri.macos.conf.json` đổi target sang `dmg`.
 - macOS: ffmpeg lấy từ osxexperts.net (arm64, 2 zip), AI pack là `ai-pack-macos-arm64.tar.gz` (giữ symlink/quyền), `ai-pack.yml` build từng nền tảng nếu release chưa có file tương ứng.
-- Chưa verify: **chưa chạy trên Mac thật** — CI chưa chạy lần nào cho macOS (torch/ctranslate2/av pin theo bản Windows, có thể cần chỉnh); app chưa notarize nên người dùng phải `xattr -cr`. Không hỗ trợ Mac Intel.
+- Chưa verify: **chưa chạy trên Mac thật** — CI chưa chạy lần nào cho macOS (torch/ctranslate2/av pin theo bản Windows, có thể cần chỉnh); app chưa notarize nên người dùng phải `xattr -cr`. Mac Intel: runner `macos-15-intel`, AI pack riêng (`requirements-ai-macos-intel.txt`, torch 2.2.2 vì PyTorch bỏ wheel x86_64 macOS sau 2.2) — các pin này chưa được CI xác nhận; ffmpeg Intel lấy từ evermeet.cx.
