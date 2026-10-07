@@ -3,7 +3,7 @@
 The installer stays small by NOT bundling the heavy parts. They are downloaded on
 first use into the user data directory instead:
 
-- ``ffmpeg``: ffmpeg.exe + ffprobe.exe (~210MB unpacked).
+- ``ffmpeg``: ffmpeg + ffprobe (~210MB unpacked on Windows, ~110MB on macOS).
 - ``ai``: torch (CPU), demucs, speechbrain, faster-whisper, scikit-learn and their
   dependencies, as a zip of a ``pip install --target`` directory (see
   ``scripts/build-ai-pack.mjs``). It is added to ``sys.path`` at runtime, so it must
@@ -20,7 +20,9 @@ import importlib.util
 import logging
 import os
 import shutil
+import stat
 import sys
+import tarfile
 import threading
 import zipfile
 from dataclasses import dataclass, field
@@ -38,13 +40,26 @@ AI_PACK_VERSION = "1"
 FFMPEG_VERSION = "9.0.2"
 
 _RELEASE_BASE = "https://github.com/phamhoangdung/crawl-veo-tool/releases/download"
-_AI_URL = os.environ.get(
-    "AI_PACK_URL", f"{_RELEASE_BASE}/ai-pack-v{AI_PACK_VERSION}/ai-pack-win64.zip"
+_IS_WINDOWS = sys.platform == "win32"
+# One AI pack per platform, all attached to the same `ai-pack-v<n>` release. The macOS
+# pack is a tar.gz because zip loses symlinks and permission bits.
+_AI_ASSET = "ai-pack-win64.zip" if _IS_WINDOWS else "ai-pack-macos-arm64.tar.gz"
+_AI_URL = os.environ.get("AI_PACK_URL", f"{_RELEASE_BASE}/ai-pack-v{AI_PACK_VERSION}/{_AI_ASSET}")
+# macOS: native arm64 static builds (one zip per binary).
+_MAC_FFMPEG_URLS = (
+    "https://www.osxexperts.net/ffmpeg81arm.zip",
+    "https://www.osxexperts.net/ffprobe81arm.zip",
 )
-_FFMPEG_URL = os.environ.get(
-    "FFMPEG_PACK_URL",
-    f"https://github.com/GyanD/codexffmpeg/releases/download/{FFMPEG_VERSION}"
-    f"/ffmpeg-{FFMPEG_VERSION}-essentials_build.zip",
+_FFMPEG_URLS = (
+    (
+        os.environ.get(
+            "FFMPEG_PACK_URL",
+            f"https://github.com/GyanD/codexffmpeg/releases/download/{FFMPEG_VERSION}"
+            f"/ffmpeg-{FFMPEG_VERSION}-essentials_build.zip",
+        ),
+    )
+    if _IS_WINDOWS
+    else _MAC_FFMPEG_URLS
 )
 
 _MARKER = ".complete"
@@ -137,7 +152,7 @@ def require_ai() -> None:
 def status() -> list[dict]:
     result = []
     for pack_id, label, size_mb in (
-        ("ffmpeg", "ffmpeg (xử lý video/âm thanh)", 110),
+        ("ffmpeg", "ffmpeg (xử lý video/âm thanh)", 110 if _IS_WINDOWS else 50),
         ("ai", "Gói AI (Whisper, Demucs, phân vai)", 600),
     ):
         st = _states[pack_id]
@@ -173,7 +188,9 @@ def _download(url: str, dest: Path, st: _State) -> None:
     with httpx.stream("GET", url, follow_redirects=True, timeout=60) as response:
         response.raise_for_status()
         raw_total = response.headers.get("content-length")
-        st.total = int(raw_total) if raw_total and raw_total.isdigit() else None
+        file_total = int(raw_total) if raw_total and raw_total.isdigit() else None
+        # Several archives (macOS ffmpeg) share one progress bar: the total grows per file.
+        st.total = None if file_total is None else (st.total or 0) + file_total
         with open(dest, "wb") as f:
             for chunk in response.iter_bytes(_CHUNK):
                 f.write(chunk)
@@ -186,13 +203,20 @@ def _run_install(pack_id: str) -> None:
     try:
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir(parents=True, exist_ok=True)
-        archive = work / "pack.zip"
-        _download(_AI_URL if pack_id == "ai" else _FFMPEG_URL, archive, st)
-        st.state = "extracting"
         if pack_id == "ai":
+            archive = work / _AI_ASSET
+            _download(_AI_URL, archive, st)
+            st.state = "extracting"
             _extract_ai(archive)
         else:
-            _extract_ffmpeg(archive)
+            archives = []
+            for index, url in enumerate(_FFMPEG_URLS):
+                archive = work / f"ffmpeg-{index}.zip"
+                _download(url, archive, st)
+                archives.append(archive)
+            st.state = "extracting"
+            for archive in archives:
+                _extract_ffmpeg(archive)
         st.state = "done"
         logger.info("Pack %s installed", pack_id)
     except Exception as exc:  # surfaced to the UI through status()
@@ -206,8 +230,15 @@ def _extract_ai(archive: Path) -> None:
     final = _ai_dir()
     partial = final.with_name(final.name + ".part")
     shutil.rmtree(partial, ignore_errors=True)
-    with zipfile.ZipFile(archive) as zf:
-        zf.extractall(partial)
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(partial)
+    else:
+        with tarfile.open(archive) as tf:
+            if hasattr(tarfile, "fully_trusted_filter"):  # our own archive: keep symlinks
+                tf.extractall(partial, filter="fully_trusted")
+            else:
+                tf.extractall(partial)
     shutil.rmtree(final, ignore_errors=True)
     partial.rename(final)
     (final / _MARKER).write_text(AI_PACK_VERSION, encoding="utf-8")
@@ -220,10 +251,13 @@ def _extract_ai(archive: Path) -> None:
 def _extract_ffmpeg(archive: Path) -> None:
     target = ffmpeg_bin_dir()
     target.mkdir(parents=True, exist_ok=True)
-    wanted = {"ffmpeg.exe", "ffprobe.exe"}
+    wanted = {"ffmpeg.exe", "ffprobe.exe"} if _IS_WINDOWS else {"ffmpeg", "ffprobe"}
     with zipfile.ZipFile(archive) as zf:
         for member in zf.namelist():
             name = member.rsplit("/", 1)[-1]
-            if name in wanted and "/bin/" in member:
+            # Windows build: binaries sit under bin/; macOS zips hold the binary at the top.
+            if name in wanted and ("/bin/" in member or not _IS_WINDOWS):
                 with zf.open(member) as src, open(target / name, "wb") as dst:
                     shutil.copyfileobj(src, dst)
+                path = target / name
+                path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

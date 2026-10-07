@@ -11,7 +11,7 @@
     "test:backend": "node scripts/run-python.mjs -m pytest backend",
     "test:frontend": "pnpm -C frontend test",
     "desktop:build-ai-pack": "node scripts/build-ai-pack.mjs",
-    "desktop:build-backend": "cd backend && .venv\\Scripts\\python.exe -m PyInstaller --distpath dist --workpath build --noconfirm viedub-backend.spec",
+    "desktop:build-backend": "node scripts/build-backend.mjs",
     "version:bump": "node scripts/bump-version.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "node scripts/bump-version.mjs patch && npm run desktop:build:keep",

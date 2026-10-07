@@ -1,4 +1,4 @@
-# Build the downloadable AI pack (torch CPU, demucs, speechbrain, faster-whisper...) and upload it
+# Build the downloadable AI packs (Windows + macOS arm64; torch CPU, demucs, speechbrain, faster-whisper...) and upload it
 # to the release `ai-pack-v<AI_PACK_VERSION>` the app downloads from on first use
 # (backend/app/core/packs.py). The version is read from packs.py, nothing to type.
 # Runs on pushes to main that touch the pack definition, and skips when that release already has
@@ -22,7 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
-      build: ${{ steps.v.outputs.build }}
+      build_win: ${{ steps.v.outputs.build_win }}
+      build_mac: ${{ steps.v.outputs.build_mac }}
     steps:
       - uses: actions/checkout@v4
       - name: Read AI_PACK_VERSION and check the release
@@ -32,16 +33,21 @@ jobs:
         run: |
           version=$(grep -m1 '^AI_PACK_VERSION' backend/app/core/packs.py | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "ai-pack-v$version" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx 'ai-pack-win64.zip'; then
-            echo "ai-pack-v$version already has the pack, nothing to build."
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
+          assets=$(gh release view "ai-pack-v$version" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          for pair in "win:ai-pack-win64.zip" "mac:ai-pack-macos-arm64.tar.gz"; do
+            key=${pair%%:*}
+            asset=${pair#*:}
+            if echo "$assets" | grep -qx "$asset"; then
+              echo "ai-pack-v$version already has $asset, nothing to build."
+              echo "build_$key=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "build_$key=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
 
   build:
     needs: plan
-    if: needs.plan.outputs.build == 'true'
+    if: needs.plan.outputs.build_win == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -65,3 +71,28 @@ jobs:
           tag="ai-pack-v${{ needs.plan.outputs.version }}"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --latest=false --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
           gh release upload "$tag" dist-packs/ai-pack-win64.zip --clobber
+
+  build-mac:
+    needs: plan
+    if: needs.plan.outputs.build_mac == 'true'
+    runs-on: macos-latest # Apple Silicon (arm64)
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build pack
+        run: |
+          python -m venv backend/.venv
+          node scripts/build-ai-pack.mjs
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="ai-pack-v${{ needs.plan.outputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --latest=false --title "AI pack v${{ needs.plan.outputs.version }}" --notes "Downloadable AI pack used by the desktop app."
+          gh release upload "$tag" dist-packs/ai-pack-macos-arm64.tar.gz --clobber

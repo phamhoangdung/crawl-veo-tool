@@ -1,4 +1,4 @@
-# Build the Windows installer (VieDub Studio) and publish it as a GitHub Release on EVERY push to main.
+# Build the Windows installer and the macOS (Apple Silicon) disk image of VieDub Studio and publish them as a GitHub Release on EVERY push to main.
 # The version is automatic: the next patch after the highest existing `v*` tag (or the version in
 # src-tauri/tauri.conf.json when that is higher, e.g. after `npm run version:bump minor`). The tag
 # is created by the release itself; the repo files are not modified. Docs-only pushes are skipped.
@@ -105,8 +105,74 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: viedub-installers
+          name: installer-windows
           path: VieDub-Studio-Setup.exe
+
+  macos:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: macos-latest # Apple Silicon (arm64)
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install root + frontend dependencies
+        run: |
+          npm ci
+          pnpm -C frontend install --frozen-lockfile
+
+      - name: Create the backend venv (the build script uses backend/.venv)
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/python -m pip install --upgrade pip
+          # AI libs (torch, ...) are NOT bundled: they ship as the downloadable AI pack.
+          grep -vE "^(faster-whisper|demucs|speechbrain|scikit-learn)" backend/requirements.txt > req-core.txt
+          backend/.venv/bin/python -m pip install -r req-core.txt
+
+      - name: Apply the computed version to the build files
+        run: node scripts/bump-version.mjs ${{ needs.plan.outputs.version }}
+
+      # tauri.macos.conf.json switches the bundle target to dmg.
+      - name: Build disk image
+        run: npm run desktop:build:keep
+
+      - name: Give the disk image a stable file name (for the permanent download link)
+        run: cp src-tauri/target/release/bundle/dmg/*.dmg VieDub-Studio-macOS.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos
+          path: VieDub-Studio-macOS.dmg
+
+  publish:
+    needs: [plan, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create GitHub Release (tag v${{ needs.plan.outputs.version }})
         uses: softprops/action-gh-release@v2
@@ -115,4 +181,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           make_latest: true
-          files: VieDub-Studio-Setup.exe
+          files: |
+            dist/VieDub-Studio-Setup.exe
+            dist/VieDub-Studio-macOS.dmg

@@ -130,3 +130,8 @@ vẫn phải có sẵn ffmpeg trong PATH.
 - **CI**: `.github/workflows/ai-pack.yml` (chạy tay) build + upload pack lên release `ai-pack-v<n>`; `release.yml` không cài torch nữa. **Phải chạy ai-pack.yml 1 lần trước khi phát hành app đầu tiên**, nếu không nút "Tải về" báo 404.
 - **Verify thật (local)**: build sidecar slim + pack, phục vụ pack qua HTTP local → `POST .../ai/install` tải+giải nén OK (814MB trên đĩa) → `viedub-backend.exe --run-demucs --help` chạy được (torch+demucs nạp từ pack) → import video thử + `/transcribe` qua backend đóng gói: faster-whisper tải model và chạy xong (`status: transcribed`). Phát hiện/sửa: torch cần stdlib (`timeit`...) mà sidecar slim không kèm → thêm `STDLIB_FOR_AI_PACK` vào `viedub-backend.spec`. **Chưa verify**: phân vai (speechbrain) và Demucs tách thật trên bản slim; tải pack từ GitHub Release thật; cài `Setup.exe` mới trên máy sạch; ffmpeg pack tải thật (máy dev có sẵn ffmpeg trong PATH nên banner coi là đã có).
 - Bỏ `scripts/fetch-ffmpeg.mjs` và việc đóng gói ffmpeg/vcruntime vào spec (vcruntime140_threads.dll nay nằm trong pack AI).
+
+## Phiên 2026-10-07 — thêm bản macOS (Apple Silicon)
+- `release.yml` build song song Windows + macOS (`macos-latest`, arm64), job `publish` gộp cả hai file vào 1 release: `VieDub-Studio-Setup.exe`, `VieDub-Studio-macOS.dmg`. `src-tauri/tauri.macos.conf.json` đổi target sang `dmg`.
+- macOS: ffmpeg lấy từ osxexperts.net (arm64, 2 zip), AI pack là `ai-pack-macos-arm64.tar.gz` (giữ symlink/quyền), `ai-pack.yml` build từng nền tảng nếu release chưa có file tương ứng.
+- Chưa verify: **chưa chạy trên Mac thật** — CI chưa chạy lần nào cho macOS (torch/ctranslate2/av pin theo bản Windows, có thể cần chỉnh); app chưa notarize nên người dùng phải `xattr -cr`. Không hỗ trợ Mac Intel.

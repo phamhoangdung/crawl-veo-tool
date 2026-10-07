@@ -9,13 +9,16 @@ use tauri::{Manager, RunEvent};
 /// "Definition of Done": Task Manager must show no orphan process).
 struct BackendProcess(Mutex<Option<Child>>);
 
-/// Path to `viedub-backend.exe`: dev mode points straight at the PyInstaller build folder
+/// Backend executable name inside the PyInstaller folder.
+const BACKEND_BIN: &str = if cfg!(windows) { "viedub-backend.exe" } else { "viedub-backend" };
+
+/// Path to the backend executable: dev mode points straight at the PyInstaller build folder
 /// (`backend/dist/viedub-backend/`, relative to the CWD `src-tauri/` when `tauri dev`
 /// runs); the packaged build uses the resource bundled via
 /// `tauri.conf.json` (`bundle.resources`).
 fn resolve_backend_exe(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if cfg!(debug_assertions) {
-        let dev_path = PathBuf::from("../backend/dist/viedub-backend/viedub-backend.exe");
+        let dev_path = PathBuf::from("../backend/dist/viedub-backend").join(BACKEND_BIN);
         if !dev_path.exists() {
             return Err(format!(
                 "Không tìm thấy backend đã build ở {:?} — chạy `pyinstaller` trong backend/ trước \
@@ -30,7 +33,7 @@ fn resolve_backend_exe(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .resource_dir()
         .map_err(|e| format!("Không lấy được resource_dir: {e}"))?;
-    Ok(resource_dir.join("backend").join("viedub-backend.exe"))
+    Ok(resource_dir.join("backend").join(BACKEND_BIN))
 }
 
 /// Port the backend listens on. The packaged build asks the OS for a FREE port instead of
